@@ -72,6 +72,10 @@ QWidget {{
     font-family: 'Segoe UI', Arial;
     font-size: 10pt;
 }}
+QLabel {{
+    background: transparent;
+    color: {C["text"]};
+}}
 QFrame#Card {{
     background-color: {C["card"]};
     border-radius: 8px;
@@ -90,6 +94,13 @@ QLineEdit, QComboBox, QDateEdit, QTextEdit {{
 QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTextEdit:focus {{
     border: 1px solid {C["accent"]};
     outline: none;
+}}
+QComboBox QAbstractItemView {{
+    background-color: {C["surface"]};
+    color: {C["text"]};
+    border: 1px solid {C["border"]};
+    selection-background-color: {C["accent"]};
+    selection-color: #0F172A;
 }}
 QPushButton {{
     font-weight: bold;
@@ -154,6 +165,108 @@ QMenu::item:selected {{
     background-color: {C["accent"]};
     color: #0F172A;
 }}
+"""
+
+# ستايل فاتح
+LIGHT_STYLE = """
+QWidget {
+    background-color: #F1F5F9;
+    color: #0F172A;
+    font-family: 'Segoe UI', Arial;
+    font-size: 10pt;
+}
+QLabel {
+    background: transparent;
+    color: #0F172A;
+}
+QFrame#Card {
+    background-color: #FFFFFF;
+    border-radius: 8px;
+    border: 1px solid #CBD5E1;
+}
+QFrame#Surface {
+    background-color: #E2E8F0;
+}
+QLineEdit, QComboBox, QDateEdit, QTextEdit {
+    background-color: #FFFFFF;
+    color: #0F172A;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    padding: 6px;
+}
+QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTextEdit:focus {
+    border: 1px solid #0D9488;
+    outline: none;
+}
+QComboBox QAbstractItemView {
+    background-color: #FFFFFF;
+    color: #0F172A;
+    border: 1px solid #CBD5E1;
+    selection-background-color: #0D9488;
+    selection-color: white;
+}
+QPushButton {
+    font-weight: bold;
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: none;
+}
+QPushButton#Accent { background-color: #0D9488; color: white; }
+QPushButton#Accent:hover { background-color: #0F766E; }
+QPushButton#Blue { background-color: #3B82F6; color: white; }
+QPushButton#Blue:hover { background-color: #2563EB; }
+QPushButton#Warn { background-color: #EF4444; color: white; }
+QPushButton#Warn:hover { background-color: #DC2626; }
+QPushButton#Gold { background-color: #F59E0B; color: white; }
+QPushButton#Gold:hover { background-color: #D97706; }
+QPushButton#Ghost { background-color: transparent; border: 1px solid #CBD5E1; color: #0F172A; }
+QPushButton#Ghost:hover { background-color: #E2E8F0; }
+
+QTableWidget {
+    background-color: #FFFFFF;
+    alternate-background-color: #F8FAFC;
+    border: 1px solid #CBD5E1;
+    gridline-color: #E2E8F0;
+    selection-background-color: #0D9488;
+    selection-color: white;
+}
+QHeaderView::section {
+    background-color: #F1F5F9;
+    color: #475569;
+    font-weight: bold;
+    padding: 8px;
+    border: none;
+    border-right: 1px solid #CBD5E1;
+    border-bottom: 2px solid #CBD5E1;
+}
+QScrollBar:vertical {
+    background: #F1F5F9;
+    width: 12px;
+}
+QScrollBar::handle:vertical {
+    background: #CBD5E1;
+    border-radius: 6px;
+}
+QScrollBar:horizontal {
+    background: #F1F5F9;
+    height: 12px;
+}
+QScrollBar::handle:horizontal {
+    background: #CBD5E1;
+    border-radius: 6px;
+}
+QMenu {
+    background-color: #FFFFFF;
+    color: #0F172A;
+    border: 1px solid #CBD5E1;
+}
+QMenu::item {
+    padding: 6px 24px;
+}
+QMenu::item:selected {
+    background-color: #0D9488;
+    color: white;
+}
 """
 
 # ستايل فاتح
@@ -447,7 +560,6 @@ class DB:
 
     def all(self):
         return self.search()
-
 db = DB()
 
 # =================== BaseDialog ===================
@@ -463,18 +575,100 @@ class AboutDialog(BaseDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("حول النظام")
-        self.resize(400, 300)
+        self.setFixedSize(450, 500)
+        self.setWindowFlags(self.windowFlags() & ~Qt.WindowType.WindowContextHelpButtonHint)
+
+
         layout = QVBoxLayout(self)
-        lbl = QLabel("""
-        نظام إدارة الإجازات التراكمية
-        الإصدار: 2.0 (نسخة متكاملة)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
         
-        تم التطوير باستخدام PyQt6
-        يدعم إدارة الموظفين والإجازات والتقارير
-        الإشعارات الذكية، الوضع الفاتح/الداكن، النسخ الاحتياطي التلقائي
+        # أيقونة (يمكن استخدام رمز من Font Awesome أو صورة، هنا نستخدم تسمية كبيرة)
+        icon_label = QLabel("📊")
+        icon_label.setFont(QFont("Segoe UI", 48))
+        icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon_label.setStyleSheet(f"color: {C['blue']}; margin-bottom: 10px;")
+        layout.addWidget(icon_label)
+        
+        # العنوان
+        title_label = QLabel("نظام إدارة الإجازات التراكمية")
+        title_label.setFont(QFont("Segoe UI", 25, QFont.Weight.Bold))
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title_label.setStyleSheet(f"color: {C['blue']}; margin-bottom: 5px;")
+        layout.addWidget(title_label)
+        
+        # الإصدار
+        version_label = QLabel("الإصدار 2.0 (2026-04)")
+        version_label.setFont(QFont("Segoe UI", 12))
+        version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        version_label.setStyleSheet(f"color: {C['blue']}; margin-bottom: 20px;")
+        layout.addWidget(version_label)
+        
+        # خط فاصل
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet(f"background-color: {C['border']}; max-height: 1px; margin: 10px 0;")
+        layout.addWidget(line)
+        
+        # معلومات التطوير
+        dev_label = QLabel("برمجة وتطوير")
+        dev_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        dev_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        dev_label.setStyleSheet(f"color: {C['blue']};")
+        layout.addWidget(dev_label)
+        
+        name_label = QLabel("تقني طبي - أحمد زياد رحيمه")
+        name_label.setFont(QFont("Segoe UI", 11))
+        name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        name_label.setStyleSheet(f"color: {C['blue']}; margin-bottom: 15px;")
+        layout.addWidget(name_label)
+        
+        # خط فاصل
+        line2 = QFrame()
+        line2.setFrameShape(QFrame.Shape.HLine)
+        line2.setStyleSheet(f"background-color: {C['border']}; max-height: 1px; margin: 10px 0;")
+        layout.addWidget(line2)
+        
+        # معلومات الاتصال
+        contact_label = QLabel("للإستفسار والدعم")
+        contact_label.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        contact_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        contact_label.setStyleSheet(f"color: {C['blue']};")
+        layout.addWidget(contact_label)
+        
+        phone_label = QLabel("📞 07723064622")
+        phone_label.setFont(QFont("Segoe UI", 11))
+        phone_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        phone_label.setStyleSheet(f"color: {C['blue']};")
+        layout.addWidget(phone_label)
+        
+        email_label = QLabel("✉️ ahmdze@gmail.com")
+        email_label.setFont(QFont("Segoe UI", 11))
+        email_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        email_label.setStyleSheet(f"color: {C['blue']};")
+        layout.addWidget(email_label)
+        
+        # زر إغلاق
+        close_btn = QPushButton("إغلاق")
+        close_btn.setObjectName("Accent")
+        close_btn.setFixedWidth(100)
+        close_btn.clicked.connect(self.accept)
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_layout.addWidget(close_btn)
+        btn_layout.addStretch()
+        layout.addLayout(btn_layout)
+        
+        # خلفية البطاقة
+        self.setStyleSheet(f"""
+            QDialog {{
+                background-color: {C['card']};
+                border-radius: 12px;
+            }}
+            QLabel {{
+                background: transparent;
+            }}
         """)
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(lbl)
 
 # =================== نافذة الإعدادات ===================
 class SettingsDialog(BaseDialog):
@@ -492,7 +686,11 @@ class SettingsDialog(BaseDialog):
         form_layout.addRow("النسخ الاحتياطي", self.chk_backup)
         form_layout.addRow("الوضع", self.cmb_theme)
         layout.addLayout(form_layout)
-        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        btn_box = QDialogButtonBox()
+        btn_box.addButton(QDialogButtonBox.StandardButton.Save)
+        btn_box.addButton(QDialogButtonBox.StandardButton.Cancel)
+        btn_box.button(QDialogButtonBox.StandardButton.Save).setText("💾 حفظ")
+        btn_box.button(QDialogButtonBox.StandardButton.Cancel).setText("❌ إلغاء")
         btn_box.accepted.connect(self._save)
         btn_box.rejected.connect(self.reject)
         layout.addWidget(btn_box)
@@ -967,38 +1165,6 @@ class DatabaseOperationsDialog(BaseDialog):
         except Exception as e:
             QMessageBox.critical(self, "خطأ", f"فشل الاستيراد: {e}")
 
-# =================== حوار تعديل الموظف (اختيار تعديل معلومات أو إجازات) ===================
-class EditEmployeeDialog(BaseDialog):
-    def __init__(self, parent=None, emp_id=None, on_save=None):
-        super().__init__(parent)
-        self.emp_id = emp_id
-        self.on_save = on_save
-        emp = db.get(emp_id)
-        self.setWindowTitle(f"خيارات التعديل")
-        self.resize(350, 200)
-        layout = QVBoxLayout(self)
-        title = QLabel(f"تعديل: {emp.get('name','')}")
-        title.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
-        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(title)
-        layout.addSpacing(20)
-        btn_info = QPushButton("📋  المعلومات العامة")
-        btn_info.setObjectName("Blue")
-        btn_info.clicked.connect(self._open_info)
-        layout.addWidget(btn_info)
-        btn_leaves = QPushButton("📅  سجل الإجازات")
-        btn_leaves.setObjectName("Accent")
-        btn_leaves.clicked.connect(self._open_leaves)
-        layout.addWidget(btn_leaves)
-    def _open_info(self):
-        self.accept()
-        dlg = EmployeeDialog(self.parent(), emp_id=self.emp_id, on_save=self.on_save)
-        dlg.exec()
-    def _open_leaves(self):
-        self.accept()
-        dlg = LeavesRegisterDialog(self.parent(), self.emp_id, on_save=self.on_save)
-        dlg.exec()
-
 # =================== سجل الإجازات (نافذة منفصلة) ===================
 class LeavesRegisterDialog(BaseDialog):
     def __init__(self, parent=None, emp_id=None, on_save=None):
@@ -1222,6 +1388,7 @@ class MainApp(QMainWindow):
         self.resize(1280, 780)
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self._ui()
+        self._load_filter_data()
         self._refresh()
         # تطبيق الثيم المحفوظ
         settings = QSettings("MyCompany", "LeaveSystem")
@@ -1238,16 +1405,20 @@ class MainApp(QMainWindow):
             pass
 
     def get_all_alerts(self):
-        """جمع كل التنبيهات (رصيد منخفض + إجازات تنتهي خلال 5 أيام)"""
+        """جمع كل التنبيهات (رصيد منخفض + إجازات تنتهي خلال 5 أيام) مع تفاصيل كاملة"""
         alerts = []
         today = date.today()
         for eid, emp in db.all().items():
-            # رصيد منخفض
+            name = emp.get('name', '')
+            job = emp.get('job_title', '')
+            dept = emp.get('institution', '')
             balance = compute_balance(emp)["balance"]
-            if balance <= 5:
-                alerts.append(f"⚠️ {emp.get('name', '')} - رصيده منخفض جداً: {balance} يوم")
             
-            # فحص كل الإجازات: أي إجازة تنتهي خلال 5 أيام أو أقل
+            # رصيد منخفض (5 أيام أو أقل) - تفاصيل كاملة
+            if balance <= 5:
+                alerts.append(f"⚠️ {name} - {job} - {dept} : رصيد منخفض ({balance} يوم)")
+            
+            # الإجازات المنتهية قريباً
             for lv in emp.get("history", []):
                 start_date_str = lv.get("start_date")
                 if not start_date_str:
@@ -1259,8 +1430,8 @@ class MainApp(QMainWindow):
                     remaining = (end_date - today).days
                     if 0 <= remaining <= 5:
                         ltype = lv.get("type", "إجازة")
-                        alerts.append(f"📅 {emp.get('name', '')} - {emp.get('job_title', '')} - {emp.get('institution', '')} : {ltype} تنتهي بعد {remaining} يوم (من {start_date} إلى {end_date})")
-                except Exception as e:
+                        alerts.append(f"📅 {name} - {job} - {dept} : {ltype} تنتهي بعد {remaining} يوم (من {start_date} إلى {end_date})")
+                except:
                     continue
         return alerts
 
@@ -1381,10 +1552,10 @@ class MainApp(QMainWindow):
         # Header
         hdr = QFrame()
         hdr.setObjectName("Surface")
-        hdr.setFixedHeight(60)
+        hdr.setFixedHeight(50)
         hdr_layout = QHBoxLayout(hdr)
         title_lbl = QLabel("نظام إدارة الإجازات التراكمية")
-        title_lbl.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        title_lbl.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
         title_lbl.setStyleSheet(f"color: {C['accent']};")
         sub_lbl = QLabel(f"يوم إجازة لكل {DAYS_PER_LEAVE} أيام دوام  |  المعدل السنوي {MAX_ANNUAL} يوم")
         sub_lbl.setStyleSheet(f"color: {C['muted']};")
@@ -1400,7 +1571,7 @@ class MainApp(QMainWindow):
         # Sidebar
         side = QFrame()
         side.setObjectName("Card")
-        side.setFixedWidth(300)
+        side.setFixedWidth(200)
         side_layout = QVBoxLayout(side)
 
         btn_add_emp = QPushButton("➕  إضافة موظف جديد")
@@ -1464,36 +1635,54 @@ class MainApp(QMainWindow):
         btn_about.clicked.connect(self._open_about)
         side_layout.addWidget(btn_about)
 
-        # Center
+        side_layout.addWidget(self._separator())
+        btn_exit = QPushButton("🚪  خروج")
+        btn_exit.setObjectName("Warn")
+        btn_exit.clicked.connect(self.close)
+        side_layout.addWidget(btn_exit)
+        
+
+
+# Center
         center_layout = QVBoxLayout()
+        
         # شريط البحث والفلترة
         filter_layout = QHBoxLayout()
-        self.btn_export_all = QPushButton("📊  تصدير الكل Excel")
-        self.btn_export_all.setObjectName("Gold")
-        self.btn_export_all.clicked.connect(self._export_all)
-        filter_layout.addWidget(self.btn_export_all)
 
-        filter_layout.addWidget(QLabel("بحث:"))
+        # 1. البحث السريع بالاسم أو الرقم
+        filter_layout.addWidget(QLabel("البحث السريع:"))
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("الاسم أو الرقم...")
         self.search_input.textChanged.connect(self._refresh)
         filter_layout.addWidget(self.search_input)
 
+        # 2. فلترة مكان العمل (قائمة منسدلة)
         filter_layout.addWidget(QLabel("مكان العمل:"))
-        self.workplace_filter = QLineEdit()
-        self.workplace_filter.setPlaceholderText("فلترة حسب مكان العمل")
-        self.workplace_filter.textChanged.connect(self._refresh)
+        self.workplace_filter = QComboBox()
+        self.workplace_filter.addItem("الكل") # القيمة الافتراضية
+        self.workplace_filter.currentTextChanged.connect(self._refresh)
         filter_layout.addWidget(self.workplace_filter)
 
+        # 3. فلترة المؤسسة (قائمة منسدلة)
         filter_layout.addWidget(QLabel("المؤسسة:"))
-        self.institution_filter = QLineEdit()
-        self.institution_filter.setPlaceholderText("فلترة حسب المؤسسة")
-        self.institution_filter.textChanged.connect(self._refresh)
+        self.institution_filter = QComboBox()
+        self.institution_filter.addItem("الكل") # القيمة الافتراضية
+        self.institution_filter.currentTextChanged.connect(self._refresh)
         filter_layout.addWidget(self.institution_filter)
 
+        # إضافة مسافة مرنة لدفع زر التصدير إلى أقصى اليسار
         filter_layout.addStretch()
+
+        # 4. زر تصدير الكل (أقصى اليسار)
+        self.btn_export_all = QPushButton("📊  تصدير الكل Excel")
+        self.btn_export_all.setObjectName("Gold")
+        self.btn_export_all.clicked.connect(self._export_all)
+        filter_layout.addWidget(self.btn_export_all)
+
+        # إضافة شريط الفلترة إلى التخطيط الأوسط
         center_layout.addLayout(filter_layout)
 
+        # --- إعداد الجدول (باقي الكود الخاص بك كما هو) ---
         self.table = QTableWidget()
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -1509,6 +1698,7 @@ class MainApp(QMainWindow):
         self.table.itemSelectionChanged.connect(self._on_sel)
         center_layout.addWidget(self.table)
 
+        
         # Details panel
         self.details_frame = QFrame()
         self.details_frame.setObjectName("Card")
@@ -1521,31 +1711,74 @@ class MainApp(QMainWindow):
                  ("taken","المأخوذة"), ("balance","الرصيد")]
         for i, (k, lb) in enumerate(items):
             title_lbl = QLabel(lb)
-            title_lbl.setStyleSheet(f"color: {C['muted']}; font-size: 11px;")
-            title_lbl.setAlignment(Qt.AlignmentFlag.AlignBottom | Qt.AlignmentFlag.AlignHCenter)
+            title_lbl.setStyleSheet(f"color: {C['accent'] if 'C' in locals() else 'blue'}; font-size: 11px; font-weight: bold;") 
+            title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignHCenter)
             val_lbl = QLabel("—")
+            val_lbl.setStyleSheet(f"color: {C['accent'] if 'C' in locals() else 'blue'}; font-size: 16px; font-weight: bold;")
             val_lbl.setFont(QFont("Segoe UI", 16 if k == "balance" else 11, QFont.Weight.Bold))
-            val_lbl.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+            val_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter | Qt.AlignmentFlag.AlignHCenter)
             details_layout.addWidget(title_lbl, 0, i)
             details_layout.addWidget(val_lbl, 1, i)
             self.dlbls[k] = val_lbl
         center_layout.addWidget(self.details_frame)
 
-        body_layout.addWidget(side)
+        body_layout.addWidget(side) # افتراض أن side معرف مسبقاً
         body_layout.addLayout(center_layout)
         main_layout.addLayout(body_layout)
+        
+        self._load_filter_data() 
+        self._refresh()
 
+   
     def _separator(self):
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
         line.setStyleSheet(f"background-color: {C['border']}; max-height: 1px;")
         return line
 
+    def _load_filter_data(self):
+            """جلب أماكن العمل والمؤسسات من قاعدة البيانات وملء القوائم المنسدلة"""
+            # إيقاف الإشارات مؤقتاً لتجنب استدعاء رفرش أثناء التحديث
+            self.workplace_filter.blockSignals(True)
+            self.institution_filter.blockSignals(True)
+
+            self.workplace_filter.clear()
+            self.institution_filter.clear()
+            
+            self.workplace_filter.addItem("الكل")
+            self.institution_filter.addItem("الكل")
+
+            try:
+                with db.get_conn() as conn:
+                    cursor = conn.cursor()
+                    
+                    # جلب أماكن العمل
+                    cursor.execute("SELECT DISTINCT workplace FROM employees WHERE workplace IS NOT NULL AND workplace != ''")
+                    workplaces = [row['workplace'] for row in cursor.fetchall()]
+                    self.workplace_filter.addItems(workplaces)
+
+                    # جلب المؤسسات
+                    cursor.execute("SELECT DISTINCT institution FROM employees WHERE institution IS NOT NULL AND institution != ''")
+                    institutions = [row['institution'] for row in cursor.fetchall()]
+                    self.institution_filter.addItems(institutions)
+            except Exception as e:
+                print(f"Error loading filters: {e}")
+            finally:
+                self.workplace_filter.blockSignals(False)
+                self.institution_filter.blockSignals(False)
+
     def _refresh(self):
         q = self.search_input.text().strip()
-        workplace = self.workplace_filter.text().strip()
-        institution = self.institution_filter.text().strip()
+        workplace = self.workplace_filter.currentText().strip()
+        institution = self.institution_filter.currentText().strip()
         self.table.setRowCount(0)
+        workplace = self.workplace_filter.currentText().strip()
+        if workplace == "الكل":
+            workplace = ""  # تفريغ المتغير لتخطي الفلترة
+
+        institution = self.institution_filter.currentText().strip()
+        if institution == "الكل":
+            institution = "" # تفريغ المتغير لتخطي الفلترة
         for eid, emp in db.search(q, workplace, institution).items():
             b = compute_balance(emp)
             row = self.table.rowCount()
@@ -1576,7 +1809,7 @@ class MainApp(QMainWindow):
         if not eid:
             for v in self.dlbls.values():
                 v.setText("—")
-                v.setStyleSheet(f"color: {C['text']};")
+                v.setStyleSheet("color: black;")
             return
         emp = db.get(eid)
         b = compute_balance(emp)
@@ -1585,11 +1818,11 @@ class MainApp(QMainWindow):
                 val = b.get(k, "—")
                 suffix = " يوم"
                 color = C["accent"] if b["balance"] >= 0 else C["neg"]
-                if k != "balance": color = C["text"]
+                if k != "balance": color = "black"
             else:
                 val = emp.get(k, "—")
                 suffix = ""
-                color = C["text"]
+                color = "black"
             v.setText(f"{val}{suffix}")
             v.setStyleSheet(f"color: {color};")
 
@@ -1615,7 +1848,7 @@ class MainApp(QMainWindow):
         if not eid:
             QMessageBox.warning(self, "تنبيه", "حدد موظفاً.")
             return
-        EditEmployeeDialog(self, eid, on_save=lambda: (self._refresh(), self._on_sel())).exec()
+        EmployeeDialog(self, eid, on_save=lambda: (self._refresh(), self._on_sel())).exec()
 
     def _delete_emp(self):
         eid = self._sel_id()
