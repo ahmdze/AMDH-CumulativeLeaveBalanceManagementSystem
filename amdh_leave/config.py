@@ -9,6 +9,7 @@ from string import Template
 
 APP_NAME = "نظام إدارة الإجازات التراكمية"
 APP_VERSION = "3.0.0"
+APP_RELEASE = "2026-10"
 APP_ORGANIZATION = "AMDH"
 APP_DEVELOPER = "تقني طبي - أحمد زياد رحيمه"
 APP_PHONE = "07723064622"
@@ -18,7 +19,19 @@ APP_EMAIL = "ahmdze@gmail.com"
 SETTINGS_ORG = "MyCompany"
 SETTINGS_APP = "LeaveSystem"
 
+
+def settings_app_name() -> str:
+    """اسم تطبيق الإعدادات، مع إمكانية العزل عبر AMDH_SETTINGS_SUFFIX (للاختبار وتعدد الملفات)."""
+    suffix = os.environ.get("AMDH_SETTINGS_SUFFIX", "")
+    return SETTINGS_APP + suffix
+
 DB_FILENAME = "employees_leave.db"
+
+# ----------------------------------------------------------------------------
+# اللغات
+# ----------------------------------------------------------------------------
+DEFAULT_LANGUAGE = "ar"           # العربية هي المصدر
+LANGUAGE_CODES = ("ar", "ku", "en")
 
 # ----------------------------------------------------------------------------
 # الثوابت النظامية
@@ -104,6 +117,7 @@ class Paths:
 # لوحات الألوان
 # ----------------------------------------------------------------------------
 PALETTES: dict[str, dict[str, str]] = {
+    # 1) داكن (الافتراضي)
     "dark": {
         "bg": "#0F172A",
         "surface": "#1E293B",
@@ -125,6 +139,7 @@ PALETTES: dict[str, dict[str, str]] = {
         "on_solid": "#FFFFFF",
         "alt": "#334155",
     },
+    # 2) فاتح
     "light": {
         "bg": "#F1F5F9",
         "surface": "#FFFFFF",
@@ -146,10 +161,87 @@ PALETTES: dict[str, dict[str, str]] = {
         "on_solid": "#FFFFFF",
         "alt": "#F8FAFC",
     },
+    # 3) أزرق ليلي
+    "midnight": {
+        "bg": "#0B1020",
+        "surface": "#141B33",
+        "card": "#1E2745",
+        "accent": "#22D3EE",
+        "accent_hover": "#06B6D4",
+        "blue": "#818CF8",
+        "blue_hover": "#6366F1",
+        "warn": "#FB7185",
+        "warn_hover": "#F43F5E",
+        "gold": "#FBBF24",
+        "gold_hover": "#F59E0B",
+        "text": "#E2E8F0",
+        "muted": "#93A4C4",
+        "border": "#2C3A5E",
+        "neg": "#FB7185",
+        "pos": "#34D399",
+        "on_accent": "#06202A",
+        "on_solid": "#0B1020",
+        "alt": "#1B2440",
+    },
+    # 4) زمردي
+    "emerald": {
+        "bg": "#071C16",
+        "surface": "#0E2A22",
+        "card": "#14402F",
+        "accent": "#34D399",
+        "accent_hover": "#10B981",
+        "blue": "#5EEAD4",
+        "blue_hover": "#2DD4BF",
+        "warn": "#F87171",
+        "warn_hover": "#EF4444",
+        "gold": "#FCD34D",
+        "gold_hover": "#F59E0B",
+        "text": "#ECFDF5",
+        "muted": "#86BFA6",
+        "border": "#1F5A45",
+        "neg": "#F87171",
+        "pos": "#6EE7B7",
+        "on_accent": "#04231A",
+        "on_solid": "#04231A",
+        "alt": "#123528",
+    },
+    # 5) رملي دافئ
+    "warm": {
+        "bg": "#FAF6EF",
+        "surface": "#FFFFFF",
+        "card": "#FFFDF8",
+        "accent": "#B45309",
+        "accent_hover": "#92400E",
+        "blue": "#0369A1",
+        "blue_hover": "#075985",
+        "warn": "#DC2626",
+        "warn_hover": "#B91C1C",
+        "gold": "#D97706",
+        "gold_hover": "#B45309",
+        "text": "#3F2E1C",
+        "muted": "#8A7358",
+        "border": "#E3D6BF",
+        "neg": "#DC2626",
+        "pos": "#15803D",
+        "on_accent": "#FFFFFF",
+        "on_solid": "#FFFFFF",
+        "alt": "#F5EFE3",
+    },
 }
 
-THEME_LABELS = {"dark": "داكن", "light": "فاتح"}
-THEME_KEYS = {"داكن": "dark", "فاتح": "light"}
+# وصف الثيمات (الاسم العربي، الوضع، ترتيب العرض)
+THEMES: list[tuple[str, str, str]] = [
+    ("dark", "داكن", "dark"),
+    ("light", "فاتح", "light"),
+    ("midnight", "أزرق ليلي", "dark"),
+    ("emerald", "زمردي", "dark"),
+    ("warm", "رملي دافئ", "light"),
+]
+THEME_LABELS = {key: label for key, label, _mode in THEMES}
+THEME_MODES = {key: mode for key, _label, mode in THEMES}
+# توافق مع القيم العربية المحفوظة في الإصدارات السابقة
+THEME_KEYS = {"داكن": "dark", "فاتح": "light", "أزرق ليلي": "midnight",
+              "زمردي": "emerald", "رملي دافئ": "warm"}
 
 _STYLE_TEMPLATE = Template(
     """

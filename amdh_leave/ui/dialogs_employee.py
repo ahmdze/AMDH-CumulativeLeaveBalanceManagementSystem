@@ -12,13 +12,14 @@ from ..services import dates as D
 from ..services import validation
 from . import widgets as W
 from .dialogs_base import BaseDialog, IssuesBox
+from ..i18n import tr
 
 STATUS_LABELS = {"active": "على الملاك", "leave": "بإجازة", "retired": "متقاعد/منتهية خدمته"}
 
 
 class EmployeeDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, emp_id: str | None = None, on_save=None):
-        super().__init__(parent, ctx, "تعديل موظف" if emp_id else "إضافة موظف جديد")
+        super().__init__(parent, ctx, tr("تعديل موظف") if emp_id else tr("إضافة موظف جديد"))
         self.emp_id = emp_id
         self.edit_mode = emp_id is not None
         self.on_save = on_save
@@ -30,15 +31,15 @@ class EmployeeDialog(BaseDialog):
     # ------------------------------------------------------------------
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label("تعديل بيانات الموظف" if self.edit_mode
-                                       else "إضافة موظف جديد", 15))
+        layout.addWidget(W.title_label(tr("تعديل بيانات الموظف") if self.edit_mode
+                                       else tr("إضافة موظف جديد"), 15))
         frame = W.card()
         form = QFormLayout(frame)
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form.setSpacing(12)
 
         self.e_id = QLineEdit()
-        self.e_id.setPlaceholderText("مثال: 57454545")
+        self.e_id.setPlaceholderText(tr("مثال: 57454545"))
         self.e_name = QLineEdit()
         self.e_title = QLineEdit()
         self.e_workplace = QLineEdit()
@@ -55,34 +56,34 @@ class EmployeeDialog(BaseDialog):
         self.d_start = W.date_edit()
         self.d_end = W.OptionalDate("انتهاء الخدمة", None)
 
-        form.addRow("الرقم الوظيفي *", self.e_id)
-        form.addRow("الاسم الكامل *", self.e_name)
-        form.addRow("العنوان الوظيفي", self.e_title)
-        form.addRow("مكان العمل", self.e_workplace)
-        form.addRow("المؤسسة / القسم", self.e_institution)
-        form.addRow("الجنس", self.cb_gender)
-        form.addRow("الحالة", self.cb_status)
-        form.addRow("تاريخ المباشرة *", self.d_start)
+        form.addRow(tr("الرقم الوظيفي *"), self.e_id)
+        form.addRow(tr("الاسم الكامل *"), self.e_name)
+        form.addRow(tr("العنوان الوظيفي"), self.e_title)
+        form.addRow(tr("مكان العمل"), self.e_workplace)
+        form.addRow(tr("المؤسسة / القسم"), self.e_institution)
+        form.addRow(tr("الجنس"), self.cb_gender)
+        form.addRow(tr("الحالة"), self.cb_status)
+        form.addRow(tr("تاريخ المباشرة *"), self.d_start)
         form.addRow("", self.d_end)
-        form.addRow("ملاحظات", self.e_notes)
+        form.addRow(tr("ملاحظات"), self.e_notes)
         layout.addWidget(frame)
 
         self.issues = IssuesBox()
         layout.addWidget(self.issues)
         if self.edit_mode:
             self.e_id.setEnabled(False)
-            hint = W.muted_label("الرقم الوظيفي غير قابل للتعديل بعد الإنشاء.")
+            hint = W.muted_label(tr("الرقم الوظيفي غير قابل للتعديل بعد الإنشاء."))
             layout.addWidget(hint)
 
         layout.addStretch()
-        layout.addLayout(self.buttons_row(W.button("إلغاء", "Ghost", self.reject, width=110),
-                                          W.button("💾 حفظ", "Accent", self._save, width=140)))
+        layout.addLayout(self.buttons_row(W.button(tr("إلغاء"), "Ghost", self.reject, width=110),
+                                          W.button(tr("💾 حفظ"), "Accent", self._save, width=140)))
 
     # ------------------------------------------------------------------
     def _load(self) -> None:
         employee = self.ctx.db.get_employee(self.emp_id)
         if not employee:
-            W.error(self, "الموظف غير موجود.")
+            W.error(self, tr("الموظف غير موجود."))
             self.reject()
             return
         self.e_id.setText(employee.emp_id)
@@ -115,14 +116,14 @@ class EmployeeDialog(BaseDialog):
     def _save(self) -> None:
         emp_id = self.emp_id if self.edit_mode else self.e_id.text().strip()
         if not self.ctx.can("edit_employee"):
-            W.error(self, "لا تملك صلاحية تعديل الموظفين.")
+            W.error(self, tr("لا تملك صلاحية تعديل الموظفين."))
             return
         fields = self._fields()
         issues = validation.validate_employee(fields, emp_id, edit_mode=self.edit_mode,
                                               exists=self.ctx.db.employee_exists)
         self.issues.set_issues(issues)
         if any(i.is_error for i in issues):
-            W.error(self, "\n".join(i.message for i in issues if i.is_error), "تعذّر الحفظ")
+            W.error(self, "\n".join(i.message for i in issues if i.is_error), tr("تعذّر الحفظ"))
             return
         if self.edit_mode:
             self.ctx.db.update_employee(emp_id, fields, self.ctx.user())

@@ -46,7 +46,22 @@ def stylesheet() -> str:
 
 
 def is_dark() -> bool:
-    return _state["theme"] == "dark"
+    return config.THEME_MODES.get(_state["theme"], "dark") == "dark"
+
+
+def theme_choices() -> list[tuple[str, str]]:
+    """[(المفتاح، الاسم العربي)] لكل الثيمات الخمسة."""
+    return [(key, label) for key, label, _mode in config.THEMES]
+
+
+def next_theme() -> str:
+    """الثيم التالي في الدورة (لزر تبديل سريع)."""
+    keys = [key for key, _label, _mode in config.THEMES]
+    try:
+        index = keys.index(_state["theme"])
+    except ValueError:
+        return keys[0]
+    return keys[(index + 1) % len(keys)]
 
 
 def balance_color(balance: int, low: int = 0) -> str:

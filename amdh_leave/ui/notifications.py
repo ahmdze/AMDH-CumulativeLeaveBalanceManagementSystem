@@ -9,6 +9,7 @@ from ..exporters import html as H
 from ..services import reports
 from . import theme, widgets as W
 from .dialogs_base import BaseDialog
+from ..i18n import tr, trf
 
 KIND_LABELS = {
     "negative_balance": "رصيد سالب (مسموح)",
@@ -23,7 +24,7 @@ KIND_LABELS = {
 
 class NotificationsDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None):
-        super().__init__(parent, ctx, "الإشعارات والتنبيهات")
+        super().__init__(parent, ctx, tr("الإشعارات والتنبيهات"))
         self.policy = self.ctx.db.policy(refresh=True)
         self.resize(1000, 640)
         self._build()
@@ -32,7 +33,7 @@ class NotificationsDialog(BaseDialog):
     def _build(self) -> None:
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
-        header.addWidget(W.title_label("الإشعارات والتنبيهات", 16))
+        header.addWidget(W.title_label(tr("الإشعارات والتنبيهات"), 16))
         header.addStretch()
         self.cb_severity = QComboBox()
         self.cb_severity.addItem("كل الأهميات", "")
@@ -46,16 +47,16 @@ class NotificationsDialog(BaseDialog):
         self.cb_kind.currentIndexChanged.connect(self._apply_filter)
         header.addWidget(self.cb_severity)
         header.addWidget(self.cb_kind)
-        header.addWidget(W.button("🔄 تحديث", "Blue", self._refresh))
+        header.addWidget(W.button(tr("🔄 تحديث"), "Blue", self._refresh))
         header.addWidget(W.button("📊 Excel", "Ghost", self._export_excel))
         header.addWidget(W.button("📄 HTML", "Ghost", self._export_html))
         header.addWidget(self.close_button())
         layout.addLayout(header)
 
-        self.note = W.muted_label("الرصيد السالب مسموح حسب الضوابط الإدارية ويُعرض كمعلومة لا كخطأ.")
+        self.note = W.muted_label(tr("الرصيد السالب مسموح حسب الضوابط الإدارية ويُعرض كمعلومة لا كخطأ."))
         layout.addWidget(self.note)
-        self.table = W.TablePanel(["الأهمية", "النوع", "الموظف", "الرقم الوظيفي", "المؤسسة",
-                                   "التاريخ", "التنبيه"])
+        self.table = W.TablePanel([tr("الأهمية"), tr("النوع"), tr("الموظف"), tr("الرقم الوظيفي"), tr("المؤسسة"),
+                                   tr("التاريخ"), tr("التنبيه")])
         layout.addWidget(self.table)
         self.footer = QLabel("")
         self.footer.setStyleSheet(theme.label_style("muted"))
@@ -84,7 +85,7 @@ class NotificationsDialog(BaseDialog):
                          alert.institution, alert.day.strftime("%Y-%m-%d") if alert.day else "",
                          alert.message])
             row_colors[(i, 0)] = colors.get(alert.severity, theme.color("text"))
-        self.table.set_rows(rows, colors=row_colors, empty_text="لا توجد تنبيهات مطابقة")
+        self.table.set_rows(rows, colors=row_colors, empty_text=tr("لا توجد تنبيهات مطابقة"))
         counts = {key: len([a for a in self.alerts if a.severity == key])
                   for key in reports.SEVERITY_LABELS}
         self.footer.setText(
@@ -94,18 +95,18 @@ class NotificationsDialog(BaseDialog):
     # ------------------------------------------------------------------
     def _export_excel(self) -> None:
         if not self.filtered:
-            W.warn(self, "لا توجد تنبيهات للتصدير.")
+            W.warn(self, tr("لا توجد تنبيهات للتصدير."))
             return
         path, _ = QFileDialog.getSaveFileName(self, "حفظ التنبيهات", "alerts.xlsx", "Excel (*.xlsx)")
         if not path:
             return
         try:
             X.export_alerts(path, self.filtered)
-            W.info(self, f"تم التصدير:\n{path}")
+            W.info(self, trf("تم التصدير:\n{v0}", v0=path))
         except Exception as exc:
-            W.error(self, f"فشل التصدير: {exc}")
+            W.error(self, trf("فشل التصدير: {v0}", v0=exc))
 
     def _export_html(self) -> None:
         content = H.alerts_html(self.filtered, self.policy)
         path = H.save_and_open(content, self.ctx.paths.reports_dir, "alerts.html")
-        W.info(self, f"تم فتح التقرير في المتصفح:\n{path.name}")
+        W.info(self, trf("تم فتح التقرير في المتصفح:\n{v0}", v0=path.name))

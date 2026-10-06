@@ -15,19 +15,23 @@ from .. import config
 from ..exporters import excel as X
 from ..exporters import html as H
 from ..exporters import pdf as P
+from ..i18n import tr, trd, trf
+from ..logging_setup import get_logger
 from ..services import balance as B
 from ..services import dates as D
 from ..services import reports
-from . import theme, widgets as W
+from . import assets, theme, widgets as W
 from .calendar_view import CalendarDialog
 from .dashboard import DashboardDialog
 from .dialogs_admin import AuditDialog, HolidaysDialog, RulesEditorDialog, UsersDialog
-from .dialogs_base import AboutDialog, SettingsDialog, TrashDialog
+from .dialogs_about import AboutDialog
+from .dialogs_base import SettingsDialog, TrashDialog
 from .dialogs_db import DatabaseOperationsDialog
 from .dialogs_employee import EmployeeDialog
 from .dialogs_leave import AttachmentsDialog, LeaveDialog, SettlementDialog, StatementDialog
 from .notifications import NotificationsDialog
 from .register import LeavesRegisterDialog
+from ..i18n import tr, trf
 
 COLUMNS = [
     ("الرقم الوظيفي", 120), ("الاسم", 200), ("العنوان الوظيفي", 150), ("مكان العمل", 140),
@@ -51,7 +55,7 @@ class MainWindow(QMainWindow):
         self.ctx = ctx
         self.policy = ctx.db.policy(refresh=True)
         self.rows: list[dict] = []
-        self.setWindowTitle(f"{config.APP_NAME} — الإصدار {config.APP_VERSION}")
+        self.setWindowTitle(trf("{v0} — الإصدار {v1}", v0=config.APP_NAME, v1=config.APP_VERSION))
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.resize(1360, 820)
         self._search_timer = QTimer(self)
@@ -86,8 +90,19 @@ class MainWindow(QMainWindow):
     def _header(self) -> QFrame:
         header = QFrame()
         header.setObjectName("Surface")
-        header.setFixedHeight(56)
+        header.setFixedHeight(60)
         layout = QHBoxLayout(header)
+        layout.setSpacing(10)
+
+        self.lbl_logo = QLabel()
+        self.lbl_logo.setFixedSize(42, 42)
+        self.lbl_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo = assets.logo(42)
+        if logo is not None:
+            self.lbl_logo.setPixmap(logo)
+        self.lbl_logo.setToolTip(config.APP_NAME)
+        layout.addWidget(self.lbl_logo)
+
         self.lbl_title = QLabel(config.APP_NAME)
         self.lbl_title.setFont(QFont("Segoe UI", 18, QFont.Weight.Bold))
         self.lbl_title.setStyleSheet(theme.label_style("accent", 18, bold=True))
@@ -98,14 +113,18 @@ class MainWindow(QMainWindow):
         layout.addWidget(W.separator())
         self.lbl_user = W.muted_label(self._user_text())
         layout.addWidget(self.lbl_user)
-        layout.addWidget(W.button("🌓 الوضع", "Ghost", self._toggle_theme, width=100,
-                                  tooltip="تبديل الوضع الداكن/الفاتح"))
+        layout.addWidget(W.button(tr("🎨 الثيم"), "Ghost", self._choose_theme, width=110,
+                                  tooltip=tr("اختيار ثيم الواجهة (5 ثيمات)")))
+        layout.addWidget(W.button(tr("🌐 اللغة"), "Ghost", self._choose_language, width=100,
+                                  tooltip=tr("تغيير لغة الواجهة")))
         return header
 
     def _user_text(self) -> str:
         session = self.ctx.session
-        scope = session.scoped_institution or "كل المؤسسات"
-        return f"المستخدم: {session.display_name} ({config.ROLE_LABELS.get(session.role, session.role)}) — {scope}"
+        scope = session.scoped_institution or tr("كل المؤسسات")
+        role = config.ROLE_LABELS.get(session.role, session.role)
+        return trf("المستخدم: {name} ({role}) — {scope}", name=session.display_name,
+                   role=trd(role), scope=scope)
 
     # -- الشريط الجانبي --------------------------------------------------
     def _sidebar(self) -> QScrollArea:
@@ -123,7 +142,7 @@ class MainWindow(QMainWindow):
             btn = W.button(text, style, slot)
             if permission and not self.ctx.can(permission):
                 btn.setEnabled(False)
-                btn.setToolTip("لا تملك صلاحية هذا الإجراء")
+                btn.setToolTip(tr("لا تملك صلاحية هذا الإجراء"))
             layout.addWidget(btn)
 
         add("➕  إضافة موظف جديد", "Accent", self._add_employee, "edit_employee")
@@ -140,17 +159,19 @@ class MainWindow(QMainWindow):
         add("📄  تقرير إجمالي", "Ghost", self._global_report)
         add("🧾  كشف حساب الموظف", "Ghost", self._open_statement)
         add("📤  تصفية نهاية الخدمة", "Ghost", self._open_settlement)
+        add("📨  مشاركة التقارير", "Ghost", self._open_share)
         layout.addWidget(W.separator())
         add("📋  ضوابط أنواع الإجازات", "Ghost", self._open_rules, "edit_rules")
         add("🗓  العطل الرسمية", "Ghost", self._open_holidays, "manage_holidays")
         add("👥  المستخدمون", "Ghost", self._open_users, "manage_users")
         add("📜  سجل التدقيق", "Ghost", self._open_audit, "view_audit")
+        add("🔒  تشفير قاعدة البيانات", "Ghost", self._open_encryption)
         add("🗄️  عمليات قاعدة البيانات", "Ghost", self._open_db_ops)
         add("🗑  سلة المحذوفات", "Ghost", self._open_trash, "purge")
         layout.addWidget(W.separator())
         add("⚙  الإعدادات", "Ghost", self._open_settings)
         add("ℹ  حول", "Ghost", self._open_about)
-        layout.addWidget(W.button("🚪  خروج", "Warn", self.close))
+        layout.addWidget(W.button(tr("🚪  خروج"), "Warn", self.close))
         layout.addStretch()
         return area
 
@@ -160,26 +181,26 @@ class MainWindow(QMainWindow):
         layout.setSpacing(8)
 
         filters = QHBoxLayout()
-        filters.addWidget(QLabel("البحث:"))
+        filters.addWidget(QLabel(tr("البحث:")))
         self.search = QLineEdit()
-        self.search.setPlaceholderText("الاسم أو الرقم الوظيفي أو العنوان (Ctrl+F)")
+        self.search.setPlaceholderText(tr("الاسم أو الرقم الوظيفي أو العنوان (Ctrl+F)"))
         self.search.textChanged.connect(lambda: self._search_timer.start())
         self.search.setClearButtonEnabled(True)
         filters.addWidget(self.search, 3)
-        filters.addWidget(QLabel("مكان العمل:"))
+        filters.addWidget(QLabel(tr("مكان العمل:")))
         self.cb_workplace = QComboBox()
         self.cb_workplace.setMinimumWidth(140)
         self.cb_workplace.currentTextChanged.connect(self._refresh)
         filters.addWidget(self.cb_workplace)
-        filters.addWidget(QLabel("المؤسسة:"))
+        filters.addWidget(QLabel(tr("المؤسسة:")))
         self.cb_institution = QComboBox()
         self.cb_institution.setMinimumWidth(150)
         self.cb_institution.currentTextChanged.connect(self._refresh)
         filters.addWidget(self.cb_institution)
-        filters.addWidget(W.button("✖ مسح الفلاتر", "Ghost", self._clear_filters))
+        filters.addWidget(W.button(tr("✖ مسح الفلاتر"), "Ghost", self._clear_filters))
         filters.addStretch()
-        filters.addWidget(W.button("📊 تصدير المعروض", "Gold", lambda: self._export(False)))
-        filters.addWidget(W.button("📊 تصدير الكل", "Gold", lambda: self._export(True)))
+        filters.addWidget(W.button(tr("📊 تصدير المعروض"), "Gold", lambda: self._export(False)))
+        filters.addWidget(W.button(tr("📊 تصدير الكل"), "Gold", lambda: self._export(True)))
         layout.addLayout(filters)
 
         self.table = W.TablePanel([c[0] for c in COLUMNS])
@@ -210,7 +231,7 @@ class MainWindow(QMainWindow):
         bar = self.statusBar()
         self.lbl_status = QLabel("")
         bar.addWidget(self.lbl_status)
-        self.lbl_path = QLabel(f"قاعدة البيانات: {self.ctx.paths.db_path}")
+        self.lbl_path = QLabel(trf("قاعدة البيانات: {v0}", v0=self.ctx.paths.db_path))
         bar.addPermanentWidget(self.lbl_path)
 
     # ==================================================================
@@ -268,7 +289,7 @@ class MainWindow(QMainWindow):
                   f"المأخوذة: {totals['taken']} يوم | إجمالي الرصيد: {totals['balance']} يوم | "
                   f"أرصدة سالبة: {totals['negative']} (مسموح حسب الضوابط)")
         self.table.set_rows(rows, numeric_columns=NUMERIC_COLUMNS, colors=colors,
-                            empty_text="لا يوجد موظفون مطابقون للبحث أو الفلاتر", footer=footer)
+                            empty_text=tr("لا يوجد موظفون مطابقون للبحث أو الفلاتر"), footer=footer)
         if hasattr(self, "lbl_status"):
             self.lbl_status.setText(f"الموظفون: {len(rows)} — آخر تحديث: "
                                     f"{date.today().strftime('%Y-%m-%d')}")
@@ -311,7 +332,7 @@ class MainWindow(QMainWindow):
     # ==================================================================
     def _require(self, emp_id: str | None) -> str | None:
         if not emp_id:
-            W.warn(self, "حدد موظفاً من الجدول أولاً.")
+            W.warn(self, tr("حدد موظفاً من الجدول أولاً."))
             return None
         return emp_id
 
@@ -328,7 +349,7 @@ class MainWindow(QMainWindow):
         if not emp_id:
             return
         if not self.ctx.can("delete_employee"):
-            W.error(self, "لا تملك صلاحية حذف الموظفين.")
+            W.error(self, tr("لا تملك صلاحية حذف الموظفين."))
             return
         employee = self.ctx.db.get_employee(emp_id)
         if not W.confirm(self, f"حذف الموظف «{employee.name}» مع إجازاته؟\n"
@@ -358,7 +379,7 @@ class MainWindow(QMainWindow):
     def _pick_leave(self, emp_id: str) -> int | None:
         leaves = self.ctx.db.list_leaves(emp_id)
         if not leaves:
-            W.info(self, "لا توجد إجازات مسجلة لهذا الموظف.")
+            W.info(self, tr("لا توجد إجازات مسجلة لهذا الموظف."))
             return None
         menu = QMenu(self)
         menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
@@ -376,6 +397,24 @@ class MainWindow(QMainWindow):
         emp_id = self._require(self._current_id())
         if emp_id:
             StatementDialog(self, self.ctx, emp_id).exec()
+
+    def _open_share(self) -> None:
+        """مشاركة التقارير بالبريد أو تلغرام."""
+        from .dialogs_share import ShareDialog
+        emp_id = self._current_id()
+        dialog = ShareDialog(self, self.ctx, emp_id, on_settings=self._open_settings_sharing)
+        dialog.exec()
+
+    def _open_settings_sharing(self) -> None:
+        dialog = SettingsDialog(self, self.ctx)
+        dialog.theme_changed.connect(self._on_settings_saved)
+        dialog.exec()
+
+    def _open_encryption(self) -> None:
+        """إدارة تشفير قاعدة البيانات."""
+        from .dialogs_security import EncryptionDialog
+        dialog = EncryptionDialog(self, self.ctx)
+        dialog.exec()
 
     def _open_settlement(self) -> None:
         emp_id = self._require(self._current_id())
@@ -436,7 +475,7 @@ class MainWindow(QMainWindow):
     # ==================================================================
     def _export(self, all_rows: bool) -> None:
         if not self.rows:
-            W.warn(self, "لا توجد بيانات للتصدير.")
+            W.warn(self, tr("لا توجد بيانات للتصدير."))
             return
         if all_rows:
             employees = self.ctx.employees()
@@ -451,10 +490,10 @@ class MainWindow(QMainWindow):
             return
         try:
             X.export_employees(path, rows, title=label)
-            W.info(self, f"تم التصدير ({label}):\n{path}")
+            W.info(self, trf("تم التصدير ({v0}):\n{v1}", v0=label, v1=path))
             self.ctx.db.log(self.ctx.user(), "تصدير", "employees", label, path)
         except Exception as exc:
-            W.error(self, f"فشل التصدير: {exc}")
+            W.error(self, trf("فشل التصدير: {v0}", v0=exc))
 
     def _report_rows_from_table(self) -> list[dict]:
         q, workplace, institution = self._filters()
@@ -465,12 +504,12 @@ class MainWindow(QMainWindow):
         employees = self.ctx.employees()
         rows = reports.global_report(employees, self.policy)
         if not rows:
-            W.info(self, "لا توجد بيانات للتصدير.")
+            W.info(self, tr("لا توجد بيانات للتصدير."))
             return
         content = H.global_report_html(rows, self.policy, "تقرير الإجازات التراكمية",
                                        self.ctx.session.scoped_institution)
         path = H.save_and_open(content, self.ctx.paths.reports_dir, "global_report.html")
-        W.info(self, f"تم فتح التقرير في المتصفح:\n{path.name}")
+        W.info(self, trf("تم فتح التقرير في المتصفح:\n{v0}", v0=path.name))
 
     def _print_employee(self) -> None:
         emp_id = self._require(self._current_id())
@@ -481,7 +520,7 @@ class MainWindow(QMainWindow):
         statement = B.yearly_statement(employee, employee.leaves, self.policy)
         content = H.employee_detail_html(employee, self.policy, balance, statement)
         path = H.save_and_open(content, self.ctx.paths.reports_dir, f"employee_{emp_id}.html")
-        W.info(self, f"تم فتح التقرير في المتصفح:\n{path.name}")
+        W.info(self, trf("تم فتح التقرير في المتصفح:\n{v0}", v0=path.name))
 
     def _export_pdf_employee(self) -> None:
         emp_id = self._require(self._current_id())
@@ -493,9 +532,9 @@ class MainWindow(QMainWindow):
             return
         try:
             P.export_employee_leaves(path, employee, self.policy)
-            W.info(self, f"تم التصدير:\n{path}")
+            W.info(self, trf("تم التصدير:\n{v0}", v0=path))
         except Exception as exc:
-            W.error(self, f"فشل التصدير: {exc}")
+            W.error(self, trf("فشل التصدير: {v0}", v0=exc))
 
     # ==================================================================
     # القوائم والسياق
@@ -546,11 +585,43 @@ class MainWindow(QMainWindow):
     # ==================================================================
     # المظهر والحالة
     # ==================================================================
-    def _toggle_theme(self) -> None:
-        name = "light" if theme.current() == "dark" else "dark"
+    def _choose_theme(self) -> None:
+        """قائمة الثيمات الخمسة."""
+        menu = QMenu(self)
+        menu.setLayoutDirection(self.layoutDirection())
+        current = theme.current()
+        for key, label in theme.theme_choices():
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(key == current)
+            action.triggered.connect(lambda _c=False, name=key: self.set_theme(name))
+            menu.addAction(action)
+        menu.exec(self.cursor().pos())
+
+    def set_theme(self, name: str) -> None:
         theme.set_theme(name)
-        self.ctx.ui_set("theme", name)
+        self.ctx.ui_set("theme", theme.current())
         self._apply_theme()
+
+    def _choose_language(self) -> None:
+        """تغيير لغة الواجهة (يُطبَّق بعد إعادة التشغيل)."""
+        menu = QMenu(self)
+        menu.setLayoutDirection(self.layoutDirection())
+        current = i18n.language()
+        for code, label in i18n.available_languages():
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(code == current)
+            action.triggered.connect(lambda _c=False, value=code: self._apply_language(value))
+            menu.addAction(action)
+        menu.exec(self.cursor().pos())
+
+    def _apply_language(self, code: str) -> None:
+        if code == i18n.language():
+            return
+        self.ctx.ui_set("language", code)
+        W.info(self, tr("تم حفظ اللغة الجديدة.") + "\n\n" +
+               tr("سيُطبَّق تغيير اللغة بعد إعادة تشغيل البرنامج."), tr("اللغة"))
 
     def _apply_theme(self) -> None:
         app = QApplication.instance()
@@ -578,6 +649,15 @@ class MainWindow(QMainWindow):
             path = self.ctx.backup.create_if_changed("start")
             if path:
                 self.ctx.db.log(self.ctx.user(), "نسخ احتياطي", "database", path.name, "عند بدء التشغيل")
+        # أيقونة الصندوق (Tray)
+        try:
+            from .tray import TrayController
+            self.tray = TrayController(self, self.ctx)
+            if self.tray.start():
+                QTimer.singleShot(900, lambda: self.tray.refresh_alerts(notify=True))
+        except Exception as exc:  # pragma: no cover - لا نُفشل التشغيل بسبب الصندوق
+            get_logger("tray").warning("تعذّر تشغيل أيقونة الصندوق: %s", exc)
+            self.tray = None
         if self.ctx.ui_get("notifications", True, bool):
             QTimer.singleShot(600, self._show_startup_alerts)
 
@@ -618,6 +698,16 @@ class MainWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def closeEvent(self, event):  # noqa: N802
+        # الإخفاء إلى الصندوق إن كان مُفعَّلاً (وزر الخروج/إنهاء التطبيق يتجاوز ذلك)
+        tray = getattr(self, "tray", None)
+        if (tray is not None and tray.tray is not None and not getattr(self, "_force_quit", False)
+                and bool(self.ctx.ui_get("close_to_tray", False, bool))):
+            self.ctx.ui_set("window_geometry", self.saveGeometry())
+            self.hide()
+            tray.notify(tr("البرنامج ما زال يعمل"),
+                        tr("أُخفي البرنامج إلى شريط النظام. اضغط على الأيقونة لإظهاره."))
+            event.ignore()
+            return
         try:
             self.ctx.ui_set("window_geometry", self.saveGeometry())
             if self.policy.backup_on_exit:
@@ -627,4 +717,7 @@ class MainWindow(QMainWindow):
                                     "عند الإغلاق")
         except Exception:  # pragma: no cover - لا نمنع الإغلاق بسبب النسخ
             pass
+        tray = getattr(self, "tray", None)
+        if tray is not None:
+            tray.shutdown()
         event.accept()

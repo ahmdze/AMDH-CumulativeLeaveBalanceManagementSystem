@@ -19,6 +19,7 @@ from pathlib import Path
 from . import config
 from .models import AppUser, Attachment, AuditEntry, Employee, Holiday, Leave
 from .rules import LeaveRule, Policy, default_rules
+from .services import crypto
 from .services.dates import parse_iso, to_iso
 
 SCHEMA_VERSION = 4
@@ -55,9 +56,11 @@ _LEAVE_COLUMNS: list[tuple[str, str]] = [
 class Database:
     """واجهة قاعدة البيانات الوحيدة المستخدمة من الواجهة والخدمات."""
 
-    def __init__(self, path: str | Path, backup_dir: str | Path | None = None) -> None:
+    def __init__(self, path: str | Path, backup_dir: str | Path | None = None,
+                 key_hex: str | None = None) -> None:
         self.path = Path(path)
         self.backup_dir = Path(backup_dir) if backup_dir else self.path.parent / "backups"
+        self.key_hex = key_hex
         self._conn: sqlite3.Connection | None = None
         self._policy_cache: Policy | None = None
         self.migrated = False
@@ -68,12 +71,17 @@ class Database:
     # ==================================================================
     def open(self) -> None:
         existed = self.path.exists() and self.path.stat().st_size > 0
+        if existed and self.key_hex is None and crypto.is_encrypted_database(self.path):
+            raise crypto.CryptoError(
+                "قاعدة البيانات مشفّرة — يلزم إدخال كلمة المرور لفتحها.")
         if existed and self._needs_migration():
             if self._safe_pre_migration_backup():
                 LOG.info("تم إنشاء نسخة احتياطية قبل الترحيل")
             self.migrated = True
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self.path), check_same_thread=False, isolation_level=None)
+        self._conn = crypto.open_connection(self.path, self.key_hex)
+        if not self.key_hex:
+            self._conn.isolation_level = None
         self._conn.row_factory = sqlite3.Row
         cur = self._conn.cursor()
         cur.execute("PRAGMA foreign_keys = ON")

@@ -24,6 +24,7 @@ from ..services import dates as D
 from ..services import reports, validation
 from . import theme, widgets as W
 from .dialogs_base import BaseDialog, IssuesBox
+from ..i18n import tr, trf
 
 
 class LeaveDialog(BaseDialog):
@@ -31,7 +32,7 @@ class LeaveDialog(BaseDialog):
 
     def __init__(self, parent=None, ctx=None, emp_id: str = "", leave_id: int | None = None,
                  on_save=None):
-        super().__init__(parent, ctx, "تعديل إجازة" if leave_id else "تسجيل إجازة")
+        super().__init__(parent, ctx, tr("تعديل إجازة") if leave_id else tr("تسجيل إجازة"))
         self.emp_id = emp_id
         self.leave_id = leave_id
         self.on_save = on_save
@@ -39,7 +40,7 @@ class LeaveDialog(BaseDialog):
         self.policy = self.ctx.db.policy(refresh=True)
         self.resize(620, 700)
         if not self.employee:
-            W.error(self, "الموظف غير موجود.")
+            W.error(self, tr("الموظف غير موجود."))
             self.reject()
             return
         self._build()
@@ -80,7 +81,7 @@ class LeaveDialog(BaseDialog):
         self.lbl_period = QLabel("—")
         self.lbl_period.setStyleSheet(theme.label_style("accent", 11, bold=True))
 
-        self.chk_manual = QCheckBox("تعديل الأيام المؤثرة يدوياً")
+        self.chk_manual = QCheckBox(tr("تعديل الأيام المؤثرة يدوياً"))
         self.sp_days = QSpinBox()
         self.sp_days.setRange(-100000, 100000)
         self.sp_days.setEnabled(False)
@@ -91,7 +92,7 @@ class LeaveDialog(BaseDialog):
         manual_row.addWidget(self.sp_days)
         manual_row.addStretch()
 
-        self.chk_outside = QCheckBox("استبعاد أيام هذه الإجازة من أيام الخدمة")
+        self.chk_outside = QCheckBox(tr("استبعاد أيام هذه الإجازة من أيام الخدمة"))
         self.chk_outside.toggled.connect(self._recalc)
         self.lbl_rule_hint = W.muted_label("")
 
@@ -105,25 +106,25 @@ class LeaveDialog(BaseDialog):
             self.cb_status.setCurrentIndex(1)
             self.cb_status.setEnabled(False)
 
-        form.addRow("نوع الإجازة", self.cb_type)
-        form.addRow("العدد والوحدة", self._holder(amount_row))
-        form.addRow("تبدأ في", self.d_start)
-        form.addRow("المدة المحتسبة", self.lbl_period)
+        form.addRow(tr("نوع الإجازة"), self.cb_type)
+        form.addRow(tr("العدد والوحدة"), self._holder(amount_row))
+        form.addRow(tr("تبدأ في"), self.d_start)
+        form.addRow(tr("المدة المحتسبة"), self.lbl_period)
         form.addRow("", self._holder(manual_row))
         form.addRow("", self.chk_outside)
         form.addRow("", self.lbl_rule_hint)
-        form.addRow("رقم الأمر", self.e_order)
+        form.addRow(tr("رقم الأمر"), self.e_order)
         form.addRow("", self.d_order)
-        form.addRow("الحالة", self.cb_status)
-        form.addRow("السبب / الملاحظة", self.e_reason)
+        form.addRow(tr("الحالة"), self.cb_status)
+        form.addRow(tr("السبب / الملاحظة"), self.e_reason)
         layout.addWidget(frame)
 
         # معاينة الرصيد
         preview = W.card()
         preview_layout = QHBoxLayout(preview)
-        self.lbl_before = W.LabeledValue("الرصيد الحالي")
-        self.lbl_days = W.LabeledValue("الأيام المؤثرة")
-        self.lbl_after = W.LabeledValue("الرصيد بعد التسجيل")
+        self.lbl_before = W.LabeledValue(tr("الرصيد الحالي"))
+        self.lbl_days = W.LabeledValue(tr("الأيام المؤثرة"))
+        self.lbl_after = W.LabeledValue(tr("الرصيد بعد التسجيل"))
         for widget in (self.lbl_before, self.lbl_days, self.lbl_after):
             preview_layout.addWidget(widget)
         layout.addWidget(preview)
@@ -134,8 +135,8 @@ class LeaveDialog(BaseDialog):
         self.issues = IssuesBox()
         layout.addWidget(self.issues)
         layout.addStretch()
-        layout.addLayout(self.buttons_row(W.button("إلغاء", "Ghost", self.reject, width=110),
-                                          W.button("💾 حفظ الإجازة", "Accent", self._save, width=160)))
+        layout.addLayout(self.buttons_row(W.button(tr("إلغاء"), "Ghost", self.reject, width=110),
+                                          W.button(tr("💾 حفظ الإجازة"), "Accent", self._save, width=160)))
 
     @staticmethod
     def _holder(layout) -> QWidget:
@@ -151,7 +152,7 @@ class LeaveDialog(BaseDialog):
             return
         leave = self.ctx.db.get_leave(self.leave_id)
         if not leave:
-            W.error(self, "الإجازة غير موجودة.")
+            W.error(self, tr("الإجازة غير موجودة."))
             self.reject()
             return
         index = self.cb_type.findText(leave.type)
@@ -206,7 +207,7 @@ class LeaveDialog(BaseDialog):
             hints.append("هذا النوع يتطلب رقم الأمر.")
         hints.append(f"طريقة العد: {rule.count_mode_label} | {rule.quota_label}")
         self.lbl_rule_hint.setText(" • ".join(hints))
-        self.e_order.setPlaceholderText("مطلوب" if rule.requires_order else "اختياري")
+        self.e_order.setPlaceholderText(tr("مطلوب") if rule.requires_order else tr("اختياري"))
         if not manual:
             self._recalc()
 
@@ -270,7 +271,7 @@ class LeaveDialog(BaseDialog):
     # ------------------------------------------------------------------
     def _save(self) -> None:
         if not self.ctx.can("edit_leave"):
-            W.error(self, "لا تملك صلاحية تسجيل الإجازات.")
+            W.error(self, tr("لا تملك صلاحية تسجيل الإجازات."))
             return
         candidate = self._candidate()
         issues = validation.validate_leave(candidate, self.employee, self.employee.leaves,
@@ -278,7 +279,7 @@ class LeaveDialog(BaseDialog):
         self.issues.set_issues(issues)
         errors = [i.message for i in issues if i.is_error]
         if errors:
-            W.error(self, "\n".join(errors), "تعذّر الحفظ")
+            W.error(self, "\n".join(errors), tr("تعذّر الحفظ"))
             return
         warnings = [i.message for i in issues if i.level == "warning"]
         if warnings and not W.confirm(self, "تنبيهات:\n\n" + "\n".join(f"• {w}" for w in warnings) +
@@ -299,19 +300,19 @@ class LeaveDialog(BaseDialog):
 # ---------------------------------------------------------------------------
 class AttachmentsDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, leave_id: int | None = None, emp_id: str = ""):
-        super().__init__(parent, ctx, "مرفقات الإجازة")
+        super().__init__(parent, ctx, tr("مرفقات الإجازة"))
         self.leave_id = leave_id
         self.emp_id = emp_id
         self.resize(640, 420)
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label("مرفقات الإجازة (صورة الأمر / كتاب)", 14))
-        layout.addWidget(W.muted_label(f"تُخزَّن المرفقات في: {self.ctx.paths.attachments_dir}"))
-        self.table = W.TablePanel(["#", "الملف", "أُضيف في", "بواسطة"])
+        layout.addWidget(W.title_label(tr("مرفقات الإجازة (صورة الأمر / كتاب)"), 14))
+        layout.addWidget(W.muted_label(trf("تُخزَّن المرفقات في: {v0}", v0=self.ctx.paths.attachments_dir)))
+        self.table = W.TablePanel(["#", tr("الملف"), tr("أُضيف في"), tr("بواسطة")])
         layout.addWidget(self.table)
         row = QHBoxLayout()
-        row.addWidget(W.button("➕ إضافة مرفق", "Accent", self._add))
-        row.addWidget(W.button("📂 فتح المحدد", "Blue", self._open))
-        row.addWidget(W.button("🗑 حذف المحدد", "Warn", self._delete))
+        row.addWidget(W.button(tr("➕ إضافة مرفق"), "Accent", self._add))
+        row.addWidget(W.button(tr("📂 فتح المحدد"), "Blue", self._open))
+        row.addWidget(W.button(tr("🗑 حذف المحدد"), "Warn", self._delete))
         row.addStretch()
         row.addWidget(self.close_button())
         layout.addLayout(row)
@@ -324,11 +325,11 @@ class AttachmentsDialog(BaseDialog):
         items = self._items()
         self._data = items
         rows = [[i + 1, item.filename, item.added_at, item.added_by] for i, item in enumerate(items)]
-        self.table.set_rows(rows, empty_text="لا توجد مرفقات")
+        self.table.set_rows(rows, empty_text=tr("لا توجد مرفقات"))
 
     def _add(self) -> None:
         if not self.leave_id:
-            W.info(self, "احفظ الإجازة أولاً ثم أضف المرفقات.")
+            W.info(self, tr("احفظ الإجازة أولاً ثم أضف المرفقات."))
             return
         path, _ = QFileDialog.getOpenFileName(self, "اختر الملف", "",
                                               "ملفات (*.pdf *.png *.jpg *.jpeg *.bmp *.tif *.docx)")
@@ -340,7 +341,7 @@ class AttachmentsDialog(BaseDialog):
             self.ctx.paths.attachments_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source, self.ctx.paths.attachments_dir / stored)
         except OSError as exc:
-            W.error(self, f"تعذّر نسخ الملف: {exc}")
+            W.error(self, trf("تعذّر نسخ الملف: {v0}", v0=exc))
             return
         self.ctx.db.add_attachment(self.leave_id, self.emp_id, source.name, stored, self.ctx.user())
         self._refresh()
@@ -348,21 +349,21 @@ class AttachmentsDialog(BaseDialog):
     def _open(self) -> None:
         row = self.table.current_row()
         if row < 0:
-            W.warn(self, "حدد مرفقاً.")
+            W.warn(self, tr("حدد مرفقاً."))
             return
         target = self.ctx.paths.attachments_dir / self._data[row].stored_name
         if not target.exists():
-            W.error(self, "الملف غير موجود على القرص.")
+            W.error(self, tr("الملف غير موجود على القرص."))
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     def _delete(self) -> None:
         row = self.table.current_row()
         if row < 0:
-            W.warn(self, "حدد مرفقاً.")
+            W.warn(self, tr("حدد مرفقاً."))
             return
         item = self._data[row]
-        if not W.confirm(self, f"حذف المرفق «{item.filename}»؟"):
+        if not W.confirm(self, trf("حذف المرفق «{v0}»؟", v0=item.filename)):
             return
         self.ctx.db.delete_attachment(item.id, self.ctx.user())
         try:
@@ -377,13 +378,13 @@ class AttachmentsDialog(BaseDialog):
 # ---------------------------------------------------------------------------
 class StatementDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, emp_id: str = ""):
-        super().__init__(parent, ctx, "كشف حساب الرصيد")
+        super().__init__(parent, ctx, tr("كشف حساب الرصيد"))
         self.emp_id = emp_id
         self.policy = self.ctx.db.policy(refresh=True)
         self.employee = self.ctx.db.get_employee(emp_id)
         self.resize(980, 620)
         if not self.employee:
-            W.error(self, "الموظف غير موجود.")
+            W.error(self, tr("الموظف غير موجود."))
             self.reject()
             return
         self.balance = B.compute_balance(self.employee, self.employee.leaves, self.policy)
@@ -393,7 +394,7 @@ class StatementDialog(BaseDialog):
 
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label(f"كشف حساب: {self.employee.name}", 15))
+        layout.addWidget(W.title_label(trf("كشف حساب: {v0}", v0=self.employee.name), 15))
 
         summary = W.card()
         summary_layout = QHBoxLayout(summary)
@@ -415,18 +416,18 @@ class StatementDialog(BaseDialog):
         layout.addWidget(W.muted_label(self.statement.policy_note +
                                        " — قد يختلف مجموع الاستحقاق السنوي بيوم عن الاحتساب المتواصل "
                                        "بسبب تقريب كل سنة على حدة."))
-        self.table = W.TablePanel(["سنة الخدمة", "من", "إلى", "أيام الخدمة", "خارج الرصيد",
-                                   "صافي الدوام", "المستحق", "المأخوذ", "منتهي", "الرصيد المرحّل"])
+        self.table = W.TablePanel([tr("سنة الخدمة"), tr("من"), tr("إلى"), tr("أيام الخدمة"), tr("خارج الرصيد"),
+                                   tr("صافي الدوام"), tr("المستحق"), tr("المأخوذ"), tr("منتهي"), tr("الرصيد المرحّل")])
         data = [[r["index"], r["start"], r["end"], r["service_days"], r["outside_days"],
                  r["net_days"], r["earned"], r["taken"], r["expired"], r["carry_out"]]
                 for r in self.rows]
         self.table.set_rows(data, numeric_columns={3, 4, 5, 6, 7, 8, 9},
-                            empty_text="لا توجد سنوات خدمة محتسبة")
+                            empty_text=tr("لا توجد سنوات خدمة محتسبة"))
         layout.addWidget(self.table)
         row = QHBoxLayout()
         row.addWidget(W.button("📊 Excel", "Ghost", self._excel))
         row.addWidget(W.button("📄 PDF", "Ghost", self._pdf))
-        row.addWidget(W.button("🖨 طباعة", "Blue", self._print))
+        row.addWidget(W.button(tr("🖨 طباعة"), "Blue", self._print))
         row.addStretch()
         row.addWidget(self.close_button())
         layout.addLayout(row)
@@ -438,9 +439,9 @@ class StatementDialog(BaseDialog):
             return
         try:
             X.export_statement(path, self.employee, self.policy, self.rows, self.balance)
-            W.info(self, f"تم التصدير:\n{path}")
+            W.info(self, trf("تم التصدير:\n{v0}", v0=path))
         except Exception as exc:
-            W.error(self, f"فشل التصدير: {exc}")
+            W.error(self, trf("فشل التصدير: {v0}", v0=exc))
 
     def _pdf(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "حفظ PDF", f"statement_{self.emp_id}.pdf", "PDF (*.pdf)")
@@ -448,14 +449,14 @@ class StatementDialog(BaseDialog):
             return
         try:
             P.export_statement(path, self.employee, self.policy, self.rows, self.balance)
-            W.info(self, f"تم التصدير:\n{path}")
+            W.info(self, trf("تم التصدير:\n{v0}", v0=path))
         except Exception as exc:
-            W.error(self, f"فشل التصدير: {exc}")
+            W.error(self, trf("فشل التصدير: {v0}", v0=exc))
 
     def _print(self) -> None:
         content = H.statement_html(self.employee, self.policy, self.statement, self.balance)
         path = H.save_and_open(content, self.ctx.paths.reports_dir, f"statement_{self.emp_id}.html")
-        W.info(self, f"تم فتح كشف الحساب في المتصفح:\n{path.name}")
+        W.info(self, trf("تم فتح كشف الحساب في المتصفح:\n{v0}", v0=path.name))
 
 
 # ---------------------------------------------------------------------------
@@ -463,13 +464,13 @@ class StatementDialog(BaseDialog):
 # ---------------------------------------------------------------------------
 class SettlementDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, emp_id: str = ""):
-        super().__init__(parent, ctx, "تصفية نهاية الخدمة")
+        super().__init__(parent, ctx, tr("تصفية نهاية الخدمة"))
         self.emp_id = emp_id
         self.policy = self.ctx.db.policy(refresh=True)
         self.employee = self.ctx.db.get_employee(emp_id)
         self.resize(620, 480)
         if not self.employee:
-            W.error(self, "الموظف غير موجود.")
+            W.error(self, tr("الموظف غير موجود."))
             self.reject()
             return
         self._build()
@@ -477,27 +478,27 @@ class SettlementDialog(BaseDialog):
 
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label(f"تصفية نهاية الخدمة — {self.employee.name}", 15))
+        layout.addWidget(W.title_label(trf("تصفية نهاية الخدمة — {v0}", v0=self.employee.name), 15))
         card = W.card()
         form = QFormLayout(card)
         self.d_asof = W.date_edit(self.employee.end_date or date.today())
         self.d_asof.dateChanged.connect(self._recalc)
-        form.addRow("تاريخ التصفية", self.d_asof)
+        form.addRow(tr("تاريخ التصفية"), self.d_asof)
         self.sp_value = QDoubleSpinBox()
         self.sp_value.setRange(0, 100_000_000)
         self.sp_value.setDecimals(2)
         self.sp_value.setSuffix(" (قيمة اليوم)")
         self.sp_value.valueChanged.connect(self._recalc)
-        form.addRow("قيمة اليوم الواحد (اختياري)", self.sp_value)
+        form.addRow(tr("قيمة اليوم الواحد (اختياري)"), self.sp_value)
         layout.addWidget(card)
 
         summary = W.card()
         summary_layout = QHBoxLayout(summary)
-        self.lbl_service = W.LabeledValue("صافي أيام الخدمة")
-        self.lbl_earned = W.LabeledValue("المستحقة")
-        self.lbl_taken = W.LabeledValue("المأخوذة")
-        self.lbl_balance = W.LabeledValue("الرصيد المستحق")
-        self.lbl_amount = W.LabeledValue("المبلغ")
+        self.lbl_service = W.LabeledValue(tr("صافي أيام الخدمة"))
+        self.lbl_earned = W.LabeledValue(tr("المستحقة"))
+        self.lbl_taken = W.LabeledValue(tr("المأخوذة"))
+        self.lbl_balance = W.LabeledValue(tr("الرصيد المستحق"))
+        self.lbl_amount = W.LabeledValue(tr("المبلغ"))
         for widget in (self.lbl_service, self.lbl_earned, self.lbl_taken, self.lbl_balance, self.lbl_amount):
             summary_layout.addWidget(widget)
         layout.addWidget(summary)
