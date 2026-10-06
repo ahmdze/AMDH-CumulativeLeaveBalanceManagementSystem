@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QMainWindow, QMenu, QScrollArea, QVBoxLayout, QWidget,
 )
 
-from .. import config
+from .. import config, i18n
 from ..exporters import excel as X
 from ..exporters import html as H
 from ..exporters import pdf as P
@@ -585,16 +585,37 @@ class MainWindow(QMainWindow):
     # ==================================================================
     # المظهر والحالة
     # ==================================================================
-    def _choose_theme(self) -> None:
-        """قائمة الثيمات الخمسة."""
-        menu = QMenu(self)
-        menu.setLayoutDirection(self.layoutDirection())
+    def theme_actions(self) -> list[QAction]:
+        """إجراءات قائمة الثيمات (مفصولة عن العرض لتكون قابلة للفحص)."""
         current = theme.current()
+        actions = []
         for key, label in theme.theme_choices():
             action = QAction(label, self)
             action.setCheckable(True)
             action.setChecked(key == current)
+            action.setData(key)
             action.triggered.connect(lambda _c=False, name=key: self.set_theme(name))
+            actions.append(action)
+        return actions
+
+    def language_actions(self) -> list[QAction]:
+        """إجراءات قائمة اللغات (مفصولة عن العرض لتكون قابلة للفحص)."""
+        current = i18n.language()
+        actions = []
+        for code, label in i18n.available_languages():
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(code == current)
+            action.setData(code)
+            action.triggered.connect(lambda _c=False, value=code: self._apply_language(value))
+            actions.append(action)
+        return actions
+
+    def _choose_theme(self) -> None:
+        """قائمة الثيمات الخمسة."""
+        menu = QMenu(self)
+        menu.setLayoutDirection(self.layoutDirection())
+        for action in self.theme_actions():
             menu.addAction(action)
         menu.exec(self.cursor().pos())
 
@@ -607,12 +628,7 @@ class MainWindow(QMainWindow):
         """تغيير لغة الواجهة (يُطبَّق بعد إعادة التشغيل)."""
         menu = QMenu(self)
         menu.setLayoutDirection(self.layoutDirection())
-        current = i18n.language()
-        for code, label in i18n.available_languages():
-            action = QAction(label, self)
-            action.setCheckable(True)
-            action.setChecked(code == current)
-            action.triggered.connect(lambda _c=False, value=code: self._apply_language(value))
+        for action in self.language_actions():
             menu.addAction(action)
         menu.exec(self.cursor().pos())
 

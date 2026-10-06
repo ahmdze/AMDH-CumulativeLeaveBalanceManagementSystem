@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import QApplication, QMessageBox
 from . import config, i18n
 from .context import AppContext
 from .db import Database
-from .i18n import tr
+from .i18n import tr, trf
 from .logging_setup import get_logger, install_excepthook, setup_logging
 from .services.backup import BackupService
 from .services.security import make_session

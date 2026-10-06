@@ -101,6 +101,28 @@ def probe():
         out.append(f"theme {theme_key} ({theme_label}): ok | balance color={style}")
     window.set_theme("dark")
 
+    # قوائم الثيم واللغة (كانت مساراً غير مغطّى وتسبّبت في NameError)
+    theme_keys = [action.data() for action in window.theme_actions()]
+    language_codes = [action.data() for action in window.language_actions()]
+    out.append(f"theme menu: {theme_keys}")
+    out.append(f"language menu: {language_codes}")
+    if len(theme_keys) != 5:
+        errors.append(f"عدد الثيمات في القائمة ليس 5: {theme_keys}")
+    if language_codes != ["ar", "ku", "en"]:
+        errors.append(f"قائمة اللغات غير متوقعة: {language_codes}")
+    window._apply_language(i18n.language())      # نفس اللغة ⇒ بلا حوار
+
+    # مسار كلمة المرور الخاطئة في نافذة الدخول (كان يُسقط البرنامج)
+    login = DLG.LoginDialog(window, ctx)
+    login.e_user.setText("admin")
+    login.e_pass.setText("كلمة-خاطئة")
+    login._login()
+    if login.user is not None or not login.lbl_error.text():
+        errors.append("مسار كلمة المرور الخاطئة لم يعمل كما هو متوقع")
+    out.append(f"login failure message: {login.lbl_error.text()[:60]!r}")
+    login._locked = False
+    login.close()
+
     emp_id = window.rows[0][0]
     employee = db.get_employee(emp_id)
     balance = B.compute_balance(employee, employee.leaves, policy)

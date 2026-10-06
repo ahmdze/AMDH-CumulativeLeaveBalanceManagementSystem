@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 
 from .. import config
 from .. import i18n
-from ..i18n import tr
+from ..i18n import tr, trf
 from ..services import security
 from . import assets, theme, widgets as W
 from .dialogs_base import BaseDialog
