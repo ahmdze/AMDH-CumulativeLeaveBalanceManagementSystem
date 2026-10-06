@@ -23,7 +23,7 @@ sys.path.insert(0, str(ROOT))
 from PyQt6.QtCore import QSettings, Qt, QTimer                 # noqa: E402
 from PyQt6.QtWidgets import QApplication                       # noqa: E402
 
-from amdh_leave import config, i18n                            # noqa: E402
+from amdh_leave import config                                 # noqa: E402
 from amdh_leave.context import AppContext                      # noqa: E402
 from amdh_leave.db import Database                             # noqa: E402
 from amdh_leave.services.backup import BackupService           # noqa: E402
@@ -59,8 +59,6 @@ def main() -> int:
     args = parser.parse_args()
 
     app = QApplication(sys.argv[:1])
-    i18n.load_catalogs()
-    i18n.set_language(os.environ.get("AMDH_TEST_LANG", "ar"))
     tmp = Path(tempfile.mkdtemp(prefix="amdh_shots_"))
     ctx = build_context(tmp)
 

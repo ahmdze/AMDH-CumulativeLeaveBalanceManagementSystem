@@ -6,7 +6,6 @@ from PyQt6.QtCore import QObject, QTimer
 from PyQt6.QtGui import QAction
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
-from ..i18n import tr, trf
 from ..logging_setup import get_logger
 from ..services import reports
 from . import assets, theme
@@ -49,7 +48,7 @@ class TrayController(QObject):
             return True
         self.tray = QSystemTrayIcon(assets.app_icon(), self.window)
         self.tray.setToolTip(f"{self.ctx.ui_get('app_name', '') or ''}".strip() or
-                             tr("نظام إدارة الإجازات التراكمية"))
+                             "نظام إدارة الإجازات التراكمية")
         self._build_menu()
         self.tray.activated.connect(self._on_activated)
         self.tray.show()
@@ -67,33 +66,33 @@ class TrayController(QObject):
         menu = QMenu()
         menu.setLayoutDirection(self.window.layoutDirection())
 
-        act_toggle = QAction(tr("إظهار/إخفاء النافذة"), self)
+        act_toggle = QAction("إظهار/إخفاء النافذة", self)
         act_toggle.triggered.connect(self.toggle_window)
         menu.addAction(act_toggle)
         menu.addSeparator()
 
-        self.act_alerts = QAction(tr("التنبيهات"), self)
+        self.act_alerts = QAction("التنبيهات", self)
         self.act_alerts.triggered.connect(self.window._open_notifications)
         menu.addAction(self.act_alerts)
 
-        act_dashboard = QAction(tr("لوحة المؤشرات"), self)
+        act_dashboard = QAction("لوحة المؤشرات", self)
         act_dashboard.triggered.connect(self.window._open_dashboard)
         menu.addAction(act_dashboard)
 
-        act_calendar = QAction(tr("تقويم الإجازات"), self)
+        act_calendar = QAction("تقويم الإجازات", self)
         act_calendar.triggered.connect(self.window._open_calendar)
         menu.addAction(act_calendar)
 
-        act_leave = QAction(tr("تسجيل إجازة"), self)
+        act_leave = QAction("تسجيل إجازة", self)
         act_leave.triggered.connect(self.window._quick_leave)
         menu.addAction(act_leave)
         menu.addSeparator()
 
-        act_backup = QAction(tr("نسخة احتياطية الآن"), self)
+        act_backup = QAction("نسخة احتياطية الآن", self)
         act_backup.triggered.connect(self.backup_now)
         menu.addAction(act_backup)
 
-        theme_menu = menu.addMenu(tr("الثيم"))
+        theme_menu = menu.addMenu("الثيم")
         theme_menu.setLayoutDirection(self.window.layoutDirection())
         for key, label in theme.theme_choices():
             action = QAction(label, self)
@@ -103,11 +102,11 @@ class TrayController(QObject):
             theme_menu.addAction(action)
 
         menu.addSeparator()
-        act_about = QAction(tr("حول النظام"), self)
+        act_about = QAction("حول النظام", self)
         act_about.triggered.connect(self.window._open_about)
         menu.addAction(act_about)
 
-        act_exit = QAction(tr("خروج"), self)
+        act_exit = QAction("خروج", self)
         act_exit.triggered.connect(self.quit_application)
         menu.addAction(act_exit)
 
@@ -135,9 +134,9 @@ class TrayController(QObject):
     def backup_now(self) -> None:
         path = self.ctx.backup.create("manual")
         if path:
-            self.notify(tr("نسخة احتياطية"), trf("تم إنشاء نسخة احتياطية: {name}", name=path.name))
+            self.notify("نسخة احتياطية", f"تم إنشاء نسخة احتياطية: {path.name}")
         else:
-            self.notify(tr("نسخة احتياطية"), tr("تعذّر إنشاء النسخة الاحتياطية (راجع ملف السجل)."),
+            self.notify("نسخة احتياطية", "تعذّر إنشاء النسخة الاحتياطية (راجع ملف السجل).",
                         warning=True)
 
     # ------------------------------------------------------------------
@@ -152,8 +151,8 @@ class TrayController(QObject):
         important = [a for a in alerts if a.severity in ("high", "medium")]
         if self.act_alerts is not None:
             count = len(important)
-            self.act_alerts.setText(trf("التنبيهات ({count})", count=count) if count
-                                    else tr("التنبيهات"))
+            self.act_alerts.setText(f"التنبيهات ({count})" if count
+                                    else "التنبيهات")
         current = self._signature(important)
         new_items = [a for a in important if f"{a.kind}|{a.emp_id}|{a.leave_id}|{a.message}"
                      not in self._seen]
@@ -162,7 +161,7 @@ class TrayController(QObject):
             first = new_items[0]
             extra = len(new_items) - 1
             body = first.message if not extra else f"{first.message} (+{extra})"
-            self.notify(trf("تنبيهات جديدة ({count})", count=len(new_items)), body,
+            self.notify(f"تنبيهات جديدة ({len(new_items)})", body,
                         warning=first.severity == "high")
         return len(important)
 

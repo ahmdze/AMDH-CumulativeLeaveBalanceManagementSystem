@@ -16,7 +16,6 @@ from PyQt6.QtCore import QSettings, QTimer                      # noqa: E402
 from PyQt6.QtWidgets import QApplication                        # noqa: E402
 
 from amdh_leave import config                                   # noqa: E402
-from amdh_leave import i18n                                     # noqa: E402
 from amdh_leave.context import AppContext                       # noqa: E402
 from amdh_leave.db import Database                              # noqa: E402
 from amdh_leave.logging_setup import setup_logging              # noqa: E402
@@ -45,13 +44,9 @@ setup_logging(TMP / "logs")
 theme.set_theme("dark")
 app.setStyleSheet(theme.stylesheet())
 
-# اللغة للفحص (ar افتراضياً؛ يمكن تمرير en أو ku عبر AMDH_TEST_LANG)
-LANGUAGE = os.environ.get("AMDH_TEST_LANG", "ar")
-i18n.load_catalogs()
-i18n.set_language(LANGUAGE)
+# الواجهة عربية فقط باتجاه من اليمين إلى اليسار
 from PyQt6.QtCore import Qt as _Qt                              # noqa: E402
-app.setLayoutDirection(_Qt.LayoutDirection.RightToLeft if i18n.is_rtl()
-                       else _Qt.LayoutDirection.LeftToRight)
+app.setLayoutDirection(_Qt.LayoutDirection.RightToLeft)
 
 paths = config.Paths(TMP).ensure()
 db = Database(paths.db_path, paths.backups_dir)
@@ -101,16 +96,11 @@ def probe():
         out.append(f"theme {theme_key} ({theme_label}): ok | balance color={style}")
     window.set_theme("dark")
 
-    # قوائم الثيم واللغة (كانت مساراً غير مغطّى وتسبّبت في NameError)
+    # قائمة الثيمات (كانت مساراً غير مغطّى وتسبّبت في NameError)
     theme_keys = [action.data() for action in window.theme_actions()]
-    language_codes = [action.data() for action in window.language_actions()]
     out.append(f"theme menu: {theme_keys}")
-    out.append(f"language menu: {language_codes}")
     if len(theme_keys) != 5:
         errors.append(f"عدد الثيمات في القائمة ليس 5: {theme_keys}")
-    if language_codes != ["ar", "ku", "en"]:
-        errors.append(f"قائمة اللغات غير متوقعة: {language_codes}")
-    window._apply_language(i18n.language())      # نفس اللغة ⇒ بلا حوار
 
     # مسار كلمة المرور الخاطئة في نافذة الدخول (كان يُسقط البرنامج)
     login = DLG.LoginDialog(window, ctx)
@@ -221,11 +211,6 @@ QTimer.singleShot(300, probe)
 app.exec()
 
 print("\n".join(out))
-missing = sorted(i18n.missing_keys())
-print(f"\nlanguage: {LANGUAGE} | missing translations: {len(missing)}")
-if missing:
-    for item in missing[:15]:
-        print("   MISSING:", item)
 if errors:
     print("\n=== ERRORS ===")
     print("\n".join(errors))

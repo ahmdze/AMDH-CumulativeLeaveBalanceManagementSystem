@@ -10,8 +10,6 @@ from PyQt6.QtWidgets import (
 )
 
 from .. import config
-from .. import i18n
-from ..i18n import tr, trf
 from ..services import security
 from . import assets, theme, widgets as W
 from .dialogs_base import BaseDialog
@@ -23,7 +21,7 @@ class LoginDialog(BaseDialog):
     """نافذة دخول مُعاد تصميمها مع الشعارات واختيار اللغة."""
 
     def __init__(self, parent=None, ctx=None):
-        super().__init__(parent, ctx, tr("تسجيل الدخول"))
+        super().__init__(parent, ctx, "تسجيل الدخول")
         self.user = None
         self.attempts = 0
         self._locked = False
@@ -46,7 +44,7 @@ class LoginDialog(BaseDialog):
         self.lbl_title.setStyleSheet(theme.label_style("accent", 17, bold=True))
         layout.addWidget(self.lbl_title)
 
-        self.lbl_version = W.muted_label(f"{tr('الإصدار')} {config.APP_VERSION}")
+        self.lbl_version = W.muted_label(f"الإصدار {config.APP_VERSION}")
         self.lbl_version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.lbl_version)
         layout.addWidget(W.separator())
@@ -56,22 +54,14 @@ class LoginDialog(BaseDialog):
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(10)
 
-        self.lbl_language = QLabel(tr("لغة الواجهة"))
-        self.cb_language = QComboBox()
-        for code, label in i18n.available_languages():
-            self.cb_language.addItem(label, code)
-        index = self.cb_language.findData(i18n.language())
-        self.cb_language.setCurrentIndex(max(0, index))
-        self.cb_language.currentIndexChanged.connect(self._switch_language)
-
-        self.lbl_user = QLabel(tr("اسم المستخدم"))
+        self.lbl_user = QLabel("اسم المستخدم")
         self.e_user = QLineEdit()
-        self.e_user.setPlaceholderText(tr("أدخل اسم المستخدم"))
+        self.e_user.setPlaceholderText("أدخل اسم المستخدم")
 
-        self.lbl_pass = QLabel(tr("كلمة المرور"))
+        self.lbl_pass = QLabel("كلمة المرور")
         self.e_pass = QLineEdit()
         self.e_pass.setEchoMode(QLineEdit.EchoMode.Password)
-        self.e_pass.setPlaceholderText(tr("أدخل كلمة المرور"))
+        self.e_pass.setPlaceholderText("أدخل كلمة المرور")
         self.e_pass.returnPressed.connect(self._login)
         self.e_user.returnPressed.connect(lambda: self.e_pass.setFocus())
 
@@ -79,7 +69,7 @@ class LoginDialog(BaseDialog):
         self.btn_eye.setObjectName("Ghost")
         self.btn_eye.setFixedWidth(42)
         self.btn_eye.setCheckable(True)
-        self.btn_eye.setToolTip(tr("إظهار كلمة المرور"))
+        self.btn_eye.setToolTip("إظهار كلمة المرور")
         self.btn_eye.toggled.connect(self._toggle_password)
 
         pass_row = QWidget()
@@ -89,19 +79,17 @@ class LoginDialog(BaseDialog):
         pass_layout.addWidget(self.e_pass, 1)
         pass_layout.addWidget(self.btn_eye)
 
-        self.chk_remember = QCheckBox(tr("تذكر اسم المستخدم"))
+        self.chk_remember = QCheckBox("تذكر اسم المستخدم")
         last_user = str(self.ctx.ui_get("last_user", "") or "")
         self.chk_remember.setChecked(bool(last_user))
         if last_user:
             self.e_user.setText(last_user)
 
-        grid.addWidget(self.lbl_language, 0, 0)
-        grid.addWidget(self.cb_language, 0, 1)
-        grid.addWidget(self.lbl_user, 1, 0)
-        grid.addWidget(self.e_user, 1, 1)
-        grid.addWidget(self.lbl_pass, 2, 0)
-        grid.addWidget(pass_row, 2, 1)
-        grid.addWidget(self.chk_remember, 3, 1)
+        grid.addWidget(self.lbl_user, 0, 0)
+        grid.addWidget(self.e_user, 0, 1)
+        grid.addWidget(self.lbl_pass, 1, 0)
+        grid.addWidget(pass_row, 1, 1)
+        grid.addWidget(self.chk_remember, 2, 1)
         grid.setColumnStretch(1, 1)
         layout.addWidget(card)
 
@@ -119,8 +107,8 @@ class LoginDialog(BaseDialog):
         layout.addStretch()
         buttons = QHBoxLayout()
         buttons.addStretch()
-        self.btn_exit = W.button(tr("خروج"), "Ghost", self.reject, width=120)
-        self.btn_login = W.button(tr("دخول"), "Accent", self._login, width=150)
+        self.btn_exit = W.button("خروج", "Ghost", self.reject, width=120)
+        self.btn_login = W.button("دخول", "Accent", self._login, width=150)
         buttons.addWidget(self.btn_exit)
         buttons.addWidget(self.btn_login)
         buttons.addStretch()
@@ -154,36 +142,13 @@ class LoginDialog(BaseDialog):
     # ------------------------------------------------------------------
     def _toggle_password(self, shown: bool) -> None:
         self.e_pass.setEchoMode(QLineEdit.EchoMode.Normal if shown else QLineEdit.EchoMode.Password)
-        self.btn_eye.setToolTip(tr("إخفاء كلمة المرور") if shown else tr("إظهار كلمة المرور"))
-
-    def _switch_language(self) -> None:
-        code = self.cb_language.currentData()
-        if not code or code == i18n.language():
-            return
-        i18n.set_language(code)
-        self.ctx.ui_set("language", code)
-        self.retranslate()
-        self._update_hint()
-
-    def retranslate(self) -> None:
-        """إعادة تعريب/ترجمة نصوص النافذة فوراً (لتغيير اللغة قبل الدخول)."""
-        self.setWindowTitle(tr("تسجيل الدخول"))
-        self.lbl_version.setText(f"{tr('الإصدار')} {config.APP_VERSION}")
-        self.lbl_language.setText(tr("لغة الواجهة"))
-        self.lbl_user.setText(tr("اسم المستخدم"))
-        self.lbl_pass.setText(tr("كلمة المرور"))
-        self.e_user.setPlaceholderText(tr("أدخل اسم المستخدم"))
-        self.e_pass.setPlaceholderText(tr("أدخل كلمة المرور"))
-        self.chk_remember.setText(tr("تذكر اسم المستخدم"))
-        self.btn_exit.setText(tr("خروج"))
-        self.btn_login.setText(tr("دخول"))
-        self.lbl_error.setText("")
+        self.btn_eye.setToolTip("إخفاء كلمة المرور" if shown else "إظهار كلمة المرور")
 
     def _update_hint(self) -> None:
         stats = self.ctx.db.stats()
         self.lbl_footer.setText(
-            f"{tr('قاعدة البيانات')}: {self.ctx.paths.db_path.name} | "
-            f"{tr('الموظفون')}: {stats['employees']} | {tr('الإجازات')}: {stats['leaves']}")
+            f"قاعدة البيانات: {self.ctx.paths.db_path.name} | "
+            f"الموظفون: {stats['employees']} | الإجازات: {stats['leaves']}")
 
     # ------------------------------------------------------------------
     def _login(self) -> None:
@@ -192,20 +157,20 @@ class LoginDialog(BaseDialog):
         username = self.e_user.text().strip()
         password = self.e_pass.text()
         if not username:
-            self._fail(tr("أدخل اسم المستخدم."))
+            self._fail("أدخل اسم المستخدم.")
             self.e_user.setFocus()
             return
         user = self.ctx.db.get_user(username)
         if not user or not user.active:
-            self._fail(tr("المستخدم غير موجود أو غير مُفعَّل."))
+            self._fail("المستخدم غير موجود أو غير مُفعَّل.")
             return
         if not security.verify_password(password, user.password_hash, user.salt, user.iterations):
-            self._fail(tr("كلمة المرور غير صحيحة."))
+            self._fail("كلمة المرور غير صحيحة.")
             return
         self.ctx.db.touch_login(username)
         self.ctx.ui_set("last_user", username if self.chk_remember.isChecked() else "")
         self.user = user
-        self.ctx.db.log(username, tr("دخول"), "session", username, "")
+        self.ctx.db.log(username, "دخول", "session", username, "")
         self.accept()
 
     def _fail(self, message: str) -> None:
@@ -216,7 +181,7 @@ class LoginDialog(BaseDialog):
         if remaining <= 0:
             self._lock()
             return
-        self.lbl_error.setText(f"{message}\n{trf('المحاولات المتبقية: {count}', count=remaining)}")
+        self.lbl_error.setText(f"{message}\n{f"المحاولات المتبقية: {remaining}"}")
 
     def _lock(self) -> None:
         """إيقاف المحاولات دقيقة واحدة بعد استنفاد المحاولات (حماية بسيطة)."""
@@ -225,7 +190,7 @@ class LoginDialog(BaseDialog):
         self.e_user.setEnabled(False)
         self.e_pass.setEnabled(False)
         seconds = 60
-        self.lbl_error.setText(trf("تم إيقاف المحاولات مؤقتاً. أعد المحاولة بعد {n} ثانية", n=seconds))
+        self.lbl_error.setText(f"تم إيقاف المحاولات مؤقتاً. أعد المحاولة بعد {seconds} ثانية")
 
         def tick():
             nonlocal seconds
@@ -241,7 +206,7 @@ class LoginDialog(BaseDialog):
                 self.e_pass.setFocus()
             else:
                 self.lbl_error.setText(
-                    trf("تم إيقاف المحاولات مؤقتاً. أعد المحاولة بعد {n} ثانية", n=seconds))
+                    f"تم إيقاف المحاولات مؤقتاً. أعد المحاولة بعد {seconds} ثانية")
 
         timer = QTimer(self)
         timer.timeout.connect(tick)
@@ -253,5 +218,5 @@ def default_password_warning(db) -> str:
     admin = db.get_user("admin")
     if admin and admin.password_hash and security.verify_password(
             "admin", admin.password_hash, admin.salt, admin.iterations):
-        return tr("كلمة مرور المدير الافتراضية (admin) لم تُغيَّر بعد — يُنصح بتغييرها فوراً.")
+        return "كلمة مرور المدير الافتراضية (admin) لم تُغيَّر بعد — يُنصح بتغييرها فوراً."
     return ""

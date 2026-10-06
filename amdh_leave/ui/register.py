@@ -13,12 +13,11 @@ from ..services import dates as D
 from . import theme, widgets as W
 from .dialogs_base import BaseDialog
 from .dialogs_leave import AttachmentsDialog, LeaveDialog
-from ..i18n import tr, trf
 
 
 class LeavesRegisterDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, emp_id: str = "", on_save=None):
-        super().__init__(parent, ctx, tr("سجل الإجازات"))
+        super().__init__(parent, ctx, "سجل الإجازات")
         self.emp_id = emp_id
         self.on_save = on_save
         self.policy = self.ctx.db.policy(refresh=True)
@@ -31,7 +30,7 @@ class LeavesRegisterDialog(BaseDialog):
         layout = QVBoxLayout(self)
         employee = self.ctx.db.get_employee(self.emp_id)
         name = employee.name if employee else self.emp_id
-        layout.addWidget(W.title_label(trf("سجل إجازات: {v0}", v0=name), 15))
+        layout.addWidget(W.title_label(f"سجل إجازات: {name}", 15))
 
         summary = W.card()
         summary_layout = QHBoxLayout(summary)
@@ -45,20 +44,20 @@ class LeavesRegisterDialog(BaseDialog):
         layout.addWidget(summary)
 
         row = QHBoxLayout()
-        row.addWidget(W.button(tr("➕ إضافة إجازة"), "Accent", self._add))
-        row.addWidget(W.button(tr("✏ تعديل المحددة"), "Blue", self._edit))
-        row.addWidget(W.button(tr("🗑 حذف المحددة"), "Warn", self._delete))
-        row.addWidget(W.button(tr("📎 مرفقات"), "Ghost", self._attachments))
-        row.addWidget(W.button(tr("📄 كشف الحساب"), "Gold", self._statement))
+        row.addWidget(W.button("➕ إضافة إجازة", "Accent", self._add))
+        row.addWidget(W.button("✏ تعديل المحددة", "Blue", self._edit))
+        row.addWidget(W.button("🗑 حذف المحددة", "Warn", self._delete))
+        row.addWidget(W.button("📎 مرفقات", "Ghost", self._attachments))
+        row.addWidget(W.button("📄 كشف الحساب", "Gold", self._statement))
         row.addStretch()
         row.addWidget(W.button("📊 Excel", "Ghost", self._export_excel))
         row.addWidget(W.button("📄 PDF", "Ghost", self._export_pdf))
-        row.addWidget(W.button(tr("🖨 طباعة"), "Blue", self._print))
+        row.addWidget(W.button("🖨 طباعة", "Blue", self._print))
         layout.addLayout(row)
 
-        self.table = W.TablePanel(["#", tr("النوع"), tr("من"), tr("إلى"), tr("العدد"), tr("الأيام المؤثرة"),
-                                   tr("أيام العمل"), tr("خارج الرصيد"), tr("الحالة"), tr("الأمر"), tr("تاريخ الأمر"),
-                                   tr("السبب"), tr("أُضيفت في"), tr("بواسطة")])
+        self.table = W.TablePanel(["#", "النوع", "من", "إلى", "العدد", "الأيام المؤثرة",
+                                   "أيام العمل", "خارج الرصيد", "الحالة", "الأمر", "تاريخ الأمر",
+                                   "السبب", "أُضيفت في", "بواسطة"])
         layout.addWidget(self.table)
         layout.addLayout(self.buttons_row(self.close_button()))
 
@@ -69,7 +68,7 @@ class LeavesRegisterDialog(BaseDialog):
     def _refresh(self) -> None:
         employee = self.ctx.db.get_employee(self.emp_id)
         if not employee:
-            W.error(self, tr("الموظف غير موجود."))
+            W.error(self, "الموظف غير موجود.")
             self.reject()
             return
         self.employee = employee
@@ -104,20 +103,20 @@ class LeavesRegisterDialog(BaseDialog):
             if lv.is_adjustment:
                 colors[(i, 1)] = theme.color("gold")
         self.table.set_rows(rows, numeric_columns={4, 5, 6}, colors=colors,
-                            empty_text=tr("لا توجد إجازات مسجلة لهذا الموظف"),
-                            footer=trf("عدد الإجازات: {v0}", v0=len(rows)))
+                            empty_text="لا توجد إجازات مسجلة لهذا الموظف",
+                            footer=f"عدد الإجازات: {len(rows)}")
 
     def _selected_leave(self):
         row = self.table.current_row()
         if row < 0 or row >= len(self.leaves):
-            W.warn(self, tr("حدد إجازة أولاً."))
+            W.warn(self, "حدد إجازة أولاً.")
             return None
         return self.leaves[row]
 
     # ------------------------------------------------------------------
     def _add(self) -> None:
         if not self.ctx.can("edit_leave"):
-            W.error(self, tr("لا تملك صلاحية تسجيل الإجازات."))
+            W.error(self, "لا تملك صلاحية تسجيل الإجازات.")
             return
         LeaveDialog(self, self.ctx, self.emp_id, on_save=self._saved).exec()
 
@@ -126,7 +125,7 @@ class LeavesRegisterDialog(BaseDialog):
         if not leave:
             return
         if not self.ctx.can("edit_leave"):
-            W.error(self, tr("لا تملك صلاحية تعديل الإجازات."))
+            W.error(self, "لا تملك صلاحية تعديل الإجازات.")
             return
         LeaveDialog(self, self.ctx, self.emp_id, leave_id=leave.id, on_save=self._saved).exec()
 
@@ -135,7 +134,7 @@ class LeavesRegisterDialog(BaseDialog):
         if not leave:
             return
         if not self.ctx.can("delete_leave"):
-            W.error(self, tr("لا تملك صلاحية حذف الإجازات."))
+            W.error(self, "لا تملك صلاحية حذف الإجازات.")
             return
         if not W.confirm(self, f"حذف إجازة «{leave.type}» بتاريخ {D.to_iso(leave.start_date)}؟\n"
                                "يمكن استعادتها لاحقاً من سلة المحذوفات."):
@@ -166,9 +165,9 @@ class LeavesRegisterDialog(BaseDialog):
             return
         try:
             X.export_leaves(path, self.employee, self.policy)
-            W.info(self, trf("تم التصدير:\n{v0}", v0=path))
+            W.info(self, f"تم التصدير:\n{path}")
         except Exception as exc:
-            W.error(self, trf("فشل التصدير: {v0}", v0=exc))
+            W.error(self, f"فشل التصدير: {exc}")
 
     def _export_pdf(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "حفظ PDF", f"leaves_{self.emp_id}.pdf", "PDF (*.pdf)")
@@ -176,13 +175,13 @@ class LeavesRegisterDialog(BaseDialog):
             return
         try:
             P.export_employee_leaves(path, self.employee, self.policy)
-            W.info(self, trf("تم التصدير:\n{v0}", v0=path))
+            W.info(self, f"تم التصدير:\n{path}")
         except Exception as exc:
-            W.error(self, trf("فشل التصدير: {v0}", v0=exc))
+            W.error(self, f"فشل التصدير: {exc}")
 
     def _print(self) -> None:
         balance = B.compute_balance(self.employee, self.employee.leaves, self.policy)
         statement = B.yearly_statement(self.employee, self.employee.leaves, self.policy)
         content = H.employee_detail_html(self.employee, self.policy, balance, statement)
         path = H.save_and_open(content, self.ctx.paths.reports_dir, f"employee_{self.emp_id}.html")
-        W.info(self, trf("تم فتح التقرير في المتصفح:\n{v0}", v0=path.name))
+        W.info(self, f"تم فتح التقرير في المتصفح:\n{path.name}")

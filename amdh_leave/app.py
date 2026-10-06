@@ -11,10 +11,9 @@ from pathlib import Path
 from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
-from . import config, i18n
+from . import config
 from .context import AppContext
 from .db import Database
-from .i18n import tr, trf
 from .logging_setup import get_logger, install_excepthook, setup_logging
 from .services.backup import BackupService
 from .services.security import make_session
@@ -129,25 +128,25 @@ def _open_encrypted_database(paths: config.Paths, logger) -> str | None:
     from .ui.dialogs_security import PasswordDialog
 
     if not crypto.sqlcipher_available():
-        QMessageBox.critical(None, tr("تشفير قاعدة البيانات"),
-                             tr("قاعدة البيانات مشفّرة، لكن حزمة SQLCipher غير مثبتة.") +
+        QMessageBox.critical(None, "تشفير قاعدة البيانات",
+                             "قاعدة البيانات مشفّرة، لكن حزمة SQLCipher غير مثبتة." +
                              "\n\n" + crypto.install_hint())
         return None
     lock = crypto.read_lock(paths.data_dir) or {}
     if not lock.get("salt"):
-        QMessageBox.critical(None, tr("تشفير قاعدة البيانات"),
-                             tr("ملف القفل مفقود — لا يمكن اشتقاق المفتاح. "
-                                "استعد نسخة احتياطية غير مشفّرة."))
+        QMessageBox.critical(None, "تشفير قاعدة البيانات",
+                             "ملف القفل مفقود — لا يمكن اشتقاق المفتاح. "
+                                "استعد نسخة احتياطية غير مشفّرة.")
         return None
     for attempt in range(3):
-        dialog = PasswordDialog(None, tr("فتح قاعدة بيانات مشفّرة"),
-                                tr("قاعدة البيانات مشفّرة. أدخل كلمة المرور.") + "\n" +
-                                trf("المحاولات المتبقية: {count}", count=3 - attempt))
+        dialog = PasswordDialog(None, "فتح قاعدة بيانات مشفّرة",
+                                "قاعدة البيانات مشفّرة. أدخل كلمة المرور." + "\n" +
+                                f"المحاولات المتبقية: {3 - attempt}")
         if dialog.exec() != dialog.DialogCode.Accepted:
             return None
         password = dialog.password or ""
         if not crypto.check_password(paths.data_dir, password):
-            QMessageBox.warning(None, tr("كلمة المرور"), tr("كلمة المرور غير صحيحة."))
+            QMessageBox.warning(None, "كلمة المرور", "كلمة المرور غير صحيحة.")
             continue
         iterations = int(lock.get("iterations", crypto.KDF_ITERATIONS))
         logger.info("فُتحت قاعدة بيانات مشفّرة")
@@ -190,17 +189,13 @@ def main(argv: list[str] | None = None) -> int:
     ui_assets.set_user_assets_dir(paths.data_dir / "assets")
     ui_assets.apply_app_icon(app)
 
-    # اللغة قبل بناء أي واجهة (اللغة تُحفظ في إعدادات الواجهة لا في القاعدة)
+    # الواجهة عربية فقط باتجاه من اليمين إلى اليسار
     settings = QSettings(config.SETTINGS_ORG, config.settings_app_name())
-    i18n.load_catalogs()
-    language = str(settings.value("language", config.DEFAULT_LANGUAGE) or config.DEFAULT_LANGUAGE)
-    i18n.set_language(language)
-    app.setLayoutDirection(Qt.LayoutDirection.RightToLeft if i18n.is_rtl()
-                           else Qt.LayoutDirection.LeftToRight)
-    logger.info("بدء التشغيل — البيانات: %s | اللغة: %s", paths.data_dir, i18n.language())
+    app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+    logger.info("بدء التشغيل — البيانات: %s", paths.data_dir)
 
     def show_error(text: str) -> None:
-        QMessageBox.critical(None, tr("خطأ غير متوقع"),
+        QMessageBox.critical(None, "خطأ غير متوقع",
                              text[-1500:] + (f"\n\n{log_file}" if log_file else ""))
 
     install_excepthook(show_error)
@@ -213,9 +208,9 @@ def main(argv: list[str] | None = None) -> int:
         if headless:
             logger.warning("هناك نسخة أخرى تعمل على نفس البيانات%s", detail)
             return 1
-        QMessageBox.information(None, tr("البرنامج يعمل"),
-                                tr("هناك نسخة أخرى من البرنامج تعمل على نفس البيانات.") + detail +
-                                "\n\n" + tr("أُغلق النسخة الحالية لتجنّب تعارض الكتابة."))
+        QMessageBox.information(None, "البرنامج يعمل",
+                                "هناك نسخة أخرى من البرنامج تعمل على نفس البيانات." + detail +
+                                "\n\n" + "أُغلق النسخة الحالية لتجنّب تعارض الكتابة.")
         return 1
 
     key_hex: str | None = None

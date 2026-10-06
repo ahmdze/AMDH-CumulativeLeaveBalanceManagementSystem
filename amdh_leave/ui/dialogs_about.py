@@ -13,8 +13,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout, QWidget,
 )
 
-from .. import config, i18n
-from ..i18n import tr
+from .. import config
 from ..logging_setup import log_path
 from . import assets, theme, widgets as W
 from .dialogs_base import BaseDialog
@@ -37,7 +36,7 @@ FEATURES = [
 
 class AboutDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None):
-        super().__init__(parent, ctx, tr("حول النظام"))
+        super().__init__(parent, ctx, "حول النظام")
         self.setMinimumSize(700, 620)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 18, 20, 16)
@@ -45,9 +44,9 @@ class AboutDialog(BaseDialog):
         layout.addWidget(self._header())
 
         tabs = QTabWidget()
-        tabs.addTab(self._tab_program(), tr("البرنامج"))
-        tabs.addTab(self._tab_developer(), tr("المطوّر"))
-        tabs.addTab(self._tab_system(), tr("النظام"))
+        tabs.addTab(self._tab_program(), "البرنامج")
+        tabs.addTab(self._tab_developer(), "المطوّر")
+        tabs.addTab(self._tab_system(), "النظام")
         layout.addWidget(tabs, 1)
         layout.addLayout(self.buttons_row(self.close_button()))
 
@@ -71,7 +70,7 @@ class AboutDialog(BaseDialog):
         name = QLabel(config.APP_NAME)
         name.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         name.setStyleSheet(theme.label_style("accent", 16, bold=True))
-        version = W.muted_label(f"{tr('الإصدار')} {config.APP_VERSION} — {config.APP_RELEASE}")
+        version = W.muted_label(f"{'الإصدار'} {config.APP_VERSION} — {config.APP_RELEASE}")
         developer = W.muted_label(config.APP_DEVELOPER)
         texts.addWidget(name)
         texts.addWidget(version)
@@ -92,14 +91,13 @@ class AboutDialog(BaseDialog):
     def _tab_program(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        description = QLabel(tr(
-            "نظام مكتبي لإدارة الإجازات التراكمية لموظفي الدوائر والمؤسسات، يعمل محلياً "
-            "بقاعدة بيانات SQLite بلا حاجة إلى إنترنت، مع تقارير جاهزة للطباعة والتصدير."))
+        description = QLabel("نظام مكتبي لإدارة الإجازات التراكمية لموظفي الدوائر والمؤسسات، يعمل محلياً "
+            "بقاعدة بيانات SQLite بلا حاجة إلى إنترنت، مع تقارير جاهزة للطباعة والتصدير.")
         description.setWordWrap(True)
         layout.addWidget(description)
         layout.addWidget(W.separator())
 
-        title = QLabel(tr("أبرز الميزات"))
+        title = QLabel("أبرز الميزات")
         title.setStyleSheet(theme.label_style("accent", 12, bold=True))
         layout.addWidget(title)
 
@@ -108,9 +106,8 @@ class AboutDialog(BaseDialog):
         features.setHtml("<ul>" + "".join(f"<li>{f}</li>" for f in FEATURES) + "</ul>")
         layout.addWidget(features, 1)
 
-        note = W.muted_label(tr(
-            "ملاحظة ضوابطية: الرصيد السالب مشروع حسب الضوابط الإدارية المعتمدة، "
-            "ولا يمنعه النظام ولا يعتبره خطأً."))
+        note = W.muted_label("ملاحظة ضوابطية: الرصيد السالب مشروع حسب الضوابط الإدارية المعتمدة، "
+            "ولا يمنعه النظام ولا يعتبره خطأً.")
         note.setWordWrap(True)
         layout.addWidget(note)
         return page
@@ -134,14 +131,14 @@ class AboutDialog(BaseDialog):
         name.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
         name.setStyleSheet(theme.label_style("accent", 14, bold=True))
         info.addWidget(name)
-        info.addWidget(W.muted_label(tr("تصميم وبرمجة وتطوير النظام")))
+        info.addWidget(W.muted_label("تصميم وبرمجة وتطوير النظام"))
         info.addWidget(W.separator())
 
         rows = [
-            (tr("الهاتف"), config.APP_PHONE),
-            (tr("البريد الإلكتروني"), config.APP_EMAIL),
-            (tr("المشروع"), config.APP_NAME),
-            (tr("الإصدار"), f"{config.APP_VERSION} ({config.APP_RELEASE})"),
+            ("الهاتف", config.APP_PHONE),
+            ("البريد الإلكتروني", config.APP_EMAIL),
+            ("المشروع", config.APP_NAME),
+            ("الإصدار", f"{config.APP_VERSION} ({config.APP_RELEASE})"),
         ]
         for label, value in rows:
             row = QHBoxLayout()
@@ -153,16 +150,15 @@ class AboutDialog(BaseDialog):
             info.addLayout(row)
 
         info.addWidget(W.separator())
-        hint = W.muted_label(tr(
-            "يمكنك استبدال صورة المطوّر وشعار البرنامج وشعار الدائرة بصورك: "
-            "ضع الملفات في مجلد assets داخل مجلد البيانات (راجع assets/README.md)."))
+        hint = W.muted_label("يمكنك استبدال صورة المطوّر وشعار البرنامج وشعار الدائرة بصورك: "
+            "ضع الملفات في مجلد assets داخل مجلد البيانات (راجع assets/README.md).")
         hint.setWordWrap(True)
         info.addWidget(hint)
         info.addStretch()
 
         buttons = QHBoxLayout()
-        buttons.addWidget(W.button(tr("📂 فتح مجلد الصور"), "Ghost", self._open_assets))
-        buttons.addWidget(W.button(f"✉️ {tr('مراسلة')}", "Ghost", self._send_email))
+        buttons.addWidget(W.button("📂 فتح مجلد الصور", "Ghost", self._open_assets))
+        buttons.addWidget(W.button(f"✉️ {'مراسلة'}", "Ghost", self._send_email))
         buttons.addStretch()
         info.addLayout(buttons)
 
@@ -175,19 +171,18 @@ class AboutDialog(BaseDialog):
         stats = self.ctx.db.stats() if self.ctx else {}
         size_kb = stats.get("size_bytes", 0) / 1024
         rows = [
-            (tr("إصدار البرنامج"), f"{config.APP_VERSION} ({config.APP_RELEASE})"),
-            (tr("بايثون"), sys.version.split()[0]),
-            (tr("PyQt6"), self._qt_version()),
-            (tr("SQLite"), sqlite3.sqlite_version),
-            (tr("نظام التشغيل"), f"{platform.system()} {platform.release()}"),
-            (tr("وضع العرض"), theme.current()),
-            (tr("اللغة"), i18n.language_label()),
-            (tr("مجلد البيانات"), str(self.ctx.paths.data_dir) if self.ctx else "—"),
-            (tr("قاعدة البيانات"), f"{stats.get('path', '—')} ({size_kb:,.0f} KB)"),
-            (tr("إصدار المخطط"), str(stats.get("schema_version", "—"))),
-            (tr("الموظفون"), str(stats.get("employees", "—"))),
-            (tr("الإجازات"), str(stats.get("leaves", "—"))),
-            (tr("ملف السجل"), str(log_path() or "—")),
+            ("إصدار البرنامج", f"{config.APP_VERSION} ({config.APP_RELEASE})"),
+            ("بايثون", sys.version.split()[0]),
+            ("PyQt6", self._qt_version()),
+            ("SQLite", sqlite3.sqlite_version),
+            ("نظام التشغيل", f"{platform.system()} {platform.release()}"),
+            ("وضع العرض", theme.current()),
+            ("مجلد البيانات", str(self.ctx.paths.data_dir) if self.ctx else "—"),
+            ("قاعدة البيانات", f"{stats.get('path', '—')} ({size_kb:,.0f} KB)"),
+            ("إصدار المخطط", str(stats.get("schema_version", "—"))),
+            ("الموظفون", str(stats.get("employees", "—"))),
+            ("الإجازات", str(stats.get("leaves", "—"))),
+            ("ملف السجل", str(log_path() or "—")),
         ]
         grid = QGridLayout()
         for index, (label, value) in enumerate(rows):
@@ -202,9 +197,9 @@ class AboutDialog(BaseDialog):
         layout.addStretch()
 
         buttons = QHBoxLayout()
-        buttons.addWidget(W.button(tr("📋 نسخ معلومات النظام"), "Blue", self._copy_info))
-        buttons.addWidget(W.button(tr("📂 فتح مجلد البيانات"), "Ghost", self._open_data))
-        buttons.addWidget(W.button(tr("📄 فتح ملف السجل"), "Ghost", self._open_log))
+        buttons.addWidget(W.button("📋 نسخ معلومات النظام", "Blue", self._copy_info))
+        buttons.addWidget(W.button("📂 فتح مجلد البيانات", "Ghost", self._open_data))
+        buttons.addWidget(W.button("📄 فتح ملف السجل", "Ghost", self._open_log))
         buttons.addStretch()
         layout.addLayout(buttons)
         return page
@@ -218,14 +213,14 @@ class AboutDialog(BaseDialog):
     def _system_summary(self) -> str:
         stats = self.ctx.db.stats() if self.ctx else {}
         lines = [
-            f"{config.APP_NAME} — {tr('الإصدار')} {config.APP_VERSION} ({config.APP_RELEASE})",
-            f"{tr('المطوّر')}: {config.APP_DEVELOPER} | {config.APP_PHONE} | {config.APP_EMAIL}",
-            f"{tr('بايثون')}: {sys.version.split()[0]} | {self._qt_version()} | "
+            f"{config.APP_NAME} — {'الإصدار'} {config.APP_VERSION} ({config.APP_RELEASE})",
+            f"{'المطوّر'}: {config.APP_DEVELOPER} | {config.APP_PHONE} | {config.APP_EMAIL}",
+            f"{'بايثون'}: {sys.version.split()[0]} | {self._qt_version()} | "
             f"SQLite {sqlite3.sqlite_version}",
-            f"{tr('نظام التشغيل')}: {platform.system()} {platform.release()}",
-            f"{tr('مجلد البيانات')}: {self.ctx.paths.data_dir if self.ctx else '—'}",
-            f"{tr('الموظفون')}: {stats.get('employees', '—')} | "
-            f"{tr('الإجازات')}: {stats.get('leaves', '—')}",
+            f"{'نظام التشغيل'}: {platform.system()} {platform.release()}",
+            f"{'مجلد البيانات'}: {self.ctx.paths.data_dir if self.ctx else '—'}",
+            f"{'الموظفون'}: {stats.get('employees', '—')} | "
+            f"{'الإجازات'}: {stats.get('leaves', '—')}",
         ]
         return "\n".join(lines)
 
@@ -233,7 +228,7 @@ class AboutDialog(BaseDialog):
         clipboard = QApplication.clipboard()
         if clipboard is not None:
             clipboard.setText(self._system_summary())
-            W.info(self, tr("تم نسخ معلومات النظام إلى الحافظة."), tr("حول النظام"))
+            W.info(self, "تم نسخ معلومات النظام إلى الحافظة.", "حول النظام")
 
     def _assets_dir(self):
         base = self.ctx.paths.data_dir / "assets" if self.ctx else assets.PACKAGE_ASSETS
@@ -252,7 +247,7 @@ class AboutDialog(BaseDialog):
         if path and path.exists():
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         else:
-            W.warn(self, tr("ملف السجل غير متاح."))
+            W.warn(self, "ملف السجل غير متاح.")
 
     def _send_email(self) -> None:
         QDesktopServices.openUrl(QUrl(f"mailto:{config.APP_EMAIL}?subject={config.APP_NAME}"))

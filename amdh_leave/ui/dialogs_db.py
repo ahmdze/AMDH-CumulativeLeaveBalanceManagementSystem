@@ -17,7 +17,6 @@ from ..services import dates as D
 from ..services import validation
 from . import theme, widgets as W
 from .dialogs_base import BaseDialog
-from ..i18n import tr, trf
 
 # الحقول الهدف في الاستيراد + مرادفات التلقين التلقائي
 IMPORT_FIELDS: list[tuple[str, str, list[str]]] = [
@@ -40,12 +39,12 @@ IMPORT_MODES = [
 
 class DatabaseOperationsDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, refresh_callback=None):
-        super().__init__(parent, ctx, tr("عمليات قاعدة البيانات"))
+        super().__init__(parent, ctx, "عمليات قاعدة البيانات")
         self.refresh_callback = refresh_callback
         self.resize(520, 520)
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label(tr("إدارة قاعدة البيانات"), 15))
-        layout.addWidget(W.muted_label(trf("المسار: {v0}", v0=self.ctx.paths.db_path)))
+        layout.addWidget(W.title_label("إدارة قاعدة البيانات", 15))
+        layout.addWidget(W.muted_label(f"المسار: {self.ctx.paths.db_path}"))
         for text, style, slot in (
             ("💾 نسخة احتياطية الآن", "Accent", self._backup_now),
             ("📀 تصدير قاعدة البيانات", "Blue", self._export_db),
@@ -65,9 +64,9 @@ class DatabaseOperationsDialog(BaseDialog):
     def _backup_now(self) -> None:
         path = self.ctx.backup.create("manual")
         if path:
-            W.info(self, trf("تم إنشاء نسخة احتياطية:\n{v0}", v0=path.name))
+            W.info(self, f"تم إنشاء نسخة احتياطية:\n{path.name}")
         else:
-            W.error(self, tr("تعذّر إنشاء النسخة (راجع ملف السجل)."))
+            W.error(self, "تعذّر إنشاء النسخة (راجع ملف السجل).")
 
     def _export_db(self) -> None:
         path, _ = QFileDialog.getSaveFileName(self, "تصدير قاعدة البيانات",
@@ -77,10 +76,10 @@ class DatabaseOperationsDialog(BaseDialog):
             return
         try:
             self.ctx.db.backup_to(path)
-            W.info(self, trf("تم التصدير:\n{v0}", v0=path))
+            W.info(self, f"تم التصدير:\n{path}")
             self.ctx.db.log(self.ctx.user(), "تصدير", "database", Path(path).name, "")
         except Exception as exc:
-            W.error(self, trf("فشل التصدير: {v0}", v0=exc))
+            W.error(self, f"فشل التصدير: {exc}")
 
     def _import_db(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "استيراد قاعدة بيانات", "", "قاعدة بيانات (*.db)")
@@ -105,7 +104,7 @@ class DatabaseOperationsDialog(BaseDialog):
     def _ask_mode(self) -> str | None:
         from PyQt6.QtWidgets import QInputDialog
         items = [label for _key, label in IMPORT_MODES]
-        choice, ok = QInputDialog.getItem(self, tr("وضع الدمج"), tr("كيف نتعامل مع الموظف الموجود؟"),
+        choice, ok = QInputDialog.getItem(self, "وضع الدمج", "كيف نتعامل مع الموظف الموجود؟",
                                           items, 0, False)
         if not ok:
             return None
@@ -116,7 +115,7 @@ class DatabaseOperationsDialog(BaseDialog):
 
     def _export_template(self) -> None:
         if not X.HAS_XLSX:
-            W.error(self, tr("مكتبة openpyxl غير مثبتة."))
+            W.error(self, "مكتبة openpyxl غير مثبتة.")
             return
         path, _ = QFileDialog.getSaveFileName(self, "حفظ قالب Excel", "template_employees.xlsx",
                                               "Excel (*.xlsx)")
@@ -124,9 +123,9 @@ class DatabaseOperationsDialog(BaseDialog):
             return
         try:
             X.export_template(path)
-            W.info(self, trf("تم حفظ القالب:\n{v0}", v0=path))
+            W.info(self, f"تم حفظ القالب:\n{path}")
         except Exception as exc:
-            W.error(self, trf("فشل الحفظ: {v0}", v0=exc))
+            W.error(self, f"فشل الحفظ: {exc}")
 
     def _import_excel(self) -> None:
         ImportWizardDialog(self, self.ctx, refresh_callback=self.refresh_callback).exec()
@@ -137,7 +136,7 @@ class DatabaseOperationsDialog(BaseDialog):
 
     def _vacuum(self) -> None:
         self.ctx.db.vacuum()
-        W.info(self, tr("تم ضغط قاعدة البيانات."))
+        W.info(self, "تم ضغط قاعدة البيانات.")
 
     def _trash(self) -> None:
         from .dialogs_base import TrashDialog
@@ -152,7 +151,7 @@ class DatabaseOperationsDialog(BaseDialog):
 # ---------------------------------------------------------------------------
 class ImportWizardDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, refresh_callback=None):
-        super().__init__(parent, ctx, tr("استيراد موظفين من Excel"))
+        super().__init__(parent, ctx, "استيراد موظفين من Excel")
         self.refresh_callback = refresh_callback
         self.path: Path | None = None
         self.headers: list[str] = []
@@ -163,15 +162,15 @@ class ImportWizardDialog(BaseDialog):
 
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label(tr("استيراد موظفين من ملف Excel"), 15))
+        layout.addWidget(W.title_label("استيراد موظفين من ملف Excel", 15))
 
         file_row = QHBoxLayout()
-        self.lbl_file = W.muted_label(tr("لم يتم اختيار ملف"))
-        file_row.addWidget(W.button(tr("📂 اختيار ملف"), "Blue", self._choose_file))
+        self.lbl_file = W.muted_label("لم يتم اختيار ملف")
+        file_row.addWidget(W.button("📂 اختيار ملف", "Blue", self._choose_file))
         self.cb_sheet = QComboBox()
         self.cb_sheet.setMinimumWidth(180)
         self.cb_sheet.currentTextChanged.connect(self._load_rows)
-        file_row.addWidget(QLabel(tr("الورقة:")))
+        file_row.addWidget(QLabel("الورقة:"))
         file_row.addWidget(self.cb_sheet)
         file_row.addWidget(self.lbl_file, 1)
         layout.addLayout(file_row)
@@ -181,18 +180,18 @@ class ImportWizardDialog(BaseDialog):
         layout.addWidget(mapping_card)
 
         mode_row = QHBoxLayout()
-        mode_row.addWidget(QLabel(tr("وضع الاستيراد:")))
+        mode_row.addWidget(QLabel("وضع الاستيراد:"))
         self.cb_mode = QComboBox()
         for key, label in IMPORT_MODES:
             self.cb_mode.addItem(label, key)
         mode_row.addWidget(self.cb_mode)
         mode_row.addStretch()
-        mode_row.addWidget(W.button(tr("🔍 تحقق ومعاينة"), "Gold", self._validate))
+        mode_row.addWidget(W.button("🔍 تحقق ومعاينة", "Gold", self._validate))
         layout.addLayout(mode_row)
 
-        self.summary = W.muted_label(tr("اختر ملفاً ثم اضغط «تحقق ومعاينة»."))
+        self.summary = W.muted_label("اختر ملفاً ثم اضغط «تحقق ومعاينة».")
         layout.addWidget(self.summary)
-        self.preview = W.TablePanel(["#", tr("الرقم الوظيفي"), tr("الاسم"), tr("المباشرة"), tr("المؤسسة"), tr("النتيجة")],
+        self.preview = W.TablePanel(["#", "الرقم الوظيفي", "الاسم", "المباشرة", "المؤسسة", "النتيجة"],
                                     sortable=False)
         layout.addWidget(self.preview)
         self.details = QLabel("")
@@ -207,14 +206,14 @@ class ImportWizardDialog(BaseDialog):
         scroll.setMaximumHeight(150)
         layout.addWidget(scroll)
 
-        self.btn_import = W.button(tr("📥 تنفيذ الاستيراد"), "Accent", self._run_import, width=180)
+        self.btn_import = W.button("📥 تنفيذ الاستيراد", "Accent", self._run_import, width=180)
         self.btn_import.setEnabled(False)
         layout.addLayout(self.buttons_row(self.close_button("إلغاء"), self.btn_import))
 
     # ------------------------------------------------------------------
     def _choose_file(self) -> None:
         if not X.HAS_XLSX:
-            W.error(self, tr("مكتبة openpyxl غير مثبتة."))
+            W.error(self, "مكتبة openpyxl غير مثبتة.")
             return
         path, _ = QFileDialog.getOpenFileName(self, "اختر ملف Excel", "", "Excel (*.xlsx *.xlsm)")
         if not path:
@@ -224,7 +223,7 @@ class ImportWizardDialog(BaseDialog):
         try:
             names = X.sheet_names(self.path)
         except Exception as exc:
-            W.error(self, trf("تعذّر قراءة الملف: {v0}", v0=exc))
+            W.error(self, f"تعذّر قراءة الملف: {exc}")
             return
         self.cb_sheet.blockSignals(True)
         self.cb_sheet.clear()
@@ -238,7 +237,7 @@ class ImportWizardDialog(BaseDialog):
         try:
             self.headers, self.raw_rows = X.read_table(self.path, sheet or None)
         except Exception as exc:
-            W.error(self, trf("تعذّر قراءة الورقة: {v0}", v0=exc))
+            W.error(self, f"تعذّر قراءة الورقة: {exc}")
             return
         self._build_mapping()
         self.summary.setText(f"عدد الصفوف في الملف: {len(self.raw_rows)} — "
@@ -290,7 +289,7 @@ class ImportWizardDialog(BaseDialog):
 
     def _validate(self) -> None:
         if not self.raw_rows:
-            W.warn(self, tr("اختر ملفاً أولاً."))
+            W.warn(self, "اختر ملفاً أولاً.")
             return
         mapped = self._mapped_rows()
         self._mapped = mapped
@@ -327,7 +326,7 @@ class ImportWizardDialog(BaseDialog):
         labels = {"ok": "جاهز للإضافة", "update": "سيُحدَّث الموجود", "error": "خطأ — لن يُستورد"}
         rows = [[r["index"], r["emp_id"], r["name"], r["start_date"], r["institution"],
                  labels[r["level"]]] for r in results[:400]]
-        self.preview.set_rows(rows, empty_text=tr("لا توجد صفوف"))
+        self.preview.set_rows(rows, empty_text="لا توجد صفوف")
         self.summary.setText(f"الصفوف: {len(results)} | صالحة: "
                              f"{sum(1 for r in results if r['level'] != 'error')} | أخطاء: {errors} | "
                              f"تحذيرات: {warnings}")
@@ -337,7 +336,7 @@ class ImportWizardDialog(BaseDialog):
     # ------------------------------------------------------------------
     def _run_import(self) -> None:
         if not getattr(self, "_validated", None):
-            W.warn(self, tr("اضغط «تحقق ومعاينة» أولاً."))
+            W.warn(self, "اضغط «تحقق ومعاينة» أولاً.")
             return
         mode = self.cb_mode.currentData()
         if self.ctx.policy.backup_before_import:
@@ -382,7 +381,7 @@ class ImportWizardDialog(BaseDialog):
         if errors:
             W.error(self, "فشل الاستيراد:\n" + "\n".join(errors))
             return
-        W.info(self, trf("اكتمل الاستيراد:\nأُضيف: {v0}\nحُدِّث: {v1}\nتُجوهل: {v2}", v0=added, v1=updated, v2=skipped))
+        W.info(self, f"اكتمل الاستيراد:\nأُضيف: {added}\nحُدِّث: {updated}\nتُجوهل: {skipped}")
         if self.refresh_callback:
             self.refresh_callback()
         self.accept()

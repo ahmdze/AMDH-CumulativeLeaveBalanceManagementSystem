@@ -17,7 +17,6 @@ from ..services import dates as D
 from ..services import reports
 from . import theme, widgets as W
 from .dialogs_base import BaseDialog
-from ..i18n import tr, trf
 
 MONTHS = ("كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران", "تموز",
           "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول")
@@ -25,7 +24,7 @@ MONTHS = ("كانون الثاني", "شباط", "آذار", "نيسان", "أي
 
 class CalendarDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None):
-        super().__init__(parent, ctx, tr("تقويم الإجازات"))
+        super().__init__(parent, ctx, "تقويم الإجازات")
         self.policy = self.ctx.db.policy(refresh=True)
         today = date.today()
         self.year = today.year
@@ -38,10 +37,10 @@ class CalendarDialog(BaseDialog):
     def _build(self) -> None:
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
-        header.addWidget(W.title_label(tr("تقويم الإجازات"), 16))
-        header.addWidget(W.button(tr("◀ السابق"), "Ghost", lambda: self._shift(-1)))
-        header.addWidget(W.button(tr("اليوم"), "Blue", self._go_today))
-        header.addWidget(W.button(tr("التالي ▶"), "Ghost", lambda: self._shift(1)))
+        header.addWidget(W.title_label("تقويم الإجازات", 16))
+        header.addWidget(W.button("◀ السابق", "Ghost", lambda: self._shift(-1)))
+        header.addWidget(W.button("اليوم", "Blue", self._go_today))
+        header.addWidget(W.button("التالي ▶", "Ghost", lambda: self._shift(1)))
         self.cb_month = QComboBox()
         self.cb_month.addItems(MONTHS)
         self.cb_month.currentIndexChanged.connect(self._on_month_changed)
@@ -66,9 +65,9 @@ class CalendarDialog(BaseDialog):
         self.days_table.itemSelectionChanged.connect(self._on_day_selected)
         layout.addWidget(self.days_table, 3)
 
-        self.detail_label = W.muted_label(tr("اختر يوماً لعرض تفاصيله"))
+        self.detail_label = W.muted_label("اختر يوماً لعرض تفاصيله")
         layout.addWidget(self.detail_label)
-        self.detail = W.TablePanel([tr("الاسم"), tr("الرقم الوظيفي"), tr("المؤسسة"), tr("النوع"), tr("من"), tr("إلى")],
+        self.detail = W.TablePanel(["الاسم", "الرقم الوظيفي", "المؤسسة", "النوع", "من", "إلى"],
                                    sortable=False)
         layout.addWidget(self.detail, 2)
         self._fill_headers()
@@ -161,13 +160,13 @@ class CalendarDialog(BaseDialog):
         item = self.days_table.item(row, col) if row >= 0 and col >= 0 else None
         day = item.data(Qt.ItemDataRole.UserRole) if item else None
         if not day:
-            self.detail.set_rows([], empty_text=tr("اختر يوماً فيه إجازات"))
+            self.detail.set_rows([], empty_text="اختر يوماً فيه إجازات")
             return
         entries = self.data["per_day"].get(day, [])
         rows = [[emp.name, emp.emp_id, emp.institution, lv.type,
                  D.to_iso(lv.start_date), D.to_iso(lv.end_date)] for emp, lv in entries]
-        self.detail.set_rows(rows, empty_text=trf("لا توجد إجازات في {v0}", v0=D.to_iso(day)),
-                             footer=trf("تاريخ مختار: {v0} — العدد: {v1}", v0=D.to_iso(day), v1=len(rows)))
+        self.detail.set_rows(rows, empty_text=f"لا توجد إجازات في {D.to_iso(day)}",
+                             footer=f"تاريخ مختار: {D.to_iso(day)} — العدد: {len(rows)}")
 
     # ------------------------------------------------------------------
     def _export_excel(self) -> None:
@@ -207,13 +206,13 @@ class CalendarDialog(BaseDialog):
                 for cell in row:
                     cell.alignment = Alignment(wrap_text=True, vertical="top", horizontal="right")
             wb.save(path)
-            W.info(self, trf("تم التصدير:\n{v0}", v0=path))
+            W.info(self, f"تم التصدير:\n{path}")
         except Exception as exc:
-            W.error(self, trf("فشل التصدير: {v0}", v0=exc))
+            W.error(self, f"فشل التصدير: {exc}")
 
     def _export_html(self) -> None:
         content = H.calendar_html(self.data, self.policy,
                                   self.ctx.session.scoped_institution)
         path = H.save_and_open(content, self.ctx.paths.reports_dir,
                                f"calendar_{self.year}_{self.month:02d}.html")
-        W.info(self, trf("تم فتح التقويم في المتصفح:\n{v0}", v0=path.name))
+        W.info(self, f"تم فتح التقويم في المتصفح:\n{path.name}")

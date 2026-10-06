@@ -13,7 +13,6 @@ from ..models import Balance, Employee, Issue, Leave
 from ..rules import Policy
 from . import balance as B
 from . import dates as D
-from ..i18n import tr, trf
 
 
 # ---------------------------------------------------------------------------
@@ -23,25 +22,25 @@ def validate_employee(fields: dict, emp_id: str, *, edit_mode: bool = False,
                       exists=None) -> list[Issue]:
     issues: list[Issue] = []
     if not emp_id or not str(emp_id).strip():
-        issues.append(Issue("error", tr("الرقم الوظيفي إلزامي.")))
+        issues.append(Issue("error", "الرقم الوظيفي إلزامي."))
     if not (fields.get("name") or "").strip():
-        issues.append(Issue("error", tr("الاسم الكامل إلزامي.")))
+        issues.append(Issue("error", "الاسم الكامل إلزامي."))
     if not edit_mode and exists is not None and callable(exists) and exists(emp_id):
-        issues.append(Issue("error", tr("الرقم الوظيفي مسجل مسبقاً.")))
+        issues.append(Issue("error", "الرقم الوظيفي مسجل مسبقاً."))
 
     start = D.parse_iso(fields.get("start_date"))
     end = D.parse_iso(fields.get("end_date"))
     if not start:
-        issues.append(Issue("error", tr("تاريخ المباشرة إلزامي وبصيغة صحيحة.")))
+        issues.append(Issue("error", "تاريخ المباشرة إلزامي وبصيغة صحيحة."))
     else:
         if start > date.today():
-            issues.append(Issue("warning", tr("تاريخ المباشرة في المستقبل.")))
+            issues.append(Issue("warning", "تاريخ المباشرة في المستقبل."))
     if end and start and end < start:
-        issues.append(Issue("error", tr("تاريخ انتهاء الخدمة قبل تاريخ المباشرة.")))
+        issues.append(Issue("error", "تاريخ انتهاء الخدمة قبل تاريخ المباشرة."))
     if fields.get("gender") not in ("ذكر", "أنثى"):
-        issues.append(Issue("error", tr("الجنس غير محدد بشكل صحيح.")))
+        issues.append(Issue("error", "الجنس غير محدد بشكل صحيح."))
     if fields.get("status") and fields["status"] not in ("active", "leave", "retired"):
-        issues.append(Issue("warning", tr("حالة الموظف غير معروفة.")))
+        issues.append(Issue("warning", "حالة الموظف غير معروفة."))
     return issues
 
 
@@ -54,39 +53,39 @@ def validate_leave(leave: Leave, employee: Employee, existing: list[Leave], poli
     rule = policy.rule(leave.type)
 
     if not leave.type:
-        issues.append(Issue("error", tr("نوع الإجازة إلزامي.")))
+        issues.append(Issue("error", "نوع الإجازة إلزامي."))
     elif leave.type not in policy.rules:
-        issues.append(Issue("warning", trf("النوع «{v0}» غير معرّف في الضوابط، وسيُعامل معاملة اعتيادية.", v0=leave.type)))
+        issues.append(Issue("warning", f"النوع «{leave.type}» غير معرّف في الضوابط، وسيُعامل معاملة اعتيادية."))
 
     if leave.unit not in config.UNITS:
-        issues.append(Issue("error", tr("الوحدة يجب أن تكون يوماً أو شهراً أو سنة.")))
+        issues.append(Issue("error", "الوحدة يجب أن تكون يوماً أو شهراً أو سنة."))
 
     if leave.is_adjustment or rule.is_adjustment:
         if leave.amount == 0:
-            issues.append(Issue("error", tr("قيمة التسوية لا يمكن أن تكون صفراً.")))
+            issues.append(Issue("error", "قيمة التسوية لا يمكن أن تكون صفراً."))
         if not (leave.reason or "").strip():
-            issues.append(Issue("error", tr("التسوية تتطلب سبباً/سنداً إدارياً.")))
+            issues.append(Issue("error", "التسوية تتطلب سبباً/سنداً إدارياً."))
     else:
         if leave.amount is None or leave.amount <= 0:
-            issues.append(Issue("error", tr("العدد يجب أن يكون أكبر من صفر (للتسويات استخدم نوع «تسوية رصيد»).")))
+            issues.append(Issue("error", "العدد يجب أن يكون أكبر من صفر (للتسويات استخدم نوع «تسوية رصيد»)."))
 
     if not leave.start_date:
-        issues.append(Issue("error", tr("تاريخ بدء الإجازة إلزامي.")))
+        issues.append(Issue("error", "تاريخ بدء الإجازة إلزامي."))
     else:
         if employee.start_date and leave.start_date < employee.start_date:
             issues.append(Issue("warning",
-                                trf("تاريخ البدء قبل تاريخ المباشرة ({v0}).", v0=D.to_iso(employee.start_date))))
+                                f"تاريخ البدء قبل تاريخ المباشرة ({D.to_iso(employee.start_date)})."))
         if employee.end_date and leave.start_date > employee.end_date:
-            issues.append(Issue("warning", tr("تاريخ البدء بعد تاريخ انتهاء الخدمة.")))
+            issues.append(Issue("warning", "تاريخ البدء بعد تاريخ انتهاء الخدمة."))
 
     if leave.end_date and leave.start_date and leave.end_date < leave.start_date:
-        issues.append(Issue("error", tr("تاريخ النهاية قبل تاريخ البداية.")))
+        issues.append(Issue("error", "تاريخ النهاية قبل تاريخ البداية."))
 
     if rule.requires_order and not (leave.order or "").strip():
-        issues.append(Issue("error", trf("نوع «{v0}» يتطلب رقم الأمر.", v0=leave.type)))
+        issues.append(Issue("error", f"نوع «{leave.type}» يتطلب رقم الأمر."))
 
     if not leave.is_adjustment and leave.days_actual == 0:
-        issues.append(Issue("error", tr("الأيام المؤثرة صفر — تحقق من العدد والوحدة والتواريخ.")))
+        issues.append(Issue("error", "الأيام المؤثرة صفر — تحقق من العدد والوحدة والتواريخ."))
 
     # تكرار رقم الأمر
     order = (leave.order or "").strip()
@@ -96,7 +95,7 @@ def validate_leave(leave: Leave, employee: Employee, existing: list[Leave], poli
                 continue
             if (other.order or "").strip() == order:
                 issues.append(Issue("warning",
-                                    trf("رقم الأمر «{v0}» مستخدم مسبقاً في إجازة ({v1}).", v0=order, v1=D.to_iso(other.start_date))))
+                                    f"رقم الأمر «{order}» مستخدم مسبقاً في إجازة ({D.to_iso(other.start_date)})."))
                 break
 
     # تقاطع المدى مع إجازات أخرى
@@ -111,7 +110,7 @@ def validate_leave(leave: Leave, employee: Employee, existing: list[Leave], poli
             o_start, o_end = B.leave_span(other)
             if D.overlaps(start, end, o_start, o_end):
                 issues.append(Issue("warning",
-                                    trf("تتقاطع مع إجازة «{v0}» من {v1} إلى {v2}.", v0=other.type, v1=D.to_iso(o_start), v2=D.to_iso(o_end))))
+                                    f"تتقاطع مع إجازة «{other.type}» من {D.to_iso(o_start)} إلى {D.to_iso(o_end)}."))
                 break
 
     # السقف الخاص بالنوع
@@ -186,15 +185,15 @@ def validate_import_row(row: dict, existing_ids: set[str], seen_ids: set[str]) -
     issues: list[Issue] = []
     emp_id = str(row.get("emp_id") or "").strip()
     if not emp_id:
-        issues.append(Issue("error", tr("الرقم الوظيفي فارغ.")))
+        issues.append(Issue("error", "الرقم الوظيفي فارغ."))
     elif emp_id in seen_ids:
-        issues.append(Issue("error", tr("الرقم الوظيفي مكرر داخل الملف.")))
+        issues.append(Issue("error", "الرقم الوظيفي مكرر داخل الملف."))
     elif emp_id in existing_ids:
-        issues.append(Issue("info", tr("الموظف موجود مسبقاً (سيُحدَّث حسب الوضع المختار).")))
+        issues.append(Issue("info", "الموظف موجود مسبقاً (سيُحدَّث حسب الوضع المختار)."))
     if not str(row.get("name") or "").strip():
-        issues.append(Issue("error", tr("الاسم فارغ.")))
+        issues.append(Issue("error", "الاسم فارغ."))
     if not D.parse_iso(row.get("start_date")):
-        issues.append(Issue("error", tr("تاريخ المباشرة غير صالح.")))
+        issues.append(Issue("error", "تاريخ المباشرة غير صالح."))
     if row.get("gender") not in ("ذكر", "أنثى", None, ""):
-        issues.append(Issue("error", tr("الجنس يجب أن يكون «ذكر» أو «أنثى».")))
+        issues.append(Issue("error", "الجنس يجب أن يكون «ذكر» أو «أنثى»."))
     return issues

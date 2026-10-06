@@ -15,7 +15,6 @@ from .. import config as cfg
 from ..models import Balance, Employee, Leave, Settlement, Statement, YearLine
 from ..rules import LeaveRule, Policy
 from . import dates as D
-from ..i18n import tr
 
 
 # ---------------------------------------------------------------------------
@@ -215,11 +214,11 @@ def yearly_statement(employee: Employee, leaves: list[Leave], policy: Policy,
     start = employee.start_date
     if not start:
         return Statement(employee=employee, balance=base, lines=[],
-                         policy_note=tr("لا يوجد تاريخ مباشرة"))
+                         policy_note="لا يوجد تاريخ مباشرة")
     limit = min(today, employee.end_date) if employee.end_date else today
     if limit < start:
         return Statement(employee=employee, balance=base, lines=[],
-                         policy_note=tr("تاريخ المباشرة بعد تاريخ الحساب"))
+                         policy_note="تاريخ المباشرة بعد تاريخ الحساب")
 
     lines = _year_lines(employee, items, policy, limit, max_years)
     balance = base

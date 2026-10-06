@@ -96,14 +96,12 @@ def test_login_remembers_username_via_settings(qapp, ctx):
     dialog.close()
 
 
-def test_login_password_toggle_and_translate(qapp, ctx):
+def test_login_password_toggle(qapp, ctx):
     dialog = LoginDialog(None, ctx)
     dialog._toggle_password(True)
     assert dialog.e_pass.echoMode().name == "Normal"
     dialog._toggle_password(False)
     assert dialog.e_pass.echoMode().name == "Password"
-    dialog.retranslate()               # لا يُسقط البرنامج ولا يترك خطأ ظاهراً
-    assert dialog.lbl_error.text() == ""
     dialog.close()
 
 
@@ -116,25 +114,20 @@ def test_default_password_warning(qapp, ctx):
     assert default_password_warning(ctx.db) == ""
 
 
-def test_theme_and_language_menu_actions(qapp, ctx):
-    """قوائم الثيم واللغة تُبنى بلا فتح حوارات (وكانت مساراً غير مغطّى)."""
+def test_theme_menu_actions(qapp, ctx):
+    """قائمة الثيمات تُبنى بلا فتح حوارات (وكانت مساراً غير مغطّى)."""
     from amdh_leave import config
-    from amdh_leave.services import balance as B
     from amdh_leave.ui.main_window import MainWindow
 
     window = MainWindow(ctx)
     try:
         theme_keys = [action.data() for action in window.theme_actions()]
         assert theme_keys == [key for key, _label, _mode in config.THEMES]
-        language_codes = [action.data() for action in window.language_actions()]
-        assert language_codes == ["ar", "ku", "en"]
 
         for key in theme_keys:
             window.set_theme(key)
             assert theme.current() == key
         window.set_theme("dark")
-        window._apply_language("ar")            # نفس اللغة ⇒ بلا حوار
-        assert ctx.ui_get("language", "ar") == "ar"
         assert window.table.table is not None
     finally:
         window.close()

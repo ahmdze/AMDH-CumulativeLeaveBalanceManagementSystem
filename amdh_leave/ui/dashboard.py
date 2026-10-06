@@ -9,7 +9,6 @@ from ..exporters import html as H
 from ..services import reports
 from . import theme, widgets as W
 from .dialogs_base import BaseDialog
-from ..i18n import tr, trf
 
 MONTHS = ("كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران", "تموز",
           "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول")
@@ -17,7 +16,7 @@ MONTHS = ("كانون الثاني", "شباط", "آذار", "نيسان", "أي
 
 class DashboardDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None):
-        super().__init__(parent, ctx, tr("لوحة المؤشرات"))
+        super().__init__(parent, ctx, "لوحة المؤشرات")
         self.policy = self.ctx.db.policy(refresh=True)
         self.resize(1180, 720)
         self._build()
@@ -27,9 +26,9 @@ class DashboardDialog(BaseDialog):
     def _build(self) -> None:
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
-        header.addWidget(W.title_label(tr("لوحة المؤشرات"), 16))
+        header.addWidget(W.title_label("لوحة المؤشرات", 16))
         header.addStretch()
-        header.addWidget(W.button(tr("🔄 تحديث"), "Blue", self._refresh))
+        header.addWidget(W.button("🔄 تحديث", "Blue", self._refresh))
         header.addWidget(W.button("📊 Excel", "Ghost", self._export_excel))
         header.addWidget(W.button("📄 HTML", "Ghost", self._export_html))
         header.addWidget(self.close_button())
@@ -63,8 +62,8 @@ class DashboardDialog(BaseDialog):
         charts2.addWidget(self.chart_month)
         layout.addLayout(charts2)
 
-        layout.addWidget(W.muted_label(tr("الموظفون على إجازة اليوم")))
-        self.on_leave = W.TablePanel([tr("الاسم"), tr("الرقم الوظيفي"), tr("المؤسسة"), tr("النوع"), tr("من"), tr("إلى")])
+        layout.addWidget(W.muted_label("الموظفون على إجازة اليوم"))
+        self.on_leave = W.TablePanel(["الاسم", "الرقم الوظيفي", "المؤسسة", "النوع", "من", "إلى"])
         layout.addWidget(self.on_leave)
 
     # ------------------------------------------------------------------
@@ -97,8 +96,8 @@ class DashboardDialog(BaseDialog):
 
         rows = [[item["name"], item["emp_id"], item["institution"], item["type"],
                  item["start"], item["end"]] for item in data["on_leave"]]
-        self.on_leave.set_rows(rows, empty_text=tr("لا يوجد موظفون في إجازة اليوم"),
-                               footer=trf("العدد: {v0}", v0=len(rows)))
+        self.on_leave.set_rows(rows, empty_text="لا يوجد موظفون في إجازة اليوم",
+                               footer=f"العدد: {len(rows)}")
 
     # ------------------------------------------------------------------
     def _export_excel(self) -> None:
@@ -106,12 +105,12 @@ class DashboardDialog(BaseDialog):
         if not path:
             return
         try:
-            X.export_employees(path, self.data["rows"], title=tr("لوحة المؤشرات"))
-            W.info(self, trf("تم التصدير:\n{v0}", v0=path))
+            X.export_employees(path, self.data["rows"], title="لوحة المؤشرات")
+            W.info(self, f"تم التصدير:\n{path}")
         except Exception as exc:
-            W.error(self, trf("فشل التصدير: {v0}", v0=exc))
+            W.error(self, f"فشل التصدير: {exc}")
 
     def _export_html(self) -> None:
         content = H.global_report_html(self.data["rows"], self.policy, "لوحة المؤشرات")
         path = H.save_and_open(content, self.ctx.paths.reports_dir, "dashboard.html")
-        W.info(self, trf("تم فتح اللوحة في المتصفح:\n{v0}", v0=path.name))
+        W.info(self, f"تم فتح اللوحة في المتصفح:\n{path.name}")

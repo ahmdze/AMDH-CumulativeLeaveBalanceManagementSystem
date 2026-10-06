@@ -9,7 +9,6 @@ from ..models import Employee, Leave
 from ..rules import Policy
 from . import balance as B
 from . import dates as D
-from ..i18n import tr, trf
 
 
 # ---------------------------------------------------------------------------
@@ -43,16 +42,16 @@ def collect_alerts(employees: list[Employee], policy: Policy,
         bal = B.compute_balance(emp, emp.leaves, policy, today)
 
         if bal.extra.get("no_start_date"):
-            alerts.append(Alert("missing_data", "medium", tr("لا يوجد تاريخ مباشرة — تعذّر حساب الرصيد"),
+            alerts.append(Alert("missing_data", "medium", "لا يوجد تاريخ مباشرة — تعذّر حساب الرصيد",
                                 emp.emp_id, emp.name, emp.institution))
         elif bal.balance < 0:
             alerts.append(Alert(
                 "negative_balance", "info",
-                trf("الرصيد سالب ({v0} يوم) — مسموح حسب الضوابط الإدارية", v0=bal.balance),
+                f"الرصيد سالب ({bal.balance} يوم) — مسموح حسب الضوابط الإدارية",
                 emp.emp_id, emp.name, emp.institution))
         elif bal.balance <= policy.low_balance_days:
             alerts.append(Alert("low_balance", "medium",
-                                trf("رصيد منخفض ({v0} يوم)", v0=bal.balance),
+                                f"رصيد منخفض ({bal.balance} يوم)",
                                 emp.emp_id, emp.name, emp.institution))
 
         if emp.end_date and 0 <= (emp.end_date - today).days <= 30:
@@ -66,7 +65,7 @@ def collect_alerts(employees: list[Employee], policy: Policy,
                 continue
             if lv.status == "pending":
                 alerts.append(Alert("pending", "medium",
-                                    trf("إجازة «{v0}» قيد الانتظار ({v1})", v0=lv.type, v1=D.to_iso(lv.start_date)),
+                                    f"إجازة «{lv.type}» قيد الانتظار ({D.to_iso(lv.start_date)})",
                                     emp.emp_id, emp.name, emp.institution, lv.start_date, lv.id))
                 continue
             if lv.status == "rejected" or B.is_service_exclusion(policy, lv):
@@ -78,11 +77,11 @@ def collect_alerts(employees: list[Employee], policy: Policy,
             if 0 <= remaining <= ahead:
                 when = "تنتهي اليوم" if remaining == 0 else f"تنتهي بعد {remaining} يوم"
                 alerts.append(Alert("ending_soon", "medium",
-                                    trf("إجازة «{v0}» {v1} (حتى {v2})", v0=lv.type, v1=when, v2=D.to_iso(end)),
+                                    f"إجازة «{lv.type}» {when} (حتى {D.to_iso(end)})",
                                     emp.emp_id, emp.name, emp.institution, end, lv.id))
             if start == today:
                 alerts.append(Alert("started_today", "info",
-                                    trf("بدء إجازة «{v0}» اليوم حتى {v1}", v0=lv.type, v1=D.to_iso(end)),
+                                    f"بدء إجازة «{lv.type}» اليوم حتى {D.to_iso(end)}",
                                     emp.emp_id, emp.name, emp.institution, start, lv.id))
 
     alerts.sort(key=lambda a: (SEVERITY_ORDER.get(a.severity, 9), a.name))

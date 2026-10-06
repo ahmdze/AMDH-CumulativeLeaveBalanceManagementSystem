@@ -14,7 +14,6 @@ from PyQt6.QtWidgets import (
 from ..exporters import excel as X
 from ..exporters import html as H
 from ..exporters import pdf as P
-from ..i18n import tr, trf
 from ..services import reports
 from ..services import sharing
 from . import theme, widgets as W
@@ -37,14 +36,14 @@ class _SendWorker(QThread):
         except Exception as exc:  # noqa: BLE001 - تُعرض للمستخدم
             self.failed.emit(str(exc))
         else:
-            self.succeeded.emit(message or tr("تم الإرسال بنجاح."))
+            self.succeeded.emit(message or "تم الإرسال بنجاح.")
 
 
 class ShareDialog(BaseDialog):
     """حوار إعداد وإرسال التقارير."""
 
     def __init__(self, parent=None, ctx=None, emp_id: str | None = None, on_settings=None):
-        super().__init__(parent, ctx, tr("مشاركة التقارير"))
+        super().__init__(parent, ctx, "مشاركة التقارير")
         self.emp_id = emp_id
         self.on_settings = on_settings
         self.worker: _SendWorker | None = None
@@ -57,14 +56,14 @@ class ShareDialog(BaseDialog):
     # ------------------------------------------------------------------
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label(tr("مشاركة التقارير"), 15))
+        layout.addWidget(W.title_label("مشاركة التقارير", 15))
         layout.addWidget(W.muted_label(
-            tr("يُنشئ النظام ملفات التقرير المطلوبة ثم يرسلها بالبريد أو إلى تلغرام.")))
+            "يُنشئ النظام ملفات التقرير المطلوبة ثم يرسلها بالبريد أو إلى تلغرام."))
 
-        scope_box = QGroupBox(tr("نطاق التقرير"))
+        scope_box = QGroupBox("نطاق التقرير")
         scope_layout = QVBoxLayout(scope_box)
-        self.rb_employee = QRadioButton(tr("الموظف المحدد"))
-        self.rb_all = QRadioButton(tr("كل الموظفين (المعروضين)"))
+        self.rb_employee = QRadioButton("الموظف المحدد")
+        self.rb_all = QRadioButton("كل الموظفين (المعروضين)")
         self.rb_all.setChecked(True if not self.emp_id else False)
         self.rb_employee.setChecked(bool(self.emp_id))
         self.rb_employee.setEnabled(bool(self.emp_id))
@@ -72,11 +71,11 @@ class ShareDialog(BaseDialog):
         scope_layout.addWidget(self.rb_all)
         layout.addWidget(scope_box)
 
-        format_box = QGroupBox(tr("صيغة الملفات"))
+        format_box = QGroupBox("صيغة الملفات")
         format_layout = QHBoxLayout(format_box)
         self.chk_excel = QCheckBox("Excel (.xlsx)")
         self.chk_pdf = QCheckBox("PDF")
-        self.chk_html = QCheckBox(tr("HTML (طباعة)"))
+        self.chk_html = QCheckBox("HTML (طباعة)")
         self.chk_excel.setChecked(True)
         self.chk_pdf.setChecked(P.available()[0])
         for box in (self.chk_excel, self.chk_pdf, self.chk_html):
@@ -87,19 +86,19 @@ class ShareDialog(BaseDialog):
             self.chk_pdf.setToolTip(P.available()[1])
         layout.addWidget(format_box)
 
-        message_box = QGroupBox(tr("نص الرسالة (اختياري)"))
+        message_box = QGroupBox("نص الرسالة (اختياري)")
         message_layout = QVBoxLayout(message_box)
-        self.e_subject = QLineEdit(trf("تقرير الإجازات التراكمية — {date}", date=date.today()))
-        self.e_body = QLineEdit(tr("مرفق تقرير الإجازات التراكمية."))
-        message_layout.addWidget(QLabel(tr("الموضوع")))
+        self.e_subject = QLineEdit(f"تقرير الإجازات التراكمية — {date.today()}")
+        self.e_body = QLineEdit("مرفق تقرير الإجازات التراكمية.")
+        message_layout.addWidget(QLabel("الموضوع"))
         message_layout.addWidget(self.e_subject)
-        message_layout.addWidget(QLabel(tr("المحتوى")))
+        message_layout.addWidget(QLabel("المحتوى"))
         message_layout.addWidget(self.e_body)
         self.cb_recipients = QComboBox()
         self.cb_recipients.setEditable(True)
         self.cb_recipients.addItems(self.email_config.recipients)
         self.cb_recipients.setCurrentText(", ".join(self.email_config.recipients))
-        message_layout.addWidget(QLabel(tr("المستلمون (مفصولون بفاصلة)")))
+        message_layout.addWidget(QLabel("المستلمون (مفصولون بفاصلة)"))
         message_layout.addWidget(self.cb_recipients)
         layout.addWidget(message_box)
 
@@ -109,12 +108,12 @@ class ShareDialog(BaseDialog):
         layout.addWidget(self.lbl_channel_telegram)
 
         buttons = QHBoxLayout()
-        self.btn_email = W.button(tr("📧 إرسال بالبريد"), "Blue", self._send_email)
-        self.btn_telegram = W.button(tr("📨 إرسال إلى تلغرام"), "Accent", self._send_telegram)
+        self.btn_email = W.button("📧 إرسال بالبريد", "Blue", self._send_email)
+        self.btn_telegram = W.button("📨 إرسال إلى تلغرام", "Accent", self._send_telegram)
         buttons.addWidget(self.btn_email)
         buttons.addWidget(self.btn_telegram)
         buttons.addStretch()
-        buttons.addWidget(W.button(tr("⚙ إعدادات المشاركة"), "Ghost", self._open_settings))
+        buttons.addWidget(W.button("⚙ إعدادات المشاركة", "Ghost", self._open_settings))
         layout.addLayout(buttons)
 
         self.lbl_status = QLabel("")
@@ -130,13 +129,12 @@ class ShareDialog(BaseDialog):
         email_ready = self.email_config.is_configured
         telegram_ready = self.telegram_config.is_configured
         self.lbl_channel_email.setText(
-            f"{tr('البريد')}: " + (trf("{host}:{port}", host=self.email_config.host,
-                                       port=self.email_config.port)
-                                   if email_ready else tr("غير مُهيَّأ — افتح إعدادات المشاركة")))
+            f"{'البريد'}: " + (f"{self.email_config.host}:{self.email_config.port}"
+                                   if email_ready else "غير مُهيَّأ — افتح إعدادات المشاركة"))
         self.lbl_channel_email.setStyleSheet(ok_style if email_ready else bad_style)
         self.lbl_channel_telegram.setText(
-            f"{tr('تلغرام')}: " + (trf("محادثة {chat}", chat=self.telegram_config.chat_id)
-                                   if telegram_ready else tr("غير مُهيَّأ — افتح إعدادات المشاركة")))
+            f"{'تلغرام'}: " + (f"محادثة {self.telegram_config.chat_id}"
+                                   if telegram_ready else "غير مُهيَّأ — افتح إعدادات المشاركة"))
         self.lbl_channel_telegram.setStyleSheet(ok_style if telegram_ready else bad_style)
         self.btn_email.setEnabled(email_ready)
         self.btn_telegram.setEnabled(telegram_ready)
@@ -157,7 +155,7 @@ class ShareDialog(BaseDialog):
         if self.rb_employee.isChecked() and self.emp_id:
             employee = self.ctx.db.get_employee(self.emp_id)
             if not employee:
-                raise sharing.SharingError(tr("الموظف غير موجود."))
+                raise sharing.SharingError("الموظف غير موجود.")
             if self.chk_excel.isChecked():
                 path = target_dir / f"leaves_{employee.emp_id}_{stamp}.xlsx"
                 X.export_leaves(path, employee, policy)
@@ -178,7 +176,7 @@ class ShareDialog(BaseDialog):
             employees = self.ctx.employees()
             rows = reports.global_report(employees, policy)
             if not rows:
-                raise sharing.SharingError(tr("لا توجد بيانات للتصدير."))
+                raise sharing.SharingError("لا توجد بيانات للتصدير.")
             if self.chk_excel.isChecked():
                 path = target_dir / f"employees_{stamp}.xlsx"
                 X.export_employees(path, rows)
@@ -193,16 +191,16 @@ class ShareDialog(BaseDialog):
                 files.append(path)
 
         if not files:
-            raise sharing.SharingError(tr("اختر صيغة واحدة على الأقل."))
+            raise sharing.SharingError("اختر صيغة واحدة على الأقل.")
         return files
 
     def _run(self, job, label: str) -> None:
         if self.worker is not None and self.worker.isRunning():
-            W.warn(self, tr("هناك عملية إرسال جارية."))
+            W.warn(self, "هناك عملية إرسال جارية.")
             return
         self.btn_email.setEnabled(False)
         self.btn_telegram.setEnabled(False)
-        self.lbl_status.setText(trf("{label}... الرجاء الانتظار", label=label))
+        self.lbl_status.setText(f"{label}... الرجاء الانتظار")
         self.lbl_status.setStyleSheet(theme.label_style("gold"))
         self.worker = _SendWorker(job, self)
         self.worker.succeeded.connect(self._on_success)
@@ -213,7 +211,7 @@ class ShareDialog(BaseDialog):
     def _on_success(self, message: str) -> None:
         self.lbl_status.setText(message)
         self.lbl_status.setStyleSheet(theme.label_style("pos"))
-        self.ctx.db.log(self.ctx.user(), tr("مشاركة"), "report", "", message)
+        self.ctx.db.log(self.ctx.user(), "مشاركة", "report", "", message)
 
     def _on_failure(self, message: str) -> None:
         self.lbl_status.setText(message)
@@ -226,7 +224,7 @@ class ShareDialog(BaseDialog):
     def _send_email(self) -> None:
         config = self.email_config
         config.recipients = self._recipients()
-        subject = self.e_subject.text().strip() or tr("تقرير الإجازات التراكمية")
+        subject = self.e_subject.text().strip() or "تقرير الإجازات التراكمية"
         body = self.e_body.text().strip()
         problem = sharing.validate_email_config(config)
         if problem:
@@ -236,10 +234,9 @@ class ShareDialog(BaseDialog):
         def job() -> str:
             files = self._generate_files()
             sharing.send_email(config, subject, body, files)
-            return trf("تم إرسال {count} ملفاً إلى {to}", count=len(files),
-                       to=", ".join(config.recipients))
+            return f'تم إرسال {len(files)} ملفاً إلى {", ".join(config.recipients)}'
 
-        self._run(job, tr("جارٍ الإرسال بالبريد"))
+        self._run(job, "جارٍ الإرسال بالبريد")
 
     def _send_telegram(self) -> None:
         config = self.telegram_config
@@ -252,13 +249,13 @@ class ShareDialog(BaseDialog):
         def job() -> str:
             files = self._generate_files()
             count = sharing.send_telegram(config, caption, files)
-            return trf("تم إرسال {count} عنصراً إلى تلغرام", count=count)
+            return f"تم إرسال {count} عنصراً إلى تلغرام"
 
-        self._run(job, tr("جارٍ الإرسال إلى تلغرام"))
+        self._run(job, "جارٍ الإرسال إلى تلغرام")
 
     def closeEvent(self, event):  # noqa: N802
         if self.worker is not None and self.worker.isRunning():
-            if not W.confirm(self, tr("هناك عملية إرسال جارية — هل تريد الإغلاق؟")):
+            if not W.confirm(self, "هناك عملية إرسال جارية — هل تريد الإغلاق؟"):
                 event.ignore()
                 return
         event.accept()

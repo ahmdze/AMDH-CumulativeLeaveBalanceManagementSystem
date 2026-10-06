@@ -12,7 +12,6 @@ from PyQt6.QtWidgets import (
 
 from .. import config
 from ..exporters import excel as X
-from ..i18n import tr, trf
 from ..models import AppUser, Holiday
 from ..rules import LeaveRule
 from ..services import dates as D
@@ -27,7 +26,7 @@ from .dialogs_base import BaseDialog
 class RuleEditDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, rule: LeaveRule | None = None,
                  existing_types: set[str] | None = None, on_save=None):
-        super().__init__(parent, ctx, tr("تعديل ضابط نوع إجازة") if rule else tr("إضافة نوع إجازة"))
+        super().__init__(parent, ctx, "تعديل ضابط نوع إجازة" if rule else "إضافة نوع إجازة")
         self.rule = rule
         self.existing = existing_types or set()
         self.on_save = on_save
@@ -42,11 +41,11 @@ class RuleEditDialog(BaseDialog):
         rule = self.rule or LeaveRule(type="")
         self.e_type = QLineEdit(rule.type)
         self.e_type.setEnabled(self.rule is None)
-        self.chk_consumes = QCheckBox(tr("يُخصم من الرصيد السنوي"))
+        self.chk_consumes = QCheckBox("يُخصم من الرصيد السنوي")
         self.chk_consumes.setChecked(rule.consumes_balance)
-        self.chk_exclusion = QCheckBox(tr("تُستبعد أيامه من أيام الخدمة"))
+        self.chk_exclusion = QCheckBox("تُستبعد أيامه من أيام الخدمة")
         self.chk_exclusion.setChecked(rule.service_exclusion)
-        self.chk_adjustment = QCheckBox(tr("نوع تسوية (يسمح بقيم سالبة)"))
+        self.chk_adjustment = QCheckBox("نوع تسوية (يسمح بقيم سالبة)")
         self.chk_adjustment.setChecked(rule.is_adjustment)
         self.cb_mode = QComboBox()
         for key in config.COUNT_MODES:
@@ -61,7 +60,7 @@ class RuleEditDialog(BaseDialog):
             self.cb_period.addItem(config.QUOTA_PERIOD_LABELS[key], key)
         index = self.cb_period.findData(rule.quota_period)
         self.cb_period.setCurrentIndex(max(0, index))
-        self.chk_order = QCheckBox(tr("يتطلب رقم الأمر"))
+        self.chk_order = QCheckBox("يتطلب رقم الأمر")
         self.chk_order.setChecked(rule.requires_order)
         self.cb_gender = QComboBox()
         self.cb_gender.addItem("للجميع", "")
@@ -72,38 +71,38 @@ class RuleEditDialog(BaseDialog):
         self.sp_order = QSpinBox()
         self.sp_order.setRange(0, 999)
         self.sp_order.setValue(rule.order_index)
-        self.chk_active = QCheckBox(tr("مُفعَّل"))
+        self.chk_active = QCheckBox("مُفعَّل")
         self.chk_active.setChecked(rule.active)
         self.e_notes = QTextEdit(rule.notes)
         self.e_notes.setFixedHeight(60)
 
-        form.addRow(tr("اسم النوع *"), self.e_type)
+        form.addRow("اسم النوع *", self.e_type)
         form.addRow("", self.chk_consumes)
         form.addRow("", self.chk_exclusion)
         form.addRow("", self.chk_adjustment)
-        form.addRow(tr("طريقة العد"), self.cb_mode)
-        form.addRow(tr("السقف"), self.sp_quota)
-        form.addRow(tr("فترة السقف"), self.cb_period)
+        form.addRow("طريقة العد", self.cb_mode)
+        form.addRow("السقف", self.sp_quota)
+        form.addRow("فترة السقف", self.cb_period)
         form.addRow("", self.chk_order)
-        form.addRow(tr("الجنس"), self.cb_gender)
-        form.addRow(tr("ترتيب الظهور"), self.sp_order)
+        form.addRow("الجنس", self.cb_gender)
+        form.addRow("ترتيب الظهور", self.sp_order)
         form.addRow("", self.chk_active)
-        form.addRow(tr("ملاحظات"), self.e_notes)
+        form.addRow("ملاحظات", self.e_notes)
         layout.addWidget(card)
         layout.addWidget(W.muted_label(
             "ملاحظة: «تُستبعد من أيام الخدمة» تعني عدم خصمها من الرصيد وعدم احتسابها خدمةً "
             "(مثل إجازة 5 سنوات)."))
         layout.addStretch()
-        layout.addLayout(self.buttons_row(W.button(tr("إلغاء"), "Ghost", self.reject, width=110),
-                                          W.button(tr("💾 حفظ"), "Accent", self._save, width=140)))
+        layout.addLayout(self.buttons_row(W.button("إلغاء", "Ghost", self.reject, width=110),
+                                          W.button("💾 حفظ", "Accent", self._save, width=140)))
 
     def _save(self) -> None:
         name = self.e_type.text().strip()
         if not name:
-            W.error(self, tr("اسم النوع إلزامي."))
+            W.error(self, "اسم النوع إلزامي.")
             return
         if self.rule is None and name in self.existing:
-            W.error(self, tr("هذا النوع موجود مسبقاً."))
+            W.error(self, "هذا النوع موجود مسبقاً.")
             return
         rule = LeaveRule(
             type=name,
@@ -128,19 +127,19 @@ class RuleEditDialog(BaseDialog):
 
 class RulesEditorDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None):
-        super().__init__(parent, ctx, tr("ضوابط أنواع الإجازات"))
+        super().__init__(parent, ctx, "ضوابط أنواع الإجازات")
         self.resize(980, 620)
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label(tr("ضوابط أنواع الإجازات"), 15))
+        layout.addWidget(W.title_label("ضوابط أنواع الإجازات", 15))
         layout.addWidget(W.muted_label(
-            tr("لكل نوع: هل يُخصم من الرصيد؟ هل يُستبعد من أيام الخدمة؟ طريقة العد، وسقف اختياري.")))
-        self.table = W.TablePanel([tr("النوع"), tr("يُخصم من الرصيد"), tr("يُستبعد من الخدمة"), tr("طريقة العد"),
-                                   tr("السقف"), tr("يتطلب أمراً"), tr("الجنس"), tr("تسوية"), tr("مُفعَّل"), tr("ملاحظات")])
+            "لكل نوع: هل يُخصم من الرصيد؟ هل يُستبعد من أيام الخدمة؟ طريقة العد، وسقف اختياري."))
+        self.table = W.TablePanel(["النوع", "يُخصم من الرصيد", "يُستبعد من الخدمة", "طريقة العد",
+                                   "السقف", "يتطلب أمراً", "الجنس", "تسوية", "مُفعَّل", "ملاحظات"])
         layout.addWidget(self.table)
         row = QHBoxLayout()
-        row.addWidget(W.button(tr("➕ إضافة نوع"), "Accent", self._add))
-        row.addWidget(W.button(tr("✏ تعديل المحدد"), "Blue", self._edit))
-        row.addWidget(W.button(tr("🗑 حذف المحدد"), "Warn", self._delete))
+        row.addWidget(W.button("➕ إضافة نوع", "Accent", self._add))
+        row.addWidget(W.button("✏ تعديل المحدد", "Blue", self._edit))
+        row.addWidget(W.button("🗑 حذف المحدد", "Warn", self._delete))
         row.addStretch()
         row.addWidget(self.close_button())
         layout.addLayout(row)
@@ -160,19 +159,19 @@ class RulesEditorDialog(BaseDialog):
                          rule.quota_label, "نعم" if rule.requires_order else "لا",
                          rule.gender or "الجميع", "نعم" if rule.is_adjustment else "لا",
                          "نعم" if rule.active else "لا", rule.notes])
-        self.table.set_rows(rows, empty_text=tr("لا توجد أنواع معرّفة"),
-                            footer=trf("عدد الأنواع: {v0}", v0=len(rows)))
+        self.table.set_rows(rows, empty_text="لا توجد أنواع معرّفة",
+                            footer=f"عدد الأنواع: {len(rows)}")
 
     def _selected(self) -> LeaveRule | None:
         idx = self.table.current_row()
         if idx < 0:
-            W.warn(self, tr("حدد نوعاً أولاً."))
+            W.warn(self, "حدد نوعاً أولاً.")
             return None
         return self._data[idx]
 
     def _add(self) -> None:
         if not self.ctx.can("edit_rules"):
-            W.error(self, tr("لا تملك صلاحية تعديل الضوابط."))
+            W.error(self, "لا تملك صلاحية تعديل الضوابط.")
             return
         RuleEditDialog(self, self.ctx, None, {r.type for r in self._data},
                        on_save=self._refresh).exec()
@@ -182,7 +181,7 @@ class RulesEditorDialog(BaseDialog):
         if not rule:
             return
         if not self.ctx.can("edit_rules"):
-            W.error(self, tr("لا تملك صلاحية تعديل الضوابط."))
+            W.error(self, "لا تملك صلاحية تعديل الضوابط.")
             return
         RuleEditDialog(self, self.ctx, rule, on_save=self._refresh).exec()
 
@@ -191,7 +190,7 @@ class RulesEditorDialog(BaseDialog):
         if not rule:
             return
         if not self.ctx.can("edit_rules"):
-            W.error(self, tr("لا تملك صلاحية تعديل الضوابط."))
+            W.error(self, "لا تملك صلاحية تعديل الضوابط.")
             return
         if not W.confirm(self, f"حذف النوع «{rule.type}»؟\n"
                                "لن تتأثر الإجازات المسجلة مسبقاً بهذا النوع."):
@@ -205,25 +204,25 @@ class RulesEditorDialog(BaseDialog):
 # ---------------------------------------------------------------------------
 class HolidaysDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None):
-        super().__init__(parent, ctx, tr("العطل الرسمية"))
+        super().__init__(parent, ctx, "العطل الرسمية")
         self.resize(620, 520)
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label(tr("العطل الرسمية"), 15))
+        layout.addWidget(W.title_label("العطل الرسمية", 15))
         layout.addWidget(W.muted_label("تُستبعد العطل من حساب «أيام العمل» للأنواع التي "
                                        "طريقة عدّها أيام عمل."))
         card = W.card()
         form = QFormLayout(card)
         self.e_name = QLineEdit()
-        self.e_name.setPlaceholderText(tr("مثال: عيد العمال"))
+        self.e_name.setPlaceholderText("مثال: عيد العمال")
         self.d_day = W.date_edit(date.today())
-        form.addRow(tr("المناسبة"), self.e_name)
-        form.addRow(tr("التاريخ"), self.d_day)
+        form.addRow("المناسبة", self.e_name)
+        form.addRow("التاريخ", self.d_day)
         layout.addWidget(card)
-        layout.addLayout(W.button_row(W.button(tr("➕ إضافة"), "Accent", self._add), stretch=False))
-        self.table = W.TablePanel(["#", tr("التاريخ"), tr("المناسبة"), tr("اليوم")])
+        layout.addLayout(W.button_row(W.button("➕ إضافة", "Accent", self._add), stretch=False))
+        self.table = W.TablePanel(["#", "التاريخ", "المناسبة", "اليوم"])
         layout.addWidget(self.table)
         row = QHBoxLayout()
-        row.addWidget(W.button(tr("🗑 حذف المحدد"), "Warn", self._delete))
+        row.addWidget(W.button("🗑 حذف المحدد", "Warn", self._delete))
         row.addStretch()
         row.addWidget(self.close_button())
         layout.addLayout(row)
@@ -235,12 +234,12 @@ class HolidaysDialog(BaseDialog):
         for i, h in enumerate(self._data, 1):
             weekday = config.WEEKDAY_NAMES[h.day.weekday()] if h.day else ""
             rows.append([i, D.to_iso(h.day), h.name, weekday])
-        self.table.set_rows(rows, empty_text=tr("لا توجد عطل مسجلة"))
+        self.table.set_rows(rows, empty_text="لا توجد عطل مسجلة")
 
     def _add(self) -> None:
         day = W.date_of(self.d_day)
         if not day:
-            W.error(self, tr("تاريخ غير صالح."))
+            W.error(self, "تاريخ غير صالح.")
             return
         self.ctx.db.add_holiday(day, self.e_name.text().strip())
         self.ctx.db.log(self.ctx.user(), "إضافة", "holiday", D.to_iso(day), self.e_name.text())
@@ -249,7 +248,7 @@ class HolidaysDialog(BaseDialog):
     def _delete(self) -> None:
         idx = self.table.current_row()
         if idx < 0:
-            W.warn(self, tr("حدد عطلة."))
+            W.warn(self, "حدد عطلة.")
             return
         item: Holiday = self._data[idx]
         self.ctx.db.delete_holiday(item.id)
@@ -261,7 +260,7 @@ class HolidaysDialog(BaseDialog):
 # ---------------------------------------------------------------------------
 class UserEditDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, user: AppUser | None = None, on_save=None):
-        super().__init__(parent, ctx, tr("تعديل مستخدم") if user else tr("إضافة مستخدم"))
+        super().__init__(parent, ctx, "تعديل مستخدم" if user else "إضافة مستخدم")
         self.user = user
         self.on_save = on_save
         self.resize(460, 420)
@@ -278,40 +277,40 @@ class UserEditDialog(BaseDialog):
         index = self.cb_role.findData(user.role)
         self.cb_role.setCurrentIndex(max(0, index))
         self.e_institution = QLineEdit(user.institution)
-        self.e_institution.setPlaceholderText(tr("اتركه فارغاً للوصول لكل المؤسسات"))
-        self.chk_active = QCheckBox(tr("حساب مُفعَّل"))
+        self.e_institution.setPlaceholderText("اتركه فارغاً للوصول لكل المؤسسات")
+        self.chk_active = QCheckBox("حساب مُفعَّل")
         self.chk_active.setChecked(user.active if self.user else True)
         self.e_password = QLineEdit()
         self.e_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.e_password.setPlaceholderText(tr("اتركه فارغاً للإبقاء على الكلمة الحالية")
-                                           if self.user else tr("كلمة المرور *"))
+        self.e_password.setPlaceholderText("اتركه فارغاً للإبقاء على الكلمة الحالية"
+                                           if self.user else "كلمة المرور *")
         self.e_password2 = QLineEdit()
         self.e_password2.setEchoMode(QLineEdit.EchoMode.Password)
-        form.addRow(tr("اسم المستخدم *"), self.e_username)
-        form.addRow(tr("الاسم المعروض"), self.e_display)
-        form.addRow(tr("الدور"), self.cb_role)
-        form.addRow(tr("المؤسسة (تقييد)"), self.e_institution)
-        form.addRow(tr("كلمة المرور"), self.e_password)
-        form.addRow(tr("تأكيد كلمة المرور"), self.e_password2)
+        form.addRow("اسم المستخدم *", self.e_username)
+        form.addRow("الاسم المعروض", self.e_display)
+        form.addRow("الدور", self.cb_role)
+        form.addRow("المؤسسة (تقييد)", self.e_institution)
+        form.addRow("كلمة المرور", self.e_password)
+        form.addRow("تأكيد كلمة المرور", self.e_password2)
         form.addRow("", self.chk_active)
         layout.addWidget(card)
         layout.addWidget(W.muted_label("الأدوار: مدير النظام (كل الصلاحيات)، مدخل بيانات "
                                        "(إضافة وتعديل بلا حذف)، مطّلع فقط (قراءة وتصدير)."))
         layout.addStretch()
-        layout.addLayout(self.buttons_row(W.button(tr("إلغاء"), "Ghost", self.reject, width=110),
-                                          W.button(tr("💾 حفظ"), "Accent", self._save, width=140)))
+        layout.addLayout(self.buttons_row(W.button("إلغاء", "Ghost", self.reject, width=110),
+                                          W.button("💾 حفظ", "Accent", self._save, width=140)))
 
     def _save(self) -> None:
         username = self.e_username.text().strip()
         if not username:
-            W.error(self, tr("اسم المستخدم إلزامي."))
+            W.error(self, "اسم المستخدم إلزامي.")
             return
         password = self.e_password.text()
         if password != self.e_password2.text():
-            W.error(self, tr("كلمتا المرور غير متطابقتين."))
+            W.error(self, "كلمتا المرور غير متطابقتين.")
             return
         if not self.user and not password:
-            W.error(self, tr("كلمة المرور إلزامية للمستخدم الجديد."))
+            W.error(self, "كلمة المرور إلزامية للمستخدم الجديد.")
             return
         if password:
             ok, message = security.password_strength(password)
@@ -320,7 +319,7 @@ class UserEditDialog(BaseDialog):
                 return
         existing = self.ctx.db.get_user(username) if self.user is None else self.user
         if self.user is None and existing:
-            W.error(self, tr("اسم المستخدم موجود مسبقاً."))
+            W.error(self, "اسم المستخدم موجود مسبقاً.")
             return
         user = AppUser(
             username=username,
@@ -345,19 +344,19 @@ class UserEditDialog(BaseDialog):
 
 class UsersDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None):
-        super().__init__(parent, ctx, tr("إدارة المستخدمين"))
+        super().__init__(parent, ctx, "إدارة المستخدمين")
         self.resize(820, 520)
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label(tr("المستخدمون والصلاحيات"), 15))
-        layout.addWidget(W.muted_label(tr("تسجيل الدخول معطَّل افتراضياً من الإعدادات ← عام.")))
-        self.table = W.TablePanel([tr("اسم المستخدم"), tr("الاسم"), tr("الدور"), tr("المؤسسة"), tr("مُفعَّل"),
-                                   tr("آخر دخول"), tr("أُنشئ في")])
+        layout.addWidget(W.title_label("المستخدمون والصلاحيات", 15))
+        layout.addWidget(W.muted_label("تسجيل الدخول معطَّل افتراضياً من الإعدادات ← عام."))
+        self.table = W.TablePanel(["اسم المستخدم", "الاسم", "الدور", "المؤسسة", "مُفعَّل",
+                                   "آخر دخول", "أُنشئ في"])
         layout.addWidget(self.table)
         row = QHBoxLayout()
-        row.addWidget(W.button(tr("➕ إضافة"), "Accent", self._add))
-        row.addWidget(W.button(tr("✏ تعديل المحدد"), "Blue", self._edit))
-        row.addWidget(W.button(tr("🔑 تغيير كلمة المرور"), "Gold", self._password))
-        row.addWidget(W.button(tr("🗑 حذف المحدد"), "Warn", self._delete))
+        row.addWidget(W.button("➕ إضافة", "Accent", self._add))
+        row.addWidget(W.button("✏ تعديل المحدد", "Blue", self._edit))
+        row.addWidget(W.button("🔑 تغيير كلمة المرور", "Gold", self._password))
+        row.addWidget(W.button("🗑 حذف المحدد", "Warn", self._delete))
         row.addStretch()
         row.addWidget(self.close_button())
         layout.addLayout(row)
@@ -368,19 +367,19 @@ class UsersDialog(BaseDialog):
         rows = [[u.username, u.display_name, config.ROLE_LABELS.get(u.role, u.role),
                  u.institution or "الكل", "نعم" if u.active else "لا", u.last_login, u.created_at]
                 for u in self._data]
-        self.table.set_rows(rows, empty_text=tr("لا يوجد مستخدمون"),
-                            footer=trf("عدد المستخدمين: {v0}", v0=len(rows)))
+        self.table.set_rows(rows, empty_text="لا يوجد مستخدمون",
+                            footer=f"عدد المستخدمين: {len(rows)}")
 
     def _guard(self) -> bool:
         if not self.ctx.can("manage_users"):
-            W.error(self, tr("إدارة المستخدمين تتطلب صلاحية مدير النظام."))
+            W.error(self, "إدارة المستخدمين تتطلب صلاحية مدير النظام.")
             return False
         return True
 
     def _selected(self) -> AppUser | None:
         idx = self.table.current_row()
         if idx < 0:
-            W.warn(self, tr("حدد مستخدماً."))
+            W.warn(self, "حدد مستخدماً.")
             return None
         return self._data[idx]
 
@@ -398,7 +397,7 @@ class UsersDialog(BaseDialog):
         if not user or not self._guard():
             return
         dialog = QDialog(self)
-        dialog.setWindowTitle(tr("تغيير كلمة المرور"))
+        dialog.setWindowTitle("تغيير كلمة المرور")
         dialog.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         dialog.setStyleSheet(self.styleSheet())
         form = QFormLayout(dialog)
@@ -406,15 +405,15 @@ class UsersDialog(BaseDialog):
         p1.setEchoMode(QLineEdit.EchoMode.Password)
         p2 = QLineEdit()
         p2.setEchoMode(QLineEdit.EchoMode.Password)
-        form.addRow(trf("كلمة المرور الجديدة لـ {v0}", v0=user.username), p1)
-        form.addRow(tr("تأكيد"), p2)
-        buttons = W.button_row(W.button(tr("إلغاء"), "Ghost", dialog.reject),
-                               W.button(tr("حفظ"), "Accent", dialog.accept))
+        form.addRow(f"كلمة المرور الجديدة لـ {user.username}", p1)
+        form.addRow("تأكيد", p2)
+        buttons = W.button_row(W.button("إلغاء", "Ghost", dialog.reject),
+                               W.button("حفظ", "Accent", dialog.accept))
         form.addRow(buttons)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return
         if p1.text() != p2.text() or not p1.text():
-            W.error(self, tr("كلمتا المرور غير متطابقتين أو فارغتان."))
+            W.error(self, "كلمتا المرور غير متطابقتين أو فارغتان.")
             return
         ok, message = security.password_strength(p1.text())
         if not ok:
@@ -423,7 +422,7 @@ class UsersDialog(BaseDialog):
         user.password_hash, user.salt, user.iterations = security.hash_password(p1.text())
         self.ctx.db.save_user(user)
         self.ctx.db.log(self.ctx.user(), "تعديل", "user", user.username, "تغيير كلمة المرور")
-        W.info(self, tr("تم تغيير كلمة المرور."))
+        W.info(self, "تم تغيير كلمة المرور.")
         self._refresh()
 
     def _delete(self) -> None:
@@ -431,13 +430,13 @@ class UsersDialog(BaseDialog):
         if not user or not self._guard():
             return
         if user.username == self.ctx.user():
-            W.error(self, tr("لا يمكنك حذف المستخدم الحالي."))
+            W.error(self, "لا يمكنك حذف المستخدم الحالي.")
             return
         if self.ctx.db.get_user(user.username) and user.role == "admin" and \
                 len([u for u in self._data if u.role == "admin"]) <= 1:
-            W.error(self, tr("لا يمكن حذف آخر مدير نظام."))
+            W.error(self, "لا يمكن حذف آخر مدير نظام.")
             return
-        if not W.confirm(self, trf("حذف المستخدم «{v0}»؟", v0=user.username)):
+        if not W.confirm(self, f"حذف المستخدم «{user.username}»؟"):
             return
         self.ctx.db.delete_user(user.username)
         self.ctx.db.log(self.ctx.user(), "حذف", "user", user.username, "")
@@ -451,10 +450,10 @@ class UsersDialog(BaseDialog):
 # ---------------------------------------------------------------------------
 class AuditDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None):
-        super().__init__(parent, ctx, tr("سجل التدقيق"))
+        super().__init__(parent, ctx, "سجل التدقيق")
         self.resize(1000, 620)
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label(tr("سجل التدقيق (من فعل ماذا ومتى)"), 15))
+        layout.addWidget(W.title_label("سجل التدقيق (من فعل ماذا ومتى)", 15))
         card = W.card()
         filters = QHBoxLayout(card)
         self.cb_user = QComboBox()
@@ -476,14 +475,14 @@ class AuditDialog(BaseDialog):
         filters.addWidget(self.cb_entity)
         filters.addWidget(self.d_from)
         filters.addWidget(self.d_to)
-        filters.addWidget(W.button(tr("🔍 تحديث"), "Blue", self._refresh))
+        filters.addWidget(W.button("🔍 تحديث", "Blue", self._refresh))
         filters.addStretch()
         layout.addWidget(card)
-        self.table = W.TablePanel(["#", tr("التاريخ والوقت"), tr("المستخدم"), tr("الإجراء"), tr("الكيان"),
-                                   tr("المعرّف"), tr("التفاصيل")])
+        self.table = W.TablePanel(["#", "التاريخ والوقت", "المستخدم", "الإجراء", "الكيان",
+                                   "المعرّف", "التفاصيل"])
         layout.addWidget(self.table)
         row = QHBoxLayout()
-        row.addWidget(W.button(tr("📊 تصدير Excel"), "Ghost", self._export))
+        row.addWidget(W.button("📊 تصدير Excel", "Ghost", self._export))
         row.addStretch()
         row.addWidget(self.close_button())
         layout.addLayout(row)
@@ -499,18 +498,18 @@ class AuditDialog(BaseDialog):
             limit=2000)
         self._data = entries
         rows = [[e.id, e.ts, e.username, e.action, e.entity, e.entity_id, e.details] for e in entries]
-        self.table.set_rows(rows, numeric_columns={0}, empty_text=tr("لا توجد سجلات مطابقة"),
-                            footer=trf("عدد السجلات المعروضة: {v0} (الأحدث أولاً، بحد أقصى 2000)", v0=len(rows)))
+        self.table.set_rows(rows, numeric_columns={0}, empty_text="لا توجد سجلات مطابقة",
+                            footer=f"عدد السجلات المعروضة: {len(rows)} (الأحدث أولاً، بحد أقصى 2000)")
 
     def _export(self) -> None:
         if not self._data:
-            W.warn(self, tr("لا توجد بيانات للتصدير."))
+            W.warn(self, "لا توجد بيانات للتصدير.")
             return
         path, _ = QFileDialog.getSaveFileName(self, "حفظ سجل التدقيق", "audit_log.xlsx", "Excel (*.xlsx)")
         if not path:
             return
         try:
             X.export_audit(path, self._data)
-            W.info(self, trf("تم التصدير:\n{v0}", v0=path))
+            W.info(self, f"تم التصدير:\n{path}")
         except Exception as exc:
-            W.error(self, trf("فشل التصدير: {v0}", v0=exc))
+            W.error(self, f"فشل التصدير: {exc}")
