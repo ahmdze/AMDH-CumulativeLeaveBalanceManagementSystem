@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .. import config, i18n
-from ..i18n import tr, trf
+from ..i18n import tr
 from ..logging_setup import log_path
 from . import assets, theme, widgets as W
 from .dialogs_base import BaseDialog

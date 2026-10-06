@@ -12,14 +12,13 @@ from PyQt6.QtWidgets import (
 
 from .. import config
 from ..exporters import excel as X
+from ..i18n import tr, trf
 from ..models import AppUser, Holiday
 from ..rules import LeaveRule
 from ..services import dates as D
 from ..services import security
-from . import theme, widgets as W
+from . import widgets as W
 from .dialogs_base import BaseDialog
-from .dialogs_login import LoginDialog  # noqa: F401  (نُقل إلى dialogs_login)
-from ..i18n import tr, trf
 
 
 # ---------------------------------------------------------------------------
