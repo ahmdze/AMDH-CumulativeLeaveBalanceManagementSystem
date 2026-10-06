@@ -528,7 +528,14 @@
     "كيف نتعامل مع الموظف الموجود؟": "How should existing employees be handled?",
     "مرفقات الإجازة": "Leave attachments",
     "مطلوب": "Required",
-    "وضع الدمج": "Merge mode"
+    "وضع الدمج": "Merge mode",
+    "إعادة الافتراضي": "Reset to default",
+    "إعادة لون الثيم الافتراضي": "Restore the theme's default colour",
+    "اختر اللون المميز": "Choose the accent colour",
+    "اللون المميز": "Accent colour",
+    "تخصيص اللون المميز...": "Customise the accent colour...",
+    "تخصيص اللون...": "Customise colour...",
+    "تخصيص اللون... ({v0})": "Customise colour... ({v0})"
   },
   "domain": {
     "معتمدة": "Approved",

@@ -16,10 +16,70 @@ from . import theme
 # ---------------------------------------------------------------------------
 # أدوات مساعدة
 # ---------------------------------------------------------------------------
-def card(parent=None) -> QFrame:
+def card(parent=None, hoverable: bool = False, shadow: bool = False) -> QFrame:
+    """إطار بطاقة. ``hoverable`` يفعّل تفاعل المرور، و``shadow`` يضيف ظلاً ناعماً."""
     frame = QFrame(parent)
     frame.setObjectName("Card")
+    if hoverable:
+        enable_hover(frame)
+    if shadow:
+        apply_shadow(frame)
     return frame
+
+
+def enable_hover(widget, property_name: str = "hovered"):
+    """يجعل المرور بالماوس يغيّر مظهر الودجت (عبر خاصية ديناميكية في الأنماط)."""
+    widget.setAttribute(Qt.WidgetAttribute.WA_Hover, True)
+    widget.setProperty(property_name, False)
+
+    def set_state(state: bool) -> None:
+        if widget.property(property_name) == state:
+            return
+        widget.setProperty(property_name, state)
+        style = widget.style()
+        style.unpolish(widget)
+        style.polish(widget)
+        widget.update()
+
+    original_enter = widget.enterEvent
+    original_leave = widget.leaveEvent
+
+    def enter(event):
+        set_state(True)
+        original_enter(event)
+
+    def leave(event):
+        set_state(False)
+        original_leave(event)
+
+    widget.enterEvent = enter          # type: ignore[method-assign]
+    widget.leaveEvent = leave          # type: ignore[method-assign]
+
+
+def apply_shadow(widget, blur: int = 12, offset: int = 2, spread: int = 0):
+    """ظل ناعم حول البطاقات الصغيرة (يعطي عمقاً بصرياً بلا تلطّخ)."""
+    from PyQt6.QtWidgets import QGraphicsDropShadowEffect
+    effect = QGraphicsDropShadowEffect(widget)
+    effect.setBlurRadius(blur)
+    effect.setOffset(0, offset)
+    color = QColor(theme.color("shadow"))
+    color.setAlpha(max(30, min(85, color.alpha() if color.alpha() else 70)))
+    effect.setColor(color)
+    widget.setGraphicsEffect(effect)
+    return effect
+
+
+def nav_button(text: str, slot=None, parent=None, tooltip: str = "") -> QPushButton:
+    """زر تنقّل في الشريط الجانبي (خلفية شفافة وشريط تمييز عند المرور)."""
+    btn = QPushButton(text, parent)
+    btn.setObjectName("Nav")
+    if slot:
+        btn.clicked.connect(slot)
+    if tooltip:
+        btn.setToolTip(tooltip)
+    btn.setCursor(Qt.CursorShape.PointingHandCursor)
+    btn.setMinimumHeight(34)
+    return btn
 
 
 def title_label(text: str, size: int = 14) -> QLabel:
@@ -38,8 +98,9 @@ def muted_label(text: str = "") -> QLabel:
 
 def separator() -> QFrame:
     line = QFrame()
+    line.setObjectName("Separator")
     line.setFrameShape(QFrame.Shape.HLine)
-    line.setStyleSheet(f"background-color: {theme.color('border')}; max-height: 1px;")
+    line.setFixedHeight(1)
     return line
 
 
@@ -183,10 +244,14 @@ def setup_table(table: QTableWidget, sortable: bool = True, multi: bool = False)
     table.setAlternatingRowColors(True)
     table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
     table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+    table.setMouseTracking(True)          # لتفعيل تفاعل المرور على الصفوف
+    table.setShowGrid(False)
     header = table.horizontalHeader()
     header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
     header.setStretchLastSection(False)
     header.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
+    header.setHighlightSections(False)
+    header.setMouseTracking(True)
     table.verticalHeader().setVisible(False)
     table.setSortingEnabled(sortable)
     return table
@@ -254,6 +319,8 @@ class KPICard(QFrame):
     def __init__(self, title: str, value: str = "—", parent=None):
         super().__init__(parent)
         self.setObjectName("Card")
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setProperty("hovered", False)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(2)
@@ -265,11 +332,13 @@ class KPICard(QFrame):
         self.value.setStyleSheet(theme.label_style("accent"))
         layout.addWidget(self.title)
         layout.addWidget(self.value)
-        self.setMinimumHeight(84)
+        self.setMinimumHeight(88)
+        enable_hover(self)
+        apply_shadow(self, blur=10, offset=2)
 
     def set_value(self, value, color_key: str | None = None, suffix: str = "") -> None:
         self.value.setText(f"{value}{suffix}")
-        self.value.setStyleSheet(theme.label_style(color_key or "accent"))
+        self.value.setStyleSheet(theme.label_style(color_key or "accent", 18, bold=True))
 
 
 class BarChart(QWidget):

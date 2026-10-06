@@ -5,7 +5,9 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from string import Template
+
+from .colors import (alpha, darken, ensure_contrast, gradient,
+                     lighten, mix, readable_on)
 
 APP_NAME = "نظام إدارة الإجازات التراكمية"
 APP_VERSION = "3.0.0"
@@ -116,242 +118,167 @@ class Paths:
 # ----------------------------------------------------------------------------
 # لوحات الألوان
 # ----------------------------------------------------------------------------
-PALETTES: dict[str, dict[str, str]] = {
-    # 1) داكن (الافتراضي)
+# الثيمات: 5 لوحات مشتقّة من بضعة ألوان أساسية (حساباتها في colors.py)
+# ----------------------------------------------------------------------------
+# mode: dark/light | تُكتب الألوان الأساسية فقط، ويُشتق الباقي تلقائياً
+# (تدرّجات، حالات hover/pressed/focus، لون نص مقروء، ظلال...) فتبقى اللوحة متناسقة.
+_THEME_ANCHORS: dict[str, dict[str, str]] = {
+    # 1) داكن — أردوازي هادئ بلمسة فيروزية
     "dark": {
-        "bg": "#0F172A",
-        "surface": "#1E293B",
-        "card": "#334155",
-        "accent": "#14B8A6",
-        "accent_hover": "#0D9488",
-        "blue": "#38BDF8",
-        "blue_hover": "#0284C7",
-        "warn": "#F87171",
-        "warn_hover": "#DC2626",
-        "gold": "#FBBF24",
-        "gold_hover": "#D97706",
-        "text": "#F8FAFC",
-        "muted": "#94A3B8",
-        "border": "#475569",
-        "neg": "#F87171",
-        "pos": "#4ADE80",
-        "on_accent": "#0F172A",
-        "on_solid": "#FFFFFF",
-        "alt": "#334155",
+        "label": "داكن", "mode": "dark",
+        "bg": "#0B1220", "surface": "#121C2E", "card": "#1A2740",
+        "text": "#EEF3F9", "muted": "#94A6BE", "border": "#26344C",
+        "accent": "#2DD4BF", "blue": "#60A5FA", "warn": "#FB7185",
+        "gold": "#FBBF24", "pos": "#34D399", "neg": "#FB7185",
     },
-    # 2) فاتح
+    # 2) فاتح — نهاري نظيف بأزرق مخضرّ
     "light": {
-        "bg": "#F1F5F9",
-        "surface": "#FFFFFF",
-        "card": "#FFFFFF",
-        "accent": "#0D9488",
-        "accent_hover": "#0F766E",
-        "blue": "#3B82F6",
-        "blue_hover": "#2563EB",
-        "warn": "#EF4444",
-        "warn_hover": "#DC2626",
-        "gold": "#F59E0B",
-        "gold_hover": "#D97706",
-        "text": "#0F172A",
-        "muted": "#475569",
-        "border": "#CBD5E1",
-        "neg": "#DC2626",
-        "pos": "#15803D",
-        "on_accent": "#FFFFFF",
-        "on_solid": "#FFFFFF",
-        "alt": "#F8FAFC",
+        "label": "فاتح", "mode": "light",
+        "bg": "#F3F6FB", "surface": "#FFFFFF", "card": "#FFFFFF",
+        "text": "#121A28", "muted": "#5C6C85", "border": "#D8E0EC",
+        "accent": "#0D9488", "blue": "#2563EB", "warn": "#DC2626",
+        "gold": "#D97706", "pos": "#15803D", "neg": "#DC2626",
     },
-    # 3) أزرق ليلي
+    # 3) أزرق ليلي — أعماق المحيط بسماوي مشرق
     "midnight": {
-        "bg": "#0B1020",
-        "surface": "#141B33",
-        "card": "#1E2745",
-        "accent": "#22D3EE",
-        "accent_hover": "#06B6D4",
-        "blue": "#818CF8",
-        "blue_hover": "#6366F1",
-        "warn": "#FB7185",
-        "warn_hover": "#F43F5E",
-        "gold": "#FBBF24",
-        "gold_hover": "#F59E0B",
-        "text": "#E2E8F0",
-        "muted": "#93A4C4",
-        "border": "#2C3A5E",
-        "neg": "#FB7185",
-        "pos": "#34D399",
-        "on_accent": "#06202A",
-        "on_solid": "#0B1020",
-        "alt": "#1B2440",
+        "label": "أزرق ليلي", "mode": "dark",
+        "bg": "#050C1C", "surface": "#0C1930", "card": "#122545",
+        "text": "#E7EFFA", "muted": "#8BA5CA", "border": "#1D3860",
+        "accent": "#38BDF8", "blue": "#818CF8", "warn": "#FB7185",
+        "gold": "#FCD34D", "pos": "#2DD4BF", "neg": "#FB7185",
     },
-    # 4) زمردي
+    # 4) زمردي — غابة زمردية بنعنع مشرق
     "emerald": {
-        "bg": "#071C16",
-        "surface": "#0E2A22",
-        "card": "#14402F",
-        "accent": "#34D399",
-        "accent_hover": "#10B981",
-        "blue": "#5EEAD4",
-        "blue_hover": "#2DD4BF",
-        "warn": "#F87171",
-        "warn_hover": "#EF4444",
-        "gold": "#FCD34D",
-        "gold_hover": "#F59E0B",
-        "text": "#ECFDF5",
-        "muted": "#86BFA6",
-        "border": "#1F5A45",
-        "neg": "#F87171",
-        "pos": "#6EE7B7",
-        "on_accent": "#04231A",
-        "on_solid": "#04231A",
-        "alt": "#123528",
+        "label": "زمردي", "mode": "dark",
+        "bg": "#061A15", "surface": "#0C2A21", "card": "#123A2C",
+        "text": "#E9F7F1", "muted": "#7FB39E", "border": "#1B4F3D",
+        "accent": "#34D399", "blue": "#38BDF8", "warn": "#F87171",
+        "gold": "#FCD34D", "pos": "#6EE7B7", "neg": "#F87171",
     },
-    # 5) رملي دافئ
+    # 5) رملي دافئ — نهاري بحبّر برتقالي محروق
     "warm": {
-        "bg": "#FAF6EF",
-        "surface": "#FFFFFF",
-        "card": "#FFFDF8",
-        "accent": "#B45309",
-        "accent_hover": "#92400E",
-        "blue": "#0369A1",
-        "blue_hover": "#075985",
-        "warn": "#DC2626",
-        "warn_hover": "#B91C1C",
-        "gold": "#D97706",
-        "gold_hover": "#B45309",
-        "text": "#3F2E1C",
-        "muted": "#8A7358",
-        "border": "#E3D6BF",
-        "neg": "#DC2626",
-        "pos": "#15803D",
-        "on_accent": "#FFFFFF",
-        "on_solid": "#FFFFFF",
-        "alt": "#F5EFE3",
+        "label": "رملي دافئ", "mode": "light",
+        "bg": "#FBF6EF", "surface": "#FFFFFF", "card": "#FFFCF7",
+        "text": "#3E2C18", "muted": "#8A7255", "border": "#E7D8C1",
+        "accent": "#C2410C", "blue": "#0E7490", "warn": "#DC2626",
+        "gold": "#B45309", "pos": "#15803D", "neg": "#DC2626",
     },
 }
 
-# وصف الثيمات (الاسم العربي، الوضع، ترتيب العرض)
+
+def build_palette(anchors: dict[str, str]) -> dict[str, str]:
+    """يشتق لوحة ألوان كاملة (40 مفتاحاً) من الألوان الأساسية للثيم."""
+    dark = anchors.get("mode", "dark") == "dark"
+    bg, surface, card = anchors["bg"], anchors["surface"], anchors["card"]
+    text, muted, border = anchors["text"], anchors["muted"], anchors["border"]
+    accent, blue = anchors["accent"], anchors["blue"]
+    warn, gold = anchors["warn"], anchors["gold"]
+    pos, neg = anchors["pos"], anchors["neg"]
+    lift = 0.07 if dark else 0.04
+
+    def ramp(color: str) -> dict[str, str]:
+        """مشتقّات لون إجراء: hover / pressed / تدرّج / لون نص مقروء فوقه."""
+        hover = lighten(color, 0.14) if dark else darken(color, 0.10)
+        pressed = darken(color, 0.18) if dark else darken(color, 0.24)
+        start = lighten(color, 0.05 if dark else 0.10)
+        end = darken(color, 0.12 if dark else 0.06)
+        return {"hover": hover, "pressed": pressed,
+                "grad": gradient(start, end), "on": readable_on(color)}
+
+    accent_ramp, blue_ramp = ramp(accent), ramp(blue)
+    warn_ramp, gold_ramp = ramp(warn), ramp(gold)
+    muted_readable = ensure_contrast(muted, surface, 3.4)
+
+    return {
+        # الخلفيات والأسطح
+        "bg": bg,
+        "bg_alt": lighten(bg, lift * 0.6) if dark else darken(bg, 0.015),
+        "surface": surface,
+        "surface_alt": mix(surface, card, 0.65),
+        "elevated": lighten(card, lift) if dark else "#FFFFFF",
+        "card": card,
+        "card_hover": lighten(card, lift) if dark else mix(card, accent, 0.07),
+        # الخطوط والفصل
+        "border": border,
+        "border_strong": lighten(border, 0.12) if dark else darken(border, 0.10),
+        "grid": mix(border, surface, 0.45),
+        # النصوص
+        "text": text,
+        "muted": muted_readable,
+        "subtle": mix(muted_readable, text, 0.45),
+        "disabled_text": mix(muted_readable, bg, 0.45),
+        # اللون المميز
+        "accent": accent,
+        "accent_hover": accent_ramp["hover"],
+        "accent_pressed": accent_ramp["pressed"],
+        "accent_soft": alpha(accent, 0.16 if dark else 0.11),
+        "accent_line": alpha(accent, 0.45),
+        "accent_grad": accent_ramp["grad"],
+        "on_accent": accent_ramp["on"],
+        # اللون الثانوي
+        "blue": blue,
+        "blue_hover": blue_ramp["hover"],
+        "blue_pressed": blue_ramp["pressed"],
+        "blue_grad": blue_ramp["grad"],
+        "on_blue": blue_ramp["on"],
+        # التحذير
+        "warn": warn,
+        "warn_hover": warn_ramp["hover"],
+        "warn_pressed": warn_ramp["pressed"],
+        "on_warn": warn_ramp["on"],
+        # الذهبي
+        "gold": gold,
+        "gold_hover": gold_ramp["hover"],
+        "gold_pressed": gold_ramp["pressed"],
+        "on_gold": gold_ramp["on"],
+        # الدلالات
+        "pos": ensure_contrast(pos, surface, 3.2),
+        "neg": ensure_contrast(neg, surface, 3.2),
+        "pos_soft": alpha(pos, 0.16),
+        "neg_soft": alpha(neg, 0.16),
+        # التحديد والتفاعل
+        "sel_bg": accent,
+        "sel_text": accent_ramp["on"],
+        "hover_bg": alpha(accent, 0.12 if dark else 0.08),
+        "focus": accent,
+        # أسطح خاصة
+        "header_grad": gradient(lighten(surface, 0.04) if dark else surface, bg),
+        "sidebar_grad": gradient(surface, mix(surface, bg, 0.75 if dark else 0.30)),
+        "tooltip_bg": lighten(card, 0.06) if dark else "#1F2937",
+        "shadow": alpha("#000000", 0.50) if dark else alpha(text, 0.18),
+    }
+
+
+PALETTES: dict[str, dict[str, str]] = {
+    key: build_palette(anchors) for key, anchors in _THEME_ANCHORS.items()
+}
+
+# (المفتاح، الاسم العربي، الوضع) — الترتيب هو ترتيب العرض في الواجهة
 THEMES: list[tuple[str, str, str]] = [
-    ("dark", "داكن", "dark"),
-    ("light", "فاتح", "light"),
-    ("midnight", "أزرق ليلي", "dark"),
-    ("emerald", "زمردي", "dark"),
-    ("warm", "رملي دافئ", "light"),
+    (key, anchors["label"], anchors["mode"]) for key, anchors in _THEME_ANCHORS.items()
 ]
 THEME_LABELS = {key: label for key, label, _mode in THEMES}
 THEME_MODES = {key: mode for key, _label, mode in THEMES}
-# توافق مع القيم العربية المحفوظة في الإصدارات السابقة
-THEME_KEYS = {"داكن": "dark", "فاتح": "light", "أزرق ليلي": "midnight",
-              "زمردي": "emerald", "رملي دافئ": "warm"}
-
-_STYLE_TEMPLATE = Template(
-    """
-QWidget {
-    background-color: $bg;
-    color: $text;
-    font-family: 'Segoe UI', Arial;
-    font-size: 10pt;
-}
-QLabel { background: transparent; color: $text; }
-QLabel#Muted { color: $muted; }
-QLabel#Title { color: $accent; font-weight: bold; }
-QFrame#Card {
-    background-color: $card;
-    border-radius: 8px;
-    border: 1px solid $border;
-}
-QFrame#Surface { background-color: $surface; }
-QFrame#Card QWidget { background: transparent; }
-QLineEdit, QComboBox, QDateEdit, QSpinBox, QTextEdit, QPlainTextEdit {
-    background-color: $surface;
-    color: $text;
-    border: 1px solid $border;
-    border-radius: 6px;
-    padding: 6px;
-}
-QLineEdit:disabled, QComboBox:disabled, QSpinBox:disabled {
-    color: $muted;
-    background-color: $bg;
-}
-QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QSpinBox:focus, QTextEdit:focus {
-    border: 1px solid $accent;
-}
-QComboBox QAbstractItemView {
-    background-color: $surface;
-    color: $text;
-    border: 1px solid $border;
-    selection-background-color: $accent;
-    selection-color: $on_accent;
-}
-QPushButton {
-    font-weight: bold;
-    padding: 8px 14px;
-    border-radius: 6px;
-    border: none;
-    background-color: $card;
-    color: $text;
-}
-QPushButton#Accent { background-color: $accent; color: $on_accent; }
-QPushButton#Accent:hover { background-color: $accent_hover; }
-QPushButton#Blue { background-color: $blue; color: $on_solid; }
-QPushButton#Blue:hover { background-color: $blue_hover; }
-QPushButton#Warn { background-color: $warn; color: $on_solid; }
-QPushButton#Warn:hover { background-color: $warn_hover; }
-QPushButton#Gold { background-color: $gold; color: $on_accent; }
-QPushButton#Gold:hover { background-color: $gold_hover; }
-QPushButton#Ghost { background-color: transparent; border: 1px solid $border; color: $text; }
-QPushButton#Ghost:hover { background-color: $surface; }
-QPushButton:disabled { background-color: $surface; color: $muted; }
-QTableWidget, QTableView {
-    background-color: $surface;
-    alternate-background-color: $alt;
-    border: 1px solid $border;
-    gridline-color: $border;
-    selection-background-color: $accent;
-    selection-color: $on_accent;
-}
-QHeaderView::section {
-    background-color: $surface;
-    color: $muted;
-    font-weight: bold;
-    padding: 8px;
-    border: none;
-    border-right: 1px solid $border;
-    border-bottom: 2px solid $border;
-}
-QScrollBar:vertical { background: $surface; width: 12px; }
-QScrollBar::handle:vertical { background: $border; border-radius: 6px; }
-QScrollBar:horizontal { background: $surface; height: 12px; }
-QScrollBar::handle:horizontal { background: $border; border-radius: 6px; }
-QMenu { background-color: $surface; color: $text; border: 1px solid $border; border-radius: 6px; }
-QMenu::item { padding: 6px 24px; }
-QMenu::item:selected { background-color: $accent; color: $on_accent; }
-QTabWidget::pane { border: 1px solid $border; border-radius: 6px; }
-QTabBar::tab {
-    background: $surface; color: $muted; padding: 8px 16px;
-    border-top-left-radius: 6px; border-top-right-radius: 6px;
-}
-QTabBar::tab:selected { background: $accent; color: $on_accent; }
-QCheckBox, QRadioButton { background: transparent; color: $text; }
-QGroupBox {
-    border: 1px solid $border; border-radius: 6px; margin-top: 12px; padding-top: 8px;
-}
-QGroupBox::title { subcontrol-origin: margin; left: 12px; padding: 0 4px; color: $accent; }
-QToolTip { background-color: $card; color: $text; border: 1px solid $border; }
-QStatusBar { background: $surface; color: $muted; }
-QListWidget, QTreeWidget { background-color: $surface; color: $text; border: 1px solid $border; }
-"""
-)
+# توافق مع القيم المحفوظة سابقاً (العربية أو مفاتيح بديلة)
+THEME_ALIASES: dict[str, str] = {label: key for key, label, _mode in THEMES}
+THEME_ALIASES.update({
+    "midnight-blue": "midnight", "ocean": "midnight", "deep": "midnight",
+    "forest": "emerald", "green": "emerald",
+    "sand": "warm", "sunset": "warm", "sun": "warm",
+    "dark-blue": "midnight", "day": "light", "night": "dark",
+})
 
 
 def palette(theme: str = "dark") -> dict[str, str]:
-    return PALETTES.get(theme, PALETTES["dark"])
+    return PALETTES.get(THEME_ALIASES.get(theme, theme), PALETTES["dark"])
 
 
-def stylesheet(theme: str = "dark") -> str:
-    return _STYLE_TEMPLATE.substitute(palette(theme))
+def stylesheet(theme: str = "dark", palette_override: dict[str, str] | None = None) -> str:
+    """أنماط Qt جاهزة للثيم المطلوب (مع إمكانية تمرير لوحة معدّلة/مخصّصة)."""
+    from . import style
+    return style.build(palette_override or palette(theme))
 
 
-# ----------------------------------------------------------------------------
 # الضوابط الافتراضية لأنواع الإجازات
 # (قابلة للتعديل كاملاً من الواجهة — تُخزَّن في قاعدة البيانات)
 # ----------------------------------------------------------------------------

@@ -232,7 +232,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     theme.set_theme(ctx.ui_get("theme", "dark") or "dark")
-    app.setStyleSheet(theme.stylesheet())
+    stored_accent = str(ctx.ui_get("accent", "") or "")
+    theme.set_accent(stored_accent or None)
+    theme.apply(app)
 
     window = MainWindow(ctx)
     window.setWindowIcon(ui_assets.app_icon())

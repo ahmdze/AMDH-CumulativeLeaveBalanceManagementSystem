@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QAction, QFont, QKeySequence
+from PyQt6.QtGui import QAction, QColor, QFont, QKeySequence
 from PyQt6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QMenu, QScrollArea, QVBoxLayout, QWidget,
@@ -89,7 +89,7 @@ class MainWindow(QMainWindow):
     # -- الترويسة -------------------------------------------------------
     def _header(self) -> QFrame:
         header = QFrame()
-        header.setObjectName("Surface")
+        header.setObjectName("Header")
         header.setFixedHeight(60)
         layout = QHBoxLayout(header)
         layout.setSpacing(10)
@@ -129,17 +129,24 @@ class MainWindow(QMainWindow):
     # -- الشريط الجانبي --------------------------------------------------
     def _sidebar(self) -> QScrollArea:
         area = QScrollArea()
-        area.setFixedWidth(228)
+        area.setFixedWidth(236)
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setStyleSheet("QScrollArea { background: transparent; }")
         holder = QWidget()
+        holder.setObjectName("Sidebar")
         area.setWidget(holder)
         layout = QVBoxLayout(holder)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(6)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(3)
 
         def add(text: str, style: str, slot, permission: str | None = None) -> None:
-            btn = W.button(text, style, slot)
+            """عناصر التنقّل: خلفية شفافة وشريط تمييز عند المرور، والأزرار الرئيسية ملوّنة."""
+            if style == "Ghost":
+                btn = W.nav_button(text, slot)
+            else:
+                btn = W.button(text, style, slot)
+                btn.setMinimumHeight(34)
             if permission and not self.ctx.can(permission):
                 btn.setEnabled(False)
                 btn.setToolTip(tr("لا تملك صلاحية هذا الإجراء"))
@@ -215,7 +222,7 @@ class MainWindow(QMainWindow):
             self.table.table.setColumnWidth(i, width)
         layout.addWidget(self.table, 1)
 
-        details = W.card()
+        details = W.card(hoverable=True)
         details.setFixedHeight(150)
         grid = QGridLayout(details)
         grid.setSpacing(4)
@@ -586,17 +593,44 @@ class MainWindow(QMainWindow):
     # المظهر والحالة
     # ==================================================================
     def theme_actions(self) -> list[QAction]:
-        """إجراءات قائمة الثيمات (مفصولة عن العرض لتكون قابلة للفحص)."""
+        """إجراءات قائمة الثيمات مع معاينة لونية لكل ثيم."""
         current = theme.current()
         actions = []
         for key, label in theme.theme_choices():
-            action = QAction(label, self)
+            action = QAction(theme.swatch_icon(key), label, self)
             action.setCheckable(True)
             action.setChecked(key == current)
             action.setData(key)
             action.triggered.connect(lambda _c=False, name=key: self.set_theme(name))
             actions.append(action)
         return actions
+
+    def accent_actions(self) -> list[QAction]:
+        """إجراءات اللون المميز: تخصيص لون أو العودة إلى لون الثيم."""
+        actions = []
+        pick = QAction(theme.accent_preview_icon(), tr("تخصيص اللون المميز..."), self)
+        pick.setData("pick")
+        pick.triggered.connect(self._pick_accent)
+        actions.append(pick)
+        reset = QAction(tr("إعادة لون الثيم الافتراضي"), self)
+        reset.setData("reset")
+        reset.setEnabled(bool(theme.accent_override()))
+        reset.triggered.connect(lambda: self.set_accent(None))
+        actions.append(reset)
+        return actions
+
+    def _pick_accent(self) -> None:
+        from PyQt6.QtWidgets import QColorDialog
+        chosen = QColorDialog.getColor(QColor(theme.color("accent")), self,
+                                       tr("اختر اللون المميز"))
+        if chosen.isValid():
+            self.set_accent(chosen.name())
+
+    def set_accent(self, accent: str | None) -> None:
+        """يضبط اللون المميز المخصّص (يُشتق منه كل حالات التفاعل)."""
+        theme.set_accent(accent)
+        self.ctx.ui_set("accent", accent or "")
+        self._apply_theme()
 
     def language_actions(self) -> list[QAction]:
         """إجراءات قائمة اللغات (مفصولة عن العرض لتكون قابلة للفحص)."""
@@ -612,10 +646,13 @@ class MainWindow(QMainWindow):
         return actions
 
     def _choose_theme(self) -> None:
-        """قائمة الثيمات الخمسة."""
+        """قائمة الثيمات الخمسة + تخصيص اللون المميز."""
         menu = QMenu(self)
         menu.setLayoutDirection(self.layoutDirection())
         for action in self.theme_actions():
+            menu.addAction(action)
+        menu.addSeparator()
+        for action in self.accent_actions():
             menu.addAction(action)
         menu.exec(self.cursor().pos())
 
@@ -647,10 +684,16 @@ class MainWindow(QMainWindow):
         self.lbl_policy.setStyleSheet(theme.label_style("muted"))
         self.lbl_user.setStyleSheet(theme.label_style("muted"))
         self._on_selection()
+        # تحديث عناصر تعتمد على الألوان مباشرةً (بطاقات المؤشرات والرسوم)
+        for widget in self.findChildren(W.KPICard):
+            widget.value.setStyleSheet(theme.label_style(theme.color("accent"), 18, bold=True))
 
     def _restore_state(self) -> None:
         name = self.ctx.ui_get("theme", "dark") or "dark"
         theme.set_theme(name)
+        stored_accent = str(self.ctx.ui_get("accent", "") or "")
+        theme.set_accent(stored_accent or None)
+        theme.apply(QApplication.instance())
         geometry = self.ctx.ui_get("window_geometry")
         if geometry:
             try:

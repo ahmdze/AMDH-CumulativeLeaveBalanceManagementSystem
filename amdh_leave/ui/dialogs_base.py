@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QDesktopServices
+from PyQt6.QtGui import QColor, QDesktopServices
 from PyQt6.QtCore import QUrl
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame, QGridLayout,
@@ -281,12 +281,20 @@ class SettingsDialog(BaseDialog):
 
         self.cb_theme = QComboBox()
         for key, label in theme.theme_choices():
-            self.cb_theme.addItem(label, key)
+            self.cb_theme.addItem(theme.swatch_icon(key), label, key)
         current_theme = self.ctx.ui_get("theme", "dark") or "dark"
-        if current_theme in config.THEME_KEYS:
-            current_theme = config.THEME_KEYS[current_theme]
+        current_theme = config.THEME_ALIASES.get(current_theme, current_theme)
         form.addRow(tr("وضع العرض"), self.cb_theme)
         self.cb_theme.setCurrentIndex(max(0, self.cb_theme.findData(current_theme)))
+
+        # اللون المميز المخصّص (اختياري) — تُشتق منه كل حالات التفاعل
+        self.btn_accent = W.button(self._accent_button_text(), "Ghost", self._pick_accent)
+        self.btn_accent.setIcon(theme.accent_preview_icon(theme.accent_override()))
+        accent_row = QHBoxLayout()
+        accent_row.addWidget(self.btn_accent)
+        accent_row.addWidget(W.button(tr("إعادة الافتراضي"), "Ghost", self._reset_accent))
+        accent_row.addStretch()
+        form.addRow(tr("اللون المميز"), self._wrap(accent_row))
 
         outer.addLayout(form)
         outer.addWidget(W.separator())
@@ -301,6 +309,34 @@ class SettingsDialog(BaseDialog):
         holder.setLayout(layout)
         layout.setContentsMargins(0, 0, 0, 0)
         return holder
+
+    def _accent_button_text(self) -> str:
+        accent = theme.accent_override()
+        return trf("تخصيص اللون... ({v0})", v0=accent) if accent else tr("تخصيص اللون...")
+
+    def _pick_accent(self) -> None:
+        from PyQt6.QtWidgets import QColorDialog
+        chosen = QColorDialog.getColor(QColor(theme.color("accent")), self,
+                                       tr("اختر اللون المميز"))
+        if not chosen.isValid():
+            return
+        theme.set_accent(chosen.name())
+        self.btn_accent.setText(self._accent_button_text())
+        self.btn_accent.setIcon(theme.accent_preview_icon(chosen.name()))
+        self._apply_theme_live()
+
+    def _reset_accent(self) -> None:
+        theme.set_accent(None)
+        self.btn_accent.setText(self._accent_button_text())
+        self.btn_accent.setIcon(theme.accent_preview_icon(None))
+        self._apply_theme_live()
+
+    def _apply_theme_live(self) -> None:
+        """تطبيق فوري للأنماط أثناء المعاينة داخل الإعدادات."""
+        app = QApplication.instance()
+        if app is not None:
+            app.setStyleSheet(theme.stylesheet())
+        self.setStyleSheet(app.styleSheet() if app is not None else "")
 
     # -- تبويب الإشعارات ----------------------------------------------
     def _tab_notifications(self) -> QWidget:
