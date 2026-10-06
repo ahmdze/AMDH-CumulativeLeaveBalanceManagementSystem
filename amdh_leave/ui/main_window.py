@@ -27,6 +27,9 @@ from .dialogs_about import AboutDialog
 from .dialogs_base import SettingsDialog, TrashDialog
 from .dialogs_db import DatabaseOperationsDialog
 from .dialogs_employee import EmployeeDialog
+from .dialogs_import import ImportHistoryDialog, TransferImportDialog
+from .dialogs_import import export_for_institution as export_transfer_file
+from .dialogs_institutions import InstitutionsDialog
 from .dialogs_leave import AttachmentsDialog, LeaveDialog, SettlementDialog, StatementDialog
 from .notifications import NotificationsDialog
 from .register import LeavesRegisterDialog
@@ -169,6 +172,11 @@ class MainWindow(QMainWindow):
         add("📜  سجل التدقيق", "Ghost", self._open_audit, "view_audit")
         add("🔒  تشفير قاعدة البيانات", "Ghost", self._open_encryption)
         add("🗄️  عمليات قاعدة البيانات", "Ghost", self._open_db_ops)
+        layout.addWidget(W.separator())
+        add("🏥  المؤسسات", "Ghost", self._open_institutions, "manage_institutions")
+        add("📥  استيراد من مؤسسة", "Accent", self._import_transfer, "import_transfer")
+        add("📤  تصدير بيانات للمركز", "Blue", self._export_transfer, "export_transfer")
+        add("📋  سجل الاستيراد", "Ghost", self._open_import_history, "manage_institutions")
         add("🗑  سلة المحذوفات", "Ghost", self._open_trash, "purge")
         layout.addWidget(W.separator())
         add("⚙  الإعدادات", "Ghost", self._open_settings)
@@ -450,6 +458,70 @@ class MainWindow(QMainWindow):
     def _open_db_ops(self) -> None:
         DatabaseOperationsDialog(self, self.ctx, refresh_callback=self._after_change).exec()
 
+    # -- المؤسسات وملفات النقل -----------------------------------------
+    def _open_institutions(self) -> None:
+        InstitutionsDialog(self, self.ctx).exec()
+        self._after_change()
+
+    def _import_transfer(self) -> None:
+        dialog = TransferImportDialog(self, self.ctx)
+        dialog.exec()
+        self._after_change()
+
+    def _export_transfer(self) -> None:
+        scope = self.ctx.session.scoped_institution
+        institution = scope
+        if not scope:
+            names = [item.name for item in self.ctx.db.list_institutions(active_only=True)]
+            if names:
+                from PyQt6.QtWidgets import QInputDialog
+                names.insert(0, "كل المؤسسات")
+                choice, ok = QInputDialog.getItem(
+                    self, "تصدير ملف نقل", "المؤسسة المطلوب تصدير بياناتها:", names, 0, False)
+                if not ok:
+                    return
+                institution = "" if choice == "كل المؤسسات" else choice
+        export_transfer_file(self, self.ctx, institution)
+
+    def _open_import_history(self) -> None:
+        ImportHistoryDialog(self, self.ctx).exec()
+
+    def _transfer_employee(self) -> None:
+        """نقل الموظف المحدد إلى مؤسسة أخرى مع تسجيل الانتقال في سجله."""
+        emp_id = self._current_id()
+        if not emp_id:
+            return
+        if not self.ctx.can("transfer_employee"):
+            W.error(self, "لا تملك صلاحية نقل الموظفين بين المؤسسات.")
+            return
+        employee = self.ctx.db.get_employee(emp_id)
+        if employee is None:
+            return
+        names = [item.name for item in self.ctx.db.list_institutions(active_only=True)
+                 if item.name != employee.institution]
+        if not names:
+            W.warn(self, "لا توجد مؤسسة أخرى مسجّلة. أضف المؤسسات من نافذة «المؤسسات».")
+            return
+        from PyQt6.QtWidgets import QInputDialog
+        choice, ok = QInputDialog.getItem(
+            self, "نقل موظف", f"نقل «{employee.name}» من «{employee.institution}» إلى:",
+            names, 0, False)
+        if not ok or not choice:
+            return
+        from ..services import dates as DD
+        moved_on = DD.date.today()
+        if not W.confirm(self, f"نقل الموظف {employee.name} ({emp_id}) إلى «{choice}»؟\n\n"
+                              "سيبقى رصيده وإجازاته كما هي، ويُسجَّل الانتقال في سجل الموظف.",
+                         "تأكيد النقل"):
+            return
+        self.ctx.db.add_move(emp_id, employee.institution, choice, moved_on=moved_on,
+                             source_file="—", note="نقل يدوي من الشاشة الرئيسية",
+                             user=self.ctx.user())
+        self.ctx.db.set_employee_institution(emp_id, choice, moved_on=moved_on,
+                                            user=self.ctx.user())
+        W.info(self, f"تم نقل الموظف إلى «{choice}» بتاريخ {moved_on}.")
+        self._after_change()
+
     def _open_trash(self) -> None:
         TrashDialog(self, self.ctx).exec()
         self._after_change()
@@ -555,6 +627,7 @@ class MainWindow(QMainWindow):
             ("🧾 كشف حساب الرصيد", self._open_statement),
             ("📤 تصفية نهاية الخدمة", self._open_settlement),
             ("📎 مرفقات الإجازة", self._open_attachments),
+            ("🔀 نقل الموظف إلى مؤسسة", self._transfer_employee),
             ("🗑 حذف الموظف", self._delete_employee),
         ]
         for text, slot in actions:

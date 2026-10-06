@@ -342,7 +342,9 @@ class AttachmentsDialog(BaseDialog):
         except OSError as exc:
             W.error(self, f"تعذّر نسخ الملف: {exc}")
             return
-        self.ctx.db.add_attachment(self.leave_id, self.emp_id, source.name, stored, self.ctx.user())
+        self.ctx.db.add_attachment(self.leave_id, self.emp_id, source.name, stored,
+                                   self.ctx.user(),
+                                   attachments_dir=self.ctx.paths.attachments_dir)
         self._refresh()
 
     def _open(self) -> None:

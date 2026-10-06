@@ -15,9 +15,11 @@ PERMISSIONS: dict[str, set[str]] = {
         "edit_employee", "delete_employee", "purge", "edit_leave", "delete_leave",
         "manage_users", "edit_policy", "edit_rules", "backup_restore", "import_db",
         "export", "view_audit", "manage_holidays", "manage_attachments", "approve",
+        "manage_institutions", "import_transfer", "export_transfer", "transfer_employee",
     },
     "editor": {
         "edit_employee", "edit_leave", "export", "manage_attachments", "approve",
+        "export_transfer",
     },
     "viewer": {"export"},
 }

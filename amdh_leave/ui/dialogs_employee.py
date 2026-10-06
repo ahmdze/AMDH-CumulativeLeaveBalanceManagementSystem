@@ -42,7 +42,14 @@ class EmployeeDialog(BaseDialog):
         self.e_name = QLineEdit()
         self.e_title = QLineEdit()
         self.e_workplace = QLineEdit()
-        self.e_institution = QLineEdit()
+        self.e_institution = QComboBox()
+        self.e_institution.setEditable(True)
+        self.e_institution.addItem("")
+        for institution in self.ctx.db.list_institutions(active_only=True):
+            label = institution.name + (f" ({institution.code})" if institution.code else "")
+            self.e_institution.addItem(label, institution.name)
+        self.e_institution.setToolTip(
+            "المؤسسة الحالية للموظف — تُختار من قائمة المؤسسات المسجّلة")
         self.e_notes = QTextEdit()
         self.e_notes.setFixedHeight(70)
 
@@ -67,6 +74,11 @@ class EmployeeDialog(BaseDialog):
         form.addRow("ملاحظات", self.e_notes)
         layout.addWidget(frame)
 
+        if self.ctx.session.scoped_institution:
+            self.e_institution.setEnabled(False)
+            self.e_institution.setToolTip(
+                f"مقيَّد بمؤسستك: {self.ctx.session.scoped_institution}")
+
         self.issues = IssuesBox()
         layout.addWidget(self.issues)
         if self.edit_mode:
@@ -89,7 +101,13 @@ class EmployeeDialog(BaseDialog):
         self.e_name.setText(employee.name)
         self.e_title.setText(employee.job_title)
         self.e_workplace.setText(employee.workplace)
-        self.e_institution.setText(employee.institution)
+        if employee.institution and self.e_institution.findData(employee.institution) < 0:
+            self.e_institution.addItem(employee.institution, employee.institution)
+        index = self.e_institution.findData(employee.institution)
+        if index >= 0:
+            self.e_institution.setCurrentIndex(index)
+        else:
+            self.e_institution.setCurrentText(employee.institution)
         self.e_notes.setPlainText(employee.notes)
         self.cb_gender.setCurrentText(employee.gender if employee.gender in ("ذكر", "أنثى") else "ذكر")
         index = self.cb_status.findData(employee.status)
@@ -99,12 +117,26 @@ class EmployeeDialog(BaseDialog):
         self.d_end.set_value(employee.end_date)
 
     # ------------------------------------------------------------------
+    def _institution_value(self) -> str:
+        """المؤسسة المختارة (النص كما هو إن كُتب يدوياً أو القيمة المرتبطة)."""
+        data = self.e_institution.currentData()
+        text = self.e_institution.currentText().strip()
+        if data and text == self.e_institution.currentText():
+            return str(data)
+        # إن كان النص يطابق عنصراً بالقائمة (مع الرمز) نأخذ قيمته
+        index = self.e_institution.findText(text)
+        if index >= 0 and self.e_institution.itemData(index):
+            return str(self.e_institution.itemData(index))
+        return text.split(" (")[0].strip() if " (" in text else text
+
     def _fields(self) -> dict:
+        scope = self.ctx.session.scoped_institution
+        institution = scope or self._institution_value()
         return {
             "name": self.e_name.text().strip(),
             "job_title": self.e_title.text().strip(),
             "workplace": self.e_workplace.text().strip(),
-            "institution": self.e_institution.text().strip(),
+            "institution": institution,
             "gender": self.cb_gender.currentText(),
             "start_date": D.to_iso(W.date_of(self.d_start)),
             "end_date": D.to_iso(self.d_end.value()),
@@ -125,7 +157,15 @@ class EmployeeDialog(BaseDialog):
             W.error(self, "\n".join(i.message for i in issues if i.is_error), "تعذّر الحفظ")
             return
         if self.edit_mode:
+            previous = self.ctx.db.get_employee(emp_id)
             self.ctx.db.update_employee(emp_id, fields, self.ctx.user())
+            if previous and previous.institution != fields["institution"]:
+                self.ctx.db.add_move(emp_id, previous.institution, fields["institution"],
+                                     moved_on=D.date.today(), source_file="—",
+                                     note="نقل يدوي من نافذة الموظف", user=self.ctx.user())
+                self.ctx.db.set_employee_institution(emp_id, fields["institution"],
+                                                     moved_on=D.date.today(),
+                                                     user=self.ctx.user())
         else:
             self.ctx.db.add_employee(emp_id, fields, self.ctx.user())
         if self.on_save:

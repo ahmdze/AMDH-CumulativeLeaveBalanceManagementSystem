@@ -123,6 +123,19 @@ def confirm(parent, text: str, title: str = "تأكيد") -> bool:
         QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes
 
 
+def open_path(parent, path, title: str = "فتح الملف") -> bool:
+    """يفتح ملفاً/مجلداً بالبرنامج الافتراضي في النظام."""
+    from pathlib import Path as _Path
+
+    from PyQt6.QtCore import QUrl
+    from PyQt6.QtGui import QDesktopServices
+    target = _Path(path)
+    if not target.exists():
+        warn(parent, f"الملف غير موجود:\n{target}", title)
+        return False
+    return QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
+
+
 def button(text: str, style: str = "Ghost", slot=None, width: int | None = None,
            parent=None, tooltip: str = "") -> QPushButton:
     btn = QPushButton(text, parent)

@@ -194,6 +194,34 @@ def export_template(path: str | Path) -> Path:
     return path
 
 
+def write_table(path: str | Path, headers: list[str], rows: list[list], *,
+                sheet: str = "ورقة1", widths: list[int] | None = None,
+                rtl: bool = True) -> Path:
+    """كتابة جدول عام إلى Excel (يُستخدم للتقارير والسجلات)."""
+    _check()
+    path = Path(path)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet
+    ws.sheet_view.rightToLeft = rtl
+    ws.append(list(headers))
+    for row in rows:
+        ws.append(list(row))
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color=HEADER_FONT)
+        cell.fill = PatternFill("solid", fgColor=HEADER_FILL)
+        cell.alignment = Alignment(horizontal="center")
+    for index, header in enumerate(headers, start=1):
+        width = widths[index - 1] if widths and index <= len(widths) else max(
+            12, min(42, len(str(header)) + 8))
+        ws.column_dimensions[get_column_letter(index)].width = width
+    ws.freeze_panes = "A2"
+    if rows:
+        ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}{ws.max_row}"
+    wb.save(path)
+    return path
+
+
 def read_table(path: str | Path, sheet: str | None = None) -> tuple[list[str], list[dict]]:
     """قراءة ملف Excel: يعيد (العناوين، الصفوف كقواميس)."""
     _check()
