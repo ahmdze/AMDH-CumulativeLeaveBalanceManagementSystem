@@ -44,3 +44,10 @@ _emp_print.html
 # النسخ القديمة (أرشيف محلي)
 # ---------------------------------------------------------------------------
 legacy/
+
+# قفل النسخة الواحدة وملفات مؤقتة
+.amdh_instance.lock
+.amdh_lock.json
+*_plain_*.db
+amdh_leave/locales/_extracted.json
+amdh_leave/locales/_to_translate.json
