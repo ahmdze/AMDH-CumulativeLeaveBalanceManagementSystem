@@ -53,7 +53,7 @@ amdh_leave/
                               dashboard | calendar_view | notifications | register
                               dialogs_institutions | dialogs_import (المؤسسات والنقل)
   assets/                     الشعارات والصور (فارغة قابلة للاستبدال) + README
-tests/                        اختبارات pytest (308 اختباراً)
+tests/                        اختبارات pytest (302 اختباراً)
 tools/                        فحوصات smoke + بناء .exe + تثبيت SQLCipher
                               + screenshots.py + check_themes.py + audit_multi_institution.py
 screenshots/                  لقطات الواجهة بالثيمات الخمسة (وثائق بصرية)
@@ -171,7 +171,7 @@ python tools/audit_multi_institution.py     # 13/13 فحصاً ناجحاً
 ## 5) الاختبارات
 
 ```powershell
-python -m pytest tests -q          # 308 اختبارات
+python -m pytest tests -q          # 302 اختباراً
 python tools/_smoke_ui.py          # فحص شامل للواجهة (headless)
 ="en"; python tools/_smoke_ui.py   # فحص الواجهة بالإنجليزية
 ```
