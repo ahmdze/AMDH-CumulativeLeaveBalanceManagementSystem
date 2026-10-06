@@ -29,6 +29,7 @@ from amdh_leave.db import Database                             # noqa: E402
 from amdh_leave.services.backup import BackupService           # noqa: E402
 from amdh_leave.services.security import make_session          # noqa: E402
 from amdh_leave.ui import dialogs_about, dialogs_base, dialogs_login, theme  # noqa: E402
+from amdh_leave.ui import dialogs_import, dialogs_institutions           # noqa: E402
 from amdh_leave.ui.main_window import MainWindow               # noqa: E402
 
 OUT = ROOT / "screenshots"
@@ -39,6 +40,16 @@ def build_context(tmp: Path) -> AppContext:
     paths = config.Paths(tmp).ensure()
     db = Database(paths.db_path, paths.backups_dir)
     db.set_meta({"auth_enabled": "0"})
+    # مؤسسات للعرض في اللقطات إن لم تكن مسجّلة
+    for name, code, kind in (("مركز الدائرة", "C0", "مركز الدائرة"),
+                             ("مستشفى الكرامة", "H1", "مستشفى"),
+                             ("مستشفى النور", "H2", "مستشفى"),
+                             ("مركز صحي الرافدين", "PH3", "مركز صحي")):
+        if db.get_institution(name) is None:
+            db.save_institution({"name": name, "code": code, "kind": kind,
+                                 "manager": "د. " + name.split()[-1]}, "admin")
+    db.set_institution_import("مستشفى الكرامة", when="2026-10-02 09:15:00", user="h1",
+                              filename="نقل_مستشفى_الكرامة.amdhz", counts="{}")
     return AppContext(paths=paths, db=db, backup=BackupService(db, paths.backups_dir),
                       session=make_session(None, False),
                       settings=QSettings("MyCompany", "AMDH-Screenshots"))
@@ -98,6 +109,18 @@ def main() -> int:
         QApplication.processEvents()
         grab(settings, OUT / f"{key}_settings.png")
         settings.close()
+
+        institutions = dialogs_institutions.InstitutionsDialog(window, ctx)
+        institutions.show()
+        QApplication.processEvents()
+        grab(institutions, OUT / f"{key}_institutions.png")
+        institutions.close()
+
+        transfer = dialogs_import.TransferImportDialog(window, ctx)
+        transfer.show()
+        QApplication.processEvents()
+        grab(transfer, OUT / f"{key}_import.png")
+        transfer.close()
         window.close()
 
     # صورة إضافية: الثيم الداكن بلون مميز مخصّص
