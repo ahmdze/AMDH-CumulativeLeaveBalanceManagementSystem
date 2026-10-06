@@ -317,10 +317,8 @@ class TransferImportDialog(QDialog):
         layout.addLayout(buttons)
 
     # -- الخطوات -------------------------------------------------------
-    def _choose(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "اختر ملف النقل", "", TRANSFER_FILTER)
-        if not path:
-            return
+    def fill_from_path(self, path: Path) -> None:
+        """يضبط الملف ويعرض بيانه ومعاينته (تُستخدم من نافذة عمليات القاعدة)."""
         self.path = Path(path)
         self.e_path.setText(str(self.path))
         self.plan = None
@@ -331,6 +329,12 @@ class TransferImportDialog(QDialog):
         except Exception as exc:                      # noqa: BLE001
             W.error(self, f"تعذّر قراءة الملف: {exc}")
             return
+        self._show_info(info)
+
+    def _choose_path_filled(self, info: dict) -> None:
+        self._show_info(info)
+
+    def _show_info(self, info: dict) -> None:
         manifest = info.get("manifest") or {}
         if not self.e_institution.text().strip() and manifest.get("institution"):
             self.e_institution.setText(str(manifest["institution"]))
@@ -352,9 +356,14 @@ class TransferImportDialog(QDialog):
             lines.append(f"ملفات مرفقات في الأرشيف: {info['attachment_files']}")
         lines.append(f"بصمة الملف: {info['checksum'][:24]}…")
         self.lbl_info.setText(" | ".join(lines[:4]))
-        self.summary.setPlainText("\n".join(lines) +
-                                  "\n\nاضغط «معاينة» لعرض تفاصيل الدمج.")
+        self.summary.setPlainText("\n".join(lines) + "\n\nاضغط «معاينة» لعرض تفاصيل الدمج.")
         self._preview()
+
+    def _choose(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "اختر ملف النقل", "", TRANSFER_FILTER)
+        if not path:
+            return
+        self.fill_from_path(Path(path))
 
     def _options(self) -> M.MergeOptions:
         return M.MergeOptions(institution=self.e_institution.text().strip(),

@@ -145,12 +145,29 @@ class BackupService:
         return True, f"تمت الاستعادة من: {source.name}{note}"
 
     def import_merge(self, source: str | Path, user: str = "") -> dict:
-        """دمج موظفين وإجازاتهم من قاعدة بيانات أخرى (بمعاملة واحدة)."""
+        """(متوافقية) يفوّض الدمج إلى المحرّك الجديد غير المُدمّر.
+
+        كان هذا الدمج يحذف إجازات الهدف ثم يُدخل إجازات المصدر فقط (فقدان بيانات المركز)،
+        فاستُبدل بـ ``services.merge`` الذي لا يحذف شيئاً ويطابق بهوية ``uid``.
+        """
         source = Path(source)
         result = {"added": 0, "updated": 0, "skipped": 0, "leaves": 0, "errors": []}
         if not source.exists():
             result["errors"].append("الملف غير موجود")
             return result
+        from . import merge as M
+        from . import transfer as T
+        try:
+            report = T.apply_transfer(self.db, source, M.MergeOptions(), user=user,
+                                      attachments_dir=self.db.path.parent / "attachments")
+        except Exception as exc:                          # noqa: BLE001
+            result["errors"].append(str(exc))
+            return result
+        result.update({"added": report.employees_added, "updated": report.employees_updated,
+                       "skipped": report.employees_skipped, "leaves": report.leaves_added,
+                       "errors": list(report.warnings)})
+        result["report"] = report
+        return result
         try:
             src = sqlite3.connect(f"file:{source}?mode=ro", uri=True)
             src.row_factory = sqlite3.Row

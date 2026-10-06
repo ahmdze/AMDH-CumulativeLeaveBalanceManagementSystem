@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 from ..exporters import excel as X
 from ..services import dates as D
 from ..services import validation
+from ..services import transfer as T
 from . import theme, widgets as W
 from .dialogs_base import BaseDialog
 
@@ -82,22 +83,29 @@ class DatabaseOperationsDialog(BaseDialog):
             W.error(self, f"فشل التصدير: {exc}")
 
     def _import_db(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "استيراد قاعدة بيانات", "", "قاعدة بيانات (*.db)")
+        """يُحوَّل إلى محرّك الدمج الجديد غير المُدمّر (معاينة + تقرير + تراجع).
+
+        الدمج القديم كان يحذف إجازات الهدف ويعيد إدخال إجازات المصدر فقط، فاستُبدل
+        بمحرّك ``services.merge`` الذي لا يحذف شيئاً ويطابق السجلات بهوية ``uid``.
+        """
+        path, _ = QFileDialog.getOpenFileName(
+            self, "استيراد/دمج قاعدة بيانات أو ملف نقل", "",
+            "ملفات النقل والقواعد (*.amdhz *.db *.zip);;كل الملفات (*)")
         if not path:
             return
-        mode = self._ask_mode()
-        if mode is None:
+        from .dialogs_import import TransferImportDialog
+        dialog = TransferImportDialog(self, self.ctx)
+        dialog.path = Path(path)
+        dialog.e_path.setText(str(path))
+        try:
+            info = T.read_transfer_info(Path(path))
+        except Exception as exc:                      # noqa: BLE001
+            W.error(self, f"تعذّر قراءة الملف: {exc}")
             return
-        if self.ctx.policy.backup_before_import:
-            self.ctx.backup.create("pre_import")
-        self.ctx.backup.import_mode = mode
-        result = self.ctx.backup.import_merge(path, self.ctx.user())
-        if result["errors"]:
-            W.error(self, "أخطاء:\n" + "\n".join(result["errors"]))
-            return
-        W.info(self, f"اكتمل الدمج:\nموظفون مضافون: {result['added']}\n"
-                     f"موظفون محدَّثون: {result['updated']}\nمتجاوَزون: {result['skipped']}\n"
-                     f"إجازات منسوخة: {result['leaves']}")
+        institution = str((info.get("manifest") or {}).get("institution") or "")
+        dialog.e_institution.setText(institution)
+        dialog._choose_path_filled(info)
+        dialog.exec()
         if self.refresh_callback:
             self.refresh_callback()
 

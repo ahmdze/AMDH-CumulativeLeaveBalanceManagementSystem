@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from amdh_leave.db import Database
+from amdh_leave.services import merge as M
 from amdh_leave.services.backup import BackupService
 from tests.conftest import create_legacy_db
 
@@ -103,12 +104,12 @@ def test_import_merge_adds_and_updates(db, tmp_path):
     assert db.employee_exists("999")
     assert len(db.get_employee("999").leaves) == 1
 
-    # الدمج مرة أخرى في وضع «تجاهل» لا يضيف شيئاً
-    service.import_mode = "skip"
+    # إعادة الدمج لا تُكرّر شيئاً (المطابقة بهوية uid)
     again = service.import_merge(tmp_path / "other.db", "tester")
-    assert again["added"] == 0 and again["skipped"] == 1
+    assert again["added"] == 0 and again["leaves"] == 0
+    assert len(db.get_employee("999").leaves) == 1
 
-    # تحديث موظف موجود
+    # تحديث موظف موجود (الأحدث يفوز)
     updated = Database(tmp_path / "other.db", tmp_path / "ob")
     updated.update_employee("999", {"name": "اسم محدث", "gender": "أنثى",
                                     "start_date": "2020-01-01"})
@@ -117,6 +118,27 @@ def test_import_merge_adds_and_updates(db, tmp_path):
     third = service.import_merge(tmp_path / "other.db", "tester")
     assert third["updated"] == 1
     assert db.get_employee("999").name == "اسم محدث"
+
+
+def test_import_merge_never_deletes_target_leaves(db, tmp_path):
+    """الدمج الجديد غير مُدمّر: إجازات الهدف تبقى كلها (كانت تُمحى سابقاً)."""
+    db.add_employee("700", {"name": "موظف الهدف", "start_date": "2015-01-01",
+                            "institution": "المركز"})
+    keep = db.add_leave("700", {"type": "اضطرارية", "start_date": "2026-04-01",
+                                "days_actual": 3, "amount": 3, "unit": "يوم",
+                                "order": "CENTER-1"})
+    other = Database(tmp_path / "src3.db", tmp_path / "ob3")
+    other.add_employee("700", {"name": "موظف الهدف", "start_date": "2015-01-01",
+                               "institution": "المركز"})
+    other.add_leave("700", {"type": "عادية", "start_date": "2026-01-05", "days_actual": 10,
+                            "amount": 10, "unit": "يوم", "order": "H-1"})
+    other.close()
+
+    result = BackupService(db, tmp_path / "backups").import_merge(tmp_path / "src3.db", "tester")
+    assert result["errors"] == [] and result["leaves"] == 1
+    ids = {leave.id for leave in db.list_leaves("700")}
+    assert keep in ids, "إجازة المركز يجب ألا تُمحى"
+    assert len(ids) == 2
 
 
 def test_import_merge_rejects_bad_file(db, tmp_path):
@@ -136,22 +158,18 @@ def test_import_merge_rolls_back_on_error(db, tmp_path):
     other.add_employee("A2", {"name": "ثاني", "gender": "ذكر", "start_date": "2020-01-01"})
     other.close()
 
+    # إجازة يتيمة (لموظف غير موجود) في ملف المصدر ⇒ تفشل داخل معاملة الدمج
+    raw = sqlite3.connect(str(tmp_path / "src2.db"))
+    raw.execute("INSERT INTO leaves (emp_id, type, start_date, days_actual, amount, unit) "
+                "VALUES ('GHOST','عادية','2026-01-01',10,10,'يوم')")
+    raw.commit()
+    raw.close()
+
     before = db.stats()["employees"]
     service = BackupService(db, tmp_path / "backups")
-    original = service._merge_employee
-    calls = {"n": 0}
-
-    def flaky(cursor, emp, leaves, result, exists):
-        calls["n"] += 1
-        if calls["n"] == 2:
-            raise sqlite3.OperationalError("فشل محاكى أثناء الدمج")
-        return original(cursor, emp, leaves, result, exists)
-
-    service._merge_employee = flaky
     result = service.import_merge(tmp_path / "src2.db", "tester")
 
     assert result["errors"], "يجب الإبلاغ عن الخطأ"
-    assert calls["n"] == 2
     assert db.stats()["employees"] == before, "يجب إرجاع كل التغييرات"
     assert not db.employee_exists("A1")
     assert not db.employee_exists("A2")
