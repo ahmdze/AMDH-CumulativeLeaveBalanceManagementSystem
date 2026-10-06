@@ -1,0 +1,802 @@
+"""طبقة قاعدة البيانات: مخطط، ترحيلات آمنة، معاملات، استعلامات، تدقيق.
+
+مبادئ التصميم:
+  * اتصال واحد دائم (لا تسريب اتصالات) مع WAL و busy_timeout.
+  * ترحيلات متكرّرة الأمان (idempotent) مبنية على فحص وجود الأعمدة والجداول.
+  * نسخة احتياطية تلقائية قبل أي ترحيل يمسّ بنية البيانات.
+  * الحذف ناعم (soft delete) قابل للاستعادة لكل الموظفين والإجازات.
+"""
+
+from __future__ import annotations
+
+import logging
+import shutil
+import sqlite3
+from contextlib import contextmanager
+from datetime import date, datetime
+from pathlib import Path
+
+from . import config
+from .models import AppUser, Attachment, AuditEntry, Employee, Holiday, Leave
+from .rules import LeaveRule, Policy, default_rules
+from .services.dates import parse_iso, to_iso
+
+SCHEMA_VERSION = 4
+
+LOG = logging.getLogger("amdh.db")
+
+# أعمدة تُضاف للجداول القديمة (الاسم، التعريف)
+_EMPLOYEE_COLUMNS: list[tuple[str, str]] = [
+    ("end_date", "TEXT"),
+    ("status", "TEXT DEFAULT 'active'"),
+    ("created_at", "TEXT"),
+    ("updated_at", "TEXT"),
+    ("deleted_at", "TEXT"),
+    ("deleted_by", "TEXT"),
+]
+
+_LEAVE_COLUMNS: list[tuple[str, str]] = [
+    ("end_date", "TEXT"),
+    ("working_days", "INTEGER DEFAULT 0"),
+    ("count_mode", "TEXT DEFAULT 'calendar'"),
+    ("status", "TEXT DEFAULT 'approved'"),
+    ("approved_by", "TEXT"),
+    ("approved_at", "TEXT"),
+    ("created_by", "TEXT"),
+    ("modified_at", "TEXT"),
+    ("modified_by", "TEXT"),
+    ("deleted_at", "TEXT"),
+    ("deleted_by", "TEXT"),
+    ("is_adjustment", "INTEGER DEFAULT 0"),
+    ("manual_days", "INTEGER DEFAULT 0"),
+]
+
+
+class Database:
+    """واجهة قاعدة البيانات الوحيدة المستخدمة من الواجهة والخدمات."""
+
+    def __init__(self, path: str | Path, backup_dir: str | Path | None = None) -> None:
+        self.path = Path(path)
+        self.backup_dir = Path(backup_dir) if backup_dir else self.path.parent / "backups"
+        self._conn: sqlite3.Connection | None = None
+        self._policy_cache: Policy | None = None
+        self.migrated = False
+        self.open()
+
+    # ==================================================================
+    # الاتصال
+    # ==================================================================
+    def open(self) -> None:
+        existed = self.path.exists() and self.path.stat().st_size > 0
+        if existed and self._needs_migration():
+            if self._safe_pre_migration_backup():
+                LOG.info("تم إنشاء نسخة احتياطية قبل الترحيل")
+            self.migrated = True
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = sqlite3.connect(str(self.path), check_same_thread=False, isolation_level=None)
+        self._conn.row_factory = sqlite3.Row
+        cur = self._conn.cursor()
+        cur.execute("PRAGMA foreign_keys = ON")
+        cur.execute("PRAGMA busy_timeout = 5000")
+        try:
+            cur.execute("PRAGMA journal_mode = WAL")
+        except sqlite3.DatabaseError:  # pragma: no cover - أنظمة ملفات لا تدعم WAL
+            LOG.warning("تعذّر تفعيل WAL")
+        cur.execute("PRAGMA synchronous = NORMAL")
+        self._migrate()
+
+    def close(self) -> None:
+        if self._conn is not None:
+            try:
+                self._conn.execute("PRAGMA optimize")
+            except sqlite3.DatabaseError:
+                pass
+            self._conn.close()
+            self._conn = None
+
+    @property
+    def conn(self) -> sqlite3.Connection:
+        if self._conn is None:
+            raise RuntimeError("قاعدة البيانات مغلقة")
+        return self._conn
+
+    def cursor(self) -> sqlite3.Cursor:
+        return self.conn.cursor()
+
+    @contextmanager
+    def transaction(self):
+        """معاملة صريحة: تُثبّت عند النجاح وتُرجِع كل شيء عند أي خطأ."""
+        cur = self.cursor()
+        cur.execute("BEGIN IMMEDIATE")
+        try:
+            yield self.conn
+        except Exception:
+            cur.execute("ROLLBACK")
+            raise
+        else:
+            cur.execute("COMMIT")
+
+    # ==================================================================
+    # الترحيل
+    # ==================================================================
+    def _needs_migration(self) -> bool:
+        try:
+            probe = sqlite3.connect(f"file:{self.path}?mode=ro", uri=True)
+            try:
+                version = probe.execute("PRAGMA user_version").fetchone()[0]
+                return version < SCHEMA_VERSION
+            finally:
+                probe.close()
+        except sqlite3.DatabaseError:
+            return False
+
+    def _safe_pre_migration_backup(self) -> bool:
+        try:
+            self.backup_dir.mkdir(parents=True, exist_ok=True)
+            stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            dest = self.backup_dir / f"pre_migration_{stamp}.db"
+            shutil.copy2(self.path, dest)
+            return True
+        except OSError as exc:  # pragma: no cover
+            LOG.error("فشل النسخ الاحتياطي قبل الترحيل: %s", exc)
+            return False
+
+    @staticmethod
+    def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
+        try:
+            return {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        except sqlite3.DatabaseError:
+            return set()
+
+    @staticmethod
+    def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
+        row = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+        return row is not None
+
+    def _migrate(self) -> None:
+        conn = self.conn
+        with self.transaction() as c:
+            # --- الجداول الأساسية (تعمل على قاعدة جديدة وقديمة) ---------
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS employees (
+                    emp_id TEXT PRIMARY KEY,
+                    name TEXT,
+                    job_title TEXT,
+                    workplace TEXT,
+                    gender TEXT,
+                    start_date TEXT,
+                    notes TEXT,
+                    institution TEXT
+                )""")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS leaves (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    emp_id TEXT,
+                    type TEXT,
+                    start_date TEXT,
+                    from_date TEXT,
+                    amount INTEGER,
+                    unit TEXT,
+                    days_actual INTEGER,
+                    order_num TEXT,
+                    order_date TEXT,
+                    outside_balance INTEGER,
+                    reason TEXT,
+                    added_date TEXT,
+                    FOREIGN KEY(emp_id) REFERENCES employees(emp_id) ON DELETE CASCADE
+                )""")
+
+            # --- إضافة الأعمدة الناقصة ---------------------------------
+            added: dict[str, set[str]] = {"employees": set(), "leaves": set()}
+            for table, columns in (("employees", _EMPLOYEE_COLUMNS), ("leaves", _LEAVE_COLUMNS)):
+                existing = self._table_columns(c, table)
+                for name, ddl in columns:
+                    if name not in existing:
+                        c.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+                        added[table].add(name)
+
+            # --- الجداول الجديدة ---------------------------------------
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS leave_rules (
+                    type TEXT PRIMARY KEY,
+                    consumes_balance INTEGER DEFAULT 1,
+                    service_exclusion INTEGER DEFAULT 0,
+                    count_mode TEXT DEFAULT 'calendar',
+                    quota_days INTEGER DEFAULT 0,
+                    quota_period TEXT DEFAULT 'none',
+                    requires_order INTEGER DEFAULT 0,
+                    is_adjustment INTEGER DEFAULT 0,
+                    gender TEXT DEFAULT '',
+                    order_index INTEGER DEFAULT 0,
+                    active INTEGER DEFAULT 1,
+                    notes TEXT DEFAULT ''
+                )""")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS holidays (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    day TEXT UNIQUE,
+                    name TEXT
+                )""")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS app_users (
+                    username TEXT PRIMARY KEY,
+                    display_name TEXT DEFAULT '',
+                    role TEXT DEFAULT 'viewer',
+                    institution TEXT DEFAULT '',
+                    password_hash TEXT DEFAULT '',
+                    salt TEXT DEFAULT '',
+                    iterations INTEGER DEFAULT 200000,
+                    active INTEGER DEFAULT 1,
+                    created_at TEXT DEFAULT '',
+                    last_login TEXT DEFAULT ''
+                )""")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS audit_log (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts TEXT,
+                    username TEXT,
+                    action TEXT,
+                    entity TEXT,
+                    entity_id TEXT,
+                    details TEXT
+                )""")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS attachments (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    leave_id INTEGER,
+                    emp_id TEXT,
+                    filename TEXT,
+                    stored_name TEXT,
+                    added_at TEXT,
+                    added_by TEXT
+                )""")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS app_meta (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )""")
+
+            # --- الفهارس ----------------------------------------------
+            for ddl in (
+                "CREATE INDEX IF NOT EXISTS idx_leaves_emp ON leaves(emp_id)",
+                "CREATE INDEX IF NOT EXISTS idx_leaves_start ON leaves(start_date)",
+                "CREATE INDEX IF NOT EXISTS idx_leaves_deleted ON leaves(deleted_at)",
+                "CREATE INDEX IF NOT EXISTS idx_emp_inst ON employees(institution)",
+                "CREATE INDEX IF NOT EXISTS idx_emp_work ON employees(workplace)",
+                "CREATE INDEX IF NOT EXISTS idx_emp_deleted ON employees(deleted_at)",
+                "CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts)",
+                "CREATE INDEX IF NOT EXISTS idx_attach_leave ON attachments(leave_id)",
+            ):
+                c.execute(ddl)
+
+            # --- البيانات الافتراضية -----------------------------------
+            if c.execute("SELECT COUNT(*) FROM leave_rules").fetchone()[0] == 0:
+                for rule in default_rules().values():
+                    self._insert_rule(c, rule)
+            if not c.execute("SELECT 1 FROM app_meta WHERE key='days_per_leave'").fetchone():
+                for key, value in config.DEFAULT_POLICY.items():
+                    c.execute("INSERT OR IGNORE INTO app_meta(key, value) VALUES (?,?)",
+                              (key, "1" if value is True else "0" if value is False else str(value)))
+            if c.execute("SELECT COUNT(*) FROM app_users").fetchone()[0] == 0:
+                from .services.security import hash_password
+                pw_hash, salt, iterations = hash_password("admin")
+                c.execute("""INSERT INTO app_users
+                             (username, display_name, role, institution, password_hash, salt,
+                              iterations, active, created_at)
+                             VALUES (?,?,?,?,?,?,?,1,?)""",
+                          ("admin", "مدير النظام", "admin", "", pw_hash, salt, iterations,
+                           datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+
+            # --- تعبئة القيم الناقصة للبيانات القديمة ------------------
+            self._backfill(c, added)
+
+            c.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+
+    @staticmethod
+    def _insert_rule(c: sqlite3.Cursor, rule: LeaveRule) -> None:
+        m = rule.to_mapping()
+        c.execute("""INSERT OR REPLACE INTO leave_rules
+                     (type, consumes_balance, service_exclusion, count_mode, quota_days,
+                      quota_period, requires_order, is_adjustment, gender, order_index, active, notes)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                  (m["type"], m["consumes_balance"], m["service_exclusion"], m["count_mode"],
+                   m["quota_days"], m["quota_period"], m["requires_order"], m["is_adjustment"],
+                   m["gender"], m["order_index"], m["active"], m["notes"]))
+
+    def _backfill(self, c: sqlite3.Cursor, added: dict[str, set[str]] | None = None) -> None:
+        """تعبئة الأعمدة الجديدة للصفوف القديمة مرة واحدة فقط (عند إضافتها فعلياً).
+
+        لا تُعدّل الأرقام المعتمدة (days_actual) إطلاقاً.
+        """
+        added = added or {"employees": set(), "leaves": set()}
+        leave_cols = added.get("leaves", set())
+        emp_cols = added.get("employees", set())
+
+        if "end_date" in leave_cols:
+            c.execute("""UPDATE leaves
+                         SET end_date = date(start_date, '+' || (MAX(COALESCE(days_actual,0),1) - 1) || ' days')
+                         WHERE (end_date IS NULL OR end_date = '')
+                           AND start_date IS NOT NULL AND start_date <> ''
+                           AND days_actual IS NOT NULL""")
+        if "working_days" in leave_cols:
+            c.execute("UPDATE leaves SET working_days = COALESCE(days_actual, 0) WHERE working_days = 0")
+        if "count_mode" in leave_cols:
+            c.execute("UPDATE leaves SET count_mode = 'calendar' WHERE count_mode IS NULL OR count_mode = ''")
+        if "status" in leave_cols:
+            c.execute("UPDATE leaves SET status = 'approved' WHERE status IS NULL OR status = ''")
+        if "is_adjustment" in leave_cols:
+            c.execute("""UPDATE leaves SET is_adjustment = COALESCE(
+                            (SELECT r.is_adjustment FROM leave_rules r WHERE r.type = leaves.type), 0)""")
+        if "status" in emp_cols:
+            c.execute("UPDATE employees SET status = 'active' WHERE status IS NULL OR status = ''")
+        if "created_at" in emp_cols:
+            c.execute("UPDATE employees SET created_at = ? WHERE created_at IS NULL OR created_at = ''",
+                      (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
+
+    @property
+    def schema_version(self) -> int:
+        return int(self.conn.execute("PRAGMA user_version").fetchone()[0])
+
+    # ==================================================================
+    # الإعدادات (app_meta) والسياسة
+    # ==================================================================
+    def get_meta(self) -> dict[str, str]:
+        rows = self.conn.execute("SELECT key, value FROM app_meta").fetchall()
+        return {r["key"]: r["value"] for r in rows}
+
+    def set_meta(self, values: dict) -> None:
+        with self.transaction() as c:
+            for key, value in values.items():
+                c.execute("INSERT INTO app_meta(key, value) VALUES (?,?) "
+                          "ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, str(value)))
+        self._policy_cache = None
+
+    def policy(self, refresh: bool = False) -> Policy:
+        if self._policy_cache is None or refresh:
+            self._policy_cache = Policy.from_meta(
+                self.get_meta(), self.list_rules(), self.holiday_set())
+        return self._policy_cache
+
+    def save_policy(self, policy: Policy) -> None:
+        self.set_meta(policy.to_meta())
+
+    def invalidate_policy(self) -> None:
+        self._policy_cache = None
+
+    # ==================================================================
+    # قواعد أنواع الإجازات
+    # ==================================================================
+    def list_rules(self) -> dict[str, LeaveRule]:
+        rows = self.conn.execute("SELECT * FROM leave_rules").fetchall()
+        rules = {r["type"]: LeaveRule.from_mapping(dict(r)) for r in rows}
+        return rules or default_rules()
+
+    def save_rule(self, rule: LeaveRule) -> None:
+        with self.transaction() as c:
+            self._insert_rule(c, rule)
+        self._policy_cache = None
+
+    def delete_rule(self, leave_type: str) -> None:
+        with self.transaction() as c:
+            c.execute("DELETE FROM leave_rules WHERE type=?", (leave_type,))
+        self._policy_cache = None
+
+    # ==================================================================
+    # العطل الرسمية
+    # ==================================================================
+    def list_holidays(self, year: int | None = None) -> list[Holiday]:
+        sql = "SELECT * FROM holidays"
+        params: list = []
+        if year:
+            sql += " WHERE day LIKE ?"
+            params.append(f"{year}-%")
+        sql += " ORDER BY day"
+        return [Holiday(id=r["id"], day=parse_iso(r["day"]), name=r["name"] or "")
+                for r in self.conn.execute(sql, params).fetchall()]
+
+    def holiday_set(self, years: int | None = None) -> set[date]:
+        holidays = self.list_holidays()
+        return {h.day for h in holidays if h.day}
+
+    def add_holiday(self, day, name: str = "") -> None:
+        with self.transaction() as c:
+            c.execute("INSERT OR REPLACE INTO holidays(day, name) VALUES (?,?)", (to_iso(day), name))
+        self._policy_cache = None
+
+    def delete_holiday(self, holiday_id: int) -> None:
+        with self.transaction() as c:
+            c.execute("DELETE FROM holidays WHERE id=?", (holiday_id,))
+        self._policy_cache = None
+
+    # ==================================================================
+    # الموظفون
+    # ==================================================================
+    def _employee_query(self, q: str = "", workplace: str = "", institution: str = "",
+                        include_deleted: bool = False) -> tuple[str, list]:
+        conditions, params = [], []
+        if not include_deleted:
+            conditions.append("(deleted_at IS NULL OR deleted_at = '')")
+        else:
+            conditions.append("(deleted_at IS NOT NULL AND deleted_at <> '')")
+        if q:
+            conditions.append("(emp_id LIKE ? OR name LIKE ? OR job_title LIKE ?)")
+            like = f"%{q}%"
+            params += [like, like, like]
+        if workplace:
+            conditions.append("workplace = ?")
+            params.append(workplace)
+        if institution:
+            conditions.append("institution = ?")
+            params.append(institution)
+        where = " AND ".join(conditions)
+        return f"SELECT * FROM employees WHERE {where} ORDER BY name COLLATE NOCASE, emp_id", params
+
+    def list_employees(self, q: str = "", workplace: str = "", institution: str = "",
+                       include_deleted: bool = False, with_leaves: bool = True) -> list[Employee]:
+        sql, params = self._employee_query(q, workplace, institution, include_deleted)
+        rows = self.conn.execute(sql, params).fetchall()
+        employees = [Employee.from_mapping(dict(r)) for r in rows]
+        if with_leaves and employees:
+            ids = [e.emp_id for e in employees]
+            by_emp: dict[str, list[Leave]] = {eid: [] for eid in ids}
+            for chunk in _chunks(ids, 400):
+                marks = ",".join("?" * len(chunk))
+                sql_l = (f"SELECT * FROM leaves WHERE emp_id IN ({marks}) "
+                         f"AND (deleted_at IS NULL OR deleted_at = '') ORDER BY id")
+                for row in self.conn.execute(sql_l, chunk).fetchall():
+                    lv = _row_to_leave(dict(row))
+                    by_emp.setdefault(lv.emp_id, []).append(lv)
+            for emp in employees:
+                emp.leaves = by_emp.get(emp.emp_id, [])
+        return employees
+
+    def get_employee(self, emp_id: str, include_deleted: bool = True) -> Employee | None:
+        row = self.conn.execute("SELECT * FROM employees WHERE emp_id=?", (emp_id,)).fetchone()
+        if not row:
+            return None
+        emp = Employee.from_mapping(dict(row))
+        if not include_deleted and emp.is_deleted:
+            return None
+        emp.leaves = self.list_leaves(emp_id)
+        return emp
+
+    def employee_exists(self, emp_id: str) -> bool:
+        return self.conn.execute("SELECT 1 FROM employees WHERE emp_id=?", (emp_id,)).fetchone() is not None
+
+    def add_employee(self, emp_id: str, fields: dict, user: str = "") -> None:
+        now = _now()
+        with self.transaction() as c:
+            c.execute("""INSERT INTO employees
+                         (emp_id, name, job_title, workplace, gender, start_date, end_date,
+                          notes, institution, status, created_at, updated_at)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      (emp_id, fields.get("name", ""), fields.get("job_title", ""),
+                       fields.get("workplace", ""), fields.get("gender", "ذكر"),
+                       fields.get("start_date", ""), fields.get("end_date", ""),
+                       fields.get("notes", ""), fields.get("institution", ""),
+                       fields.get("status", "active"), now, now))
+        self.log(user, "إضافة", "employee", emp_id, fields.get("name", ""))
+
+    def update_employee(self, emp_id: str, fields: dict, user: str = "") -> None:
+        with self.transaction() as c:
+            c.execute("""UPDATE employees SET name=?, job_title=?, workplace=?, gender=?,
+                         start_date=?, end_date=?, notes=?, institution=?, status=?, updated_at=?
+                         WHERE emp_id=?""",
+                      (fields.get("name", ""), fields.get("job_title", ""), fields.get("workplace", ""),
+                       fields.get("gender", "ذكر"), fields.get("start_date", ""),
+                       fields.get("end_date", ""), fields.get("notes", ""),
+                       fields.get("institution", ""), fields.get("status", "active"),
+                       _now(), emp_id))
+        self.log(user, "تعديل", "employee", emp_id, fields.get("name", ""))
+
+    def soft_delete_employee(self, emp_id: str, user: str = "") -> None:
+        with self.transaction() as c:
+            c.execute("UPDATE employees SET deleted_at=?, deleted_by=? WHERE emp_id=?",
+                      (_now(), user, emp_id))
+        self.log(user, "حذف", "employee", emp_id, "")
+
+    def restore_employee(self, emp_id: str, user: str = "") -> None:
+        with self.transaction() as c:
+            c.execute("UPDATE employees SET deleted_at=NULL, deleted_by=NULL WHERE emp_id=?", (emp_id,))
+        self.log(user, "استعادة", "employee", emp_id, "")
+
+    def purge_employee(self, emp_id: str) -> None:
+        with self.transaction() as c:
+            c.execute("DELETE FROM employees WHERE emp_id=?", (emp_id,))
+        LOG.warning("حذف نهائي للموظف %s", emp_id)
+
+    def distinct_values(self, column: str) -> list[str]:
+        if column not in {"workplace", "institution", "job_title", "gender"}:
+            raise ValueError("عمود غير مسموح")
+        rows = self.conn.execute(
+            f"SELECT DISTINCT {column} FROM employees WHERE {column} IS NOT NULL AND {column} <> '' "
+            f"AND (deleted_at IS NULL OR deleted_at='') ORDER BY {column}").fetchall()
+        return [r[0] for r in rows]
+
+    # ==================================================================
+    # الإجازات
+    # ==================================================================
+    def list_leaves(self, emp_id: str, include_deleted: bool = False) -> list[Leave]:
+        sql = "SELECT * FROM leaves WHERE emp_id=?"
+        if not include_deleted:
+            sql += " AND (deleted_at IS NULL OR deleted_at='')"
+        sql += " ORDER BY id"
+        return [_row_to_leave(dict(r)) for r in self.conn.execute(sql, (emp_id,)).fetchall()]
+
+    def get_leave(self, leave_id: int) -> Leave | None:
+        row = self.conn.execute("SELECT * FROM leaves WHERE id=?", (leave_id,)).fetchone()
+        return _row_to_leave(dict(row)) if row else None
+
+    def all_leaves(self, include_deleted: bool = False) -> list[Leave]:
+        sql = "SELECT * FROM leaves"
+        if not include_deleted:
+            sql += " WHERE (deleted_at IS NULL OR deleted_at='')"
+        sql += " ORDER BY emp_id, id"
+        return [_row_to_leave(dict(r)) for r in self.conn.execute(sql).fetchall()]
+
+    def leaves_in_range(self, start: date, end: date, institution: str = "") -> list[tuple[Employee, Leave]]:
+        sql = """SELECT l.*, e.name AS emp_name, e.job_title AS emp_job, e.institution AS emp_inst
+                 FROM leaves l JOIN employees e ON e.emp_id = l.emp_id
+                 WHERE (l.deleted_at IS NULL OR l.deleted_at='')
+                   AND (e.deleted_at IS NULL OR e.deleted_at='')
+                   AND COALESCE(l.end_date, l.start_date) >= ?
+                   AND l.start_date <= ?"""
+        params: list = [to_iso(start), to_iso(end)]
+        if institution:
+            sql += " AND e.institution = ?"
+            params.append(institution)
+        sql += " ORDER BY l.start_date"
+        out = []
+        for row in self.conn.execute(sql, params).fetchall():
+            data = dict(row)
+            emp = Employee(emp_id=data["emp_id"], name=data.pop("emp_name") or "",
+                           job_title=data.pop("emp_job") or "", institution=data.pop("emp_inst") or "")
+            out.append((emp, _row_to_leave(data)))
+        return out
+
+    def add_leave(self, emp_id: str, fields: dict, user: str = "") -> int:
+        with self.transaction() as c:
+            c.execute("""INSERT INTO leaves
+                (emp_id, type, start_date, end_date, from_date, amount, unit, days_actual,
+                 working_days, count_mode, order_num, order_date, outside_balance, reason,
+                 added_date, status, approved_by, approved_at, created_by, modified_at,
+                 modified_by, is_adjustment, manual_days)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      (emp_id, fields.get("type", ""), fields.get("start_date", ""),
+                       fields.get("end_date", ""), fields.get("from_date", fields.get("start_date", "")),
+                       fields.get("amount", 0), fields.get("unit", "يوم"),
+                       fields.get("days_actual", 0), fields.get("working_days", 0),
+                       fields.get("count_mode", "calendar"), fields.get("order", ""),
+                       fields.get("order_date", ""), int(fields.get("outside_balance", False)),
+                       fields.get("reason", ""), fields.get("added_date") or _now(),
+                       fields.get("status", "approved"), fields.get("approved_by", ""),
+                       fields.get("approved_at", ""), user, _now(), user,
+                       int(fields.get("is_adjustment", False)), int(fields.get("manual_days", False))))
+            leave_id = int(c.execute("SELECT last_insert_rowid()").fetchone()[0])
+        self.log(user, "إضافة", "leave", str(leave_id),
+                 f"{emp_id} - {fields.get('type', '')} - {fields.get('days_actual', 0)} يوم")
+        return leave_id
+
+    def update_leave(self, leave_id: int, fields: dict, user: str = "") -> None:
+        """تعديل إجازة: لا يمسّ تاريخ الإضافة ولا منشئ السجل (يُسجَّل التعديل في modified_*)."""
+        with self.transaction() as c:
+            c.execute("""UPDATE leaves SET type=?, start_date=?, end_date=?, from_date=?,
+                         amount=?, unit=?, days_actual=?, working_days=?, count_mode=?,
+                         order_num=?, order_date=?, outside_balance=?, reason=?, status=?,
+                         is_adjustment=?, manual_days=?, modified_at=?, modified_by=?
+                         WHERE id=?""",
+                      (fields.get("type", ""), fields.get("start_date", ""), fields.get("end_date", ""),
+                       fields.get("from_date", fields.get("start_date", "")), fields.get("amount", 0),
+                       fields.get("unit", "يوم"), fields.get("days_actual", 0),
+                       fields.get("working_days", 0), fields.get("count_mode", "calendar"),
+                       fields.get("order", ""), fields.get("order_date", ""),
+                       int(fields.get("outside_balance", False)), fields.get("reason", ""),
+                       fields.get("status", "approved"), int(fields.get("is_adjustment", False)),
+                       int(fields.get("manual_days", False)), _now(), user, leave_id))
+        self.log(user, "تعديل", "leave", str(leave_id),
+                 f"{fields.get('type', '')} - {fields.get('days_actual', 0)} يوم")
+
+    def soft_delete_leave(self, leave_id: int, user: str = "", reason: str = "") -> None:
+        with self.transaction() as c:
+            c.execute("UPDATE leaves SET deleted_at=?, deleted_by=? WHERE id=?",
+                      (_now(), user, leave_id))
+        self.log(user, "حذف", "leave", str(leave_id), reason)
+
+    def restore_leave(self, leave_id: int, user: str = "") -> None:
+        with self.transaction() as c:
+            c.execute("UPDATE leaves SET deleted_at=NULL, deleted_by=NULL WHERE id=?", (leave_id,))
+        self.log(user, "استعادة", "leave", str(leave_id), "")
+
+    def purge_leave(self, leave_id: int) -> None:
+        with self.transaction() as c:
+            c.execute("DELETE FROM attachments WHERE leave_id=?", (leave_id,))
+            c.execute("DELETE FROM leaves WHERE id=?", (leave_id,))
+
+    def void_employee_leaves(self, emp_id: str, user: str = "") -> None:  # pragma: no cover - توافق
+        with self.transaction() as c:
+            c.execute("UPDATE leaves SET deleted_at=?, deleted_by=? WHERE emp_id=? AND deleted_at IS NULL",
+                      (_now(), user, emp_id))
+
+    def purge_all_deleted(self) -> dict[str, int]:
+        """إفراغ سلة المحذوفات نهائياً."""
+        with self.transaction() as c:
+            leaves = c.execute("SELECT COUNT(*) FROM leaves WHERE deleted_at IS NOT NULL AND deleted_at<>''").fetchone()[0]
+            emps = c.execute("SELECT COUNT(*) FROM employees WHERE deleted_at IS NOT NULL AND deleted_at<>''").fetchone()[0]
+            c.execute("DELETE FROM leaves WHERE deleted_at IS NOT NULL AND deleted_at<>''")
+            c.execute("DELETE FROM employees WHERE deleted_at IS NOT NULL AND deleted_at<>''")
+        return {"leaves": leaves, "employees": emps}
+
+    # ==================================================================
+    # المرفقات
+    # ==================================================================
+    def list_attachments(self, leave_id: int) -> list[Attachment]:
+        rows = self.conn.execute("SELECT * FROM attachments WHERE leave_id=? ORDER BY id",
+                                 (leave_id,)).fetchall()
+        return [Attachment(id=r["id"], leave_id=r["leave_id"], emp_id=r["emp_id"],
+                           filename=r["filename"], stored_name=r["stored_name"],
+                           added_at=r["added_at"], added_by=r["added_by"]) for r in rows]
+
+    def add_attachment(self, leave_id: int, emp_id: str, filename: str, stored_name: str,
+                       user: str = "") -> int:
+        with self.transaction() as c:
+            c.execute("""INSERT INTO attachments(leave_id, emp_id, filename, stored_name, added_at, added_by)
+                         VALUES (?,?,?,?,?,?)""",
+                      (leave_id, emp_id, filename, stored_name, _now(), user))
+            return int(c.execute("SELECT last_insert_rowid()").fetchone()[0])
+
+    def delete_attachment(self, attachment_id: int, user: str = "") -> None:
+        with self.transaction() as c:
+            c.execute("DELETE FROM attachments WHERE id=?", (attachment_id,))
+        self.log(user, "حذف مرفق", "attachment", str(attachment_id), "")
+
+    # ==================================================================
+    # المستخدمون
+    # ==================================================================
+    def list_users(self) -> list[AppUser]:
+        rows = self.conn.execute("SELECT * FROM app_users ORDER BY username").fetchall()
+        return [AppUser.from_mapping(dict(r)) for r in rows]
+
+    def get_user(self, username: str) -> AppUser | None:
+        row = self.conn.execute("SELECT * FROM app_users WHERE username=?", (username,)).fetchone()
+        return AppUser.from_mapping(dict(row)) if row else None
+
+    def save_user(self, user: AppUser) -> None:
+        with self.transaction() as c:
+            exists = c.execute("SELECT 1 FROM app_users WHERE username=?", (user.username,)).fetchone()
+            if exists:
+                c.execute("""UPDATE app_users SET display_name=?, role=?, institution=?,
+                             password_hash=?, salt=?, iterations=?, active=? WHERE username=?""",
+                          (user.display_name, user.role, user.institution, user.password_hash,
+                           user.salt, user.iterations, int(user.active), user.username))
+            else:
+                c.execute("""INSERT INTO app_users(username, display_name, role, institution,
+                             password_hash, salt, iterations, active, created_at)
+                             VALUES (?,?,?,?,?,?,?,?,?)""",
+                          (user.username, user.display_name, user.role, user.institution,
+                           user.password_hash, user.salt, user.iterations, int(user.active), _now()))
+
+    def delete_user(self, username: str) -> None:
+        with self.transaction() as c:
+            c.execute("DELETE FROM app_users WHERE username=?", (username,))
+
+    def touch_login(self, username: str) -> None:
+        with self.transaction() as c:
+            c.execute("UPDATE app_users SET last_login=? WHERE username=?", (_now(), username))
+
+    # ==================================================================
+    # سجل التدقيق
+    # ==================================================================
+    def log(self, username: str, action: str, entity: str, entity_id: str = "", details: str = "") -> None:
+        try:
+            with self.transaction() as c:
+                c.execute("""INSERT INTO audit_log(ts, username, action, entity, entity_id, details)
+                             VALUES (?,?,?,?,?,?)""",
+                          (_now(), username or "—", action, entity, str(entity_id), details))
+        except sqlite3.DatabaseError as exc:  # pragma: no cover
+            LOG.error("تعذّر تسجيل التدقيق: %s", exc)
+
+    def list_audit(self, username: str = "", action: str = "", entity: str = "",
+                   date_from: str = "", date_to: str = "", limit: int = 1000) -> list[AuditEntry]:
+        conditions, params = ["1=1"], []
+        if username:
+            conditions.append("username = ?")
+            params.append(username)
+        if action:
+            conditions.append("action = ?")
+            params.append(action)
+        if entity:
+            conditions.append("entity = ?")
+            params.append(entity)
+        if date_from:
+            conditions.append("ts >= ?")
+            params.append(date_from)
+        if date_to:
+            conditions.append("ts <= ?")
+            params.append(date_to + " 23:59:59")
+        params.append(int(limit))
+        sql = (f"SELECT * FROM audit_log WHERE {' AND '.join(conditions)} "
+               f"ORDER BY id DESC LIMIT ?")
+        rows = self.conn.execute(sql, params).fetchall()
+        return [AuditEntry(id=r["id"], ts=r["ts"], username=r["username"], action=r["action"],
+                           entity=r["entity"], entity_id=r["entity_id"], details=r["details"])
+                for r in rows]
+
+    def audit_values(self, column: str) -> list[str]:
+        if column not in {"username", "action", "entity"}:
+            raise ValueError("عمود غير مسموح")
+        rows = self.conn.execute(
+            f"SELECT DISTINCT {column} FROM audit_log WHERE {column} IS NOT NULL ORDER BY {column}").fetchall()
+        return [r[0] for r in rows]
+
+    # ==================================================================
+    # صيانة ونُسخ احتياطية
+    # ==================================================================
+    def integrity_check(self) -> tuple[bool, str]:
+        try:
+            result = self.conn.execute("PRAGMA integrity_check").fetchone()[0]
+            ok = str(result).lower() == "ok"
+            fk = self.conn.execute("PRAGMA foreign_key_check").fetchall()
+            if fk:
+                return False, f"مرجعية معطوبة: {len(fk)} سجل"
+            return ok, str(result)
+        except sqlite3.DatabaseError as exc:
+            return False, str(exc)
+
+    def vacuum(self) -> None:
+        self.conn.execute("VACUUM")
+
+    def backup_to(self, dest: str | Path) -> Path:
+        """نسخة احتياطية متسقة عبر واجهة SQLite (آمنة حتى مع وجود كتابة)."""
+        dest = Path(dest)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        target = sqlite3.connect(str(dest))
+        try:
+            with target:
+                self.conn.backup(target)
+        finally:
+            target.close()
+        return dest
+
+    def stats(self) -> dict:
+        c = self.conn
+        live = "(deleted_at IS NULL OR deleted_at='')"
+        dead = "(deleted_at IS NOT NULL AND deleted_at<>'')"
+        return {
+            "employees": c.execute(f"SELECT COUNT(*) FROM employees WHERE {live}").fetchone()[0],
+            "employees_deleted": c.execute(f"SELECT COUNT(*) FROM employees WHERE {dead}").fetchone()[0],
+            "leaves": c.execute(f"SELECT COUNT(*) FROM leaves WHERE {live}").fetchone()[0],
+            "leaves_deleted": c.execute(f"SELECT COUNT(*) FROM leaves WHERE {dead}").fetchone()[0],
+            "institutions": len(self.distinct_values("institution")),
+            "workplaces": len(self.distinct_values("workplace")),
+            "attachments": c.execute("SELECT COUNT(*) FROM attachments").fetchone()[0],
+            "audit": c.execute("SELECT COUNT(*) FROM audit_log").fetchone()[0],
+            "size_bytes": self.path.stat().st_size if self.path.exists() else 0,
+            "schema_version": self.schema_version,
+            "path": str(self.path),
+        }
+
+    def __enter__(self) -> "Database":
+        return self
+
+    def __exit__(self, *exc) -> None:
+        self.close()
+
+
+# ---------------------------------------------------------------------------
+# أدوات
+# ---------------------------------------------------------------------------
+def _now() -> str:
+    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _chunks(items: list, size: int):
+    for i in range(0, len(items), size):
+        yield items[i:i + size]
+
+
+def _row_to_leave(data: dict) -> Leave:
+    data = dict(data)
+    if "order_num" in data:
+        data.setdefault("order", data.get("order_num") or "")
+    return Leave.from_mapping(data)

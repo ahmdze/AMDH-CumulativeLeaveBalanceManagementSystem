@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "amdh-leave-system"
+version = "3.0.0"
+description = "نظام إدارة الإجازات التراكمية — واجهة عربية RTL لإدارة إجازات الموظفين وأرصدتها"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Proprietary" }
+authors = [{ name = "أحمد زياد رحيمه", email = "ahmdze@gmail.com" }]
+keywords = ["leave", "hr", "arabic", "pyqt6", "sqlite", "إجازات"]
+dependencies = [
+    "PyQt6>=6.6,<7",
+    "openpyxl>=3.1",
+    "reportlab>=4.0",
+    "arabic-reshaper>=3.0",
+    "python-bidi>=0.4.2",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4", "pyinstaller>=6.0"]
+
+[project.scripts]
+amdh-leave = "amdh_leave.app:main"
+
+[tool.setuptools]
+packages = ["amdh_leave", "amdh_leave.services", "amdh_leave.exporters", "amdh_leave.ui"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    "E501",   # الطول يُدار يدوياً (نصوص عربية طويلة)
+    "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E402"]
+"tools/*" = ["E402", "F401"]

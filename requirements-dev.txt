@@ -1,0 +1,4 @@
+# متطلبات التطوير والاختبار
+-r requirements.txt
+pytest>=7.4
+pyinstaller>=6.0
