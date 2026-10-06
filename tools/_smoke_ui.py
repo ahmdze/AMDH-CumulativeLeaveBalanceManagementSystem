@@ -16,6 +16,7 @@ from PyQt6.QtCore import QSettings, QTimer                      # noqa: E402
 from PyQt6.QtWidgets import QApplication                        # noqa: E402
 
 from amdh_leave import config                                   # noqa: E402
+from amdh_leave import i18n                                     # noqa: E402
 from amdh_leave.context import AppContext                       # noqa: E402
 from amdh_leave.db import Database                              # noqa: E402
 from amdh_leave.logging_setup import setup_logging              # noqa: E402
@@ -24,6 +25,8 @@ from amdh_leave.services.backup import BackupService            # noqa: E402
 from amdh_leave.services.security import make_session           # noqa: E402
 from amdh_leave.ui import theme                                 # noqa: E402
 from amdh_leave.ui import dialogs_admin as DA                   # noqa: E402
+from amdh_leave.ui import dialogs_about as DAB                  # noqa: E402
+from amdh_leave.ui import dialogs_login as DLG                  # noqa: E402
 from amdh_leave.ui import dialogs_base as DB_                   # noqa: E402
 from amdh_leave.ui import dialogs_db as DDB                     # noqa: E402
 from amdh_leave.ui import dialogs_employee as DE                # noqa: E402
@@ -41,6 +44,14 @@ app = QApplication(sys.argv[:1])
 setup_logging(TMP / "logs")
 theme.set_theme("dark")
 app.setStyleSheet(theme.stylesheet())
+
+# اللغة للفحص (ar افتراضياً؛ يمكن تمرير en أو ku عبر AMDH_TEST_LANG)
+LANGUAGE = os.environ.get("AMDH_TEST_LANG", "ar")
+i18n.load_catalogs()
+i18n.set_language(LANGUAGE)
+from PyQt6.QtCore import Qt as _Qt                              # noqa: E402
+app.setLayoutDirection(_Qt.LayoutDirection.RightToLeft if i18n.is_rtl()
+                       else _Qt.LayoutDirection.LeftToRight)
 
 paths = config.Paths(TMP).ensure()
 db = Database(paths.db_path, paths.backups_dir)
@@ -71,19 +82,24 @@ def probe():
     out.append(f"rows in table: {window.table.table.rowCount()}")
     out.append(f"status: {window.lbl_status.text()}")
 
-    # اختيار أول صف والتحقق من ألوان لوحة التفاصيل (المشكلة القديمة)
+    # اختيار أول صف والتحقق من ألوان لوحة التفاصيل (المشكلة القديمة: نص أسود)
     window.table.table.setCurrentCell(0, 0)
     window._on_selection()
     for key in ("name", "raw_days", "balance"):
         widget = window.detail_widgets[key]
         out.append(f"detail {key}: style={widget.value.styleSheet()} text={widget.value.text()}")
-        if "black" in widget.value.styleSheet():
-            errors.append(f"لون أسود في الوضع الداكن: {key}")
+        if "#000000" in widget.value.styleSheet():
+            errors.append(f"لون أسود غير مقروء في: {key}")
 
-    # تبديل الثيم والعودة
-    window._toggle_theme()
-    out.append(f"theme after toggle: {theme.current()}")
-    window._toggle_theme()
+    # تجربة كل الثيمات الخمسة
+    for theme_key, theme_label in theme.theme_choices():
+        window.set_theme(theme_key)
+        window._on_selection()
+        style = window.detail_widgets["balance"].value.styleSheet()
+        if "#000000" in style:
+            errors.append(f"الثيم {theme_key}: لون الرصيد أسود")
+        out.append(f"theme {theme_key} ({theme_label}): ok | balance color={style}")
+    window.set_theme("dark")
 
     emp_id = window.rows[0][0]
     employee = db.get_employee(emp_id)
@@ -103,7 +119,7 @@ def probe():
     out.append(f"expected: raw={expected_raw} outside={expected_outside} net={expected_net} "
                f"earned={expected_earned} taken=20 balance={expected_earned - 20}")
 
-    check("AboutDialog", lambda: DB_.AboutDialog(window, ctx))
+    check("AboutDialog", lambda: DAB.AboutDialog(window, ctx))
     check("SettingsDialog", lambda: DB_.SettingsDialog(window, ctx))
     check("TrashDialog", lambda: DB_.TrashDialog(window, ctx))
     check("EmployeeDialog(add)", lambda: DE.EmployeeDialog(window, ctx))
@@ -120,7 +136,7 @@ def probe():
     check("HolidaysDialog", lambda: DA.HolidaysDialog(window, ctx))
     check("UsersDialog", lambda: DA.UsersDialog(window, ctx))
     check("UserEditDialog", lambda: DA.UserEditDialog(window, ctx, None))
-    check("LoginDialog", lambda: DA.LoginDialog(window, ctx))
+    check("LoginDialog", lambda: DLG.LoginDialog(window, ctx))
     check("AuditDialog", lambda: DA.AuditDialog(window, ctx))
     check("DatabaseOperationsDialog", lambda: DDB.DatabaseOperationsDialog(window, ctx))
     check("ImportWizardDialog", lambda: DDB.ImportWizardDialog(window, ctx))
@@ -183,6 +199,11 @@ QTimer.singleShot(300, probe)
 app.exec()
 
 print("\n".join(out))
+missing = sorted(i18n.missing_keys())
+print(f"\nlanguage: {LANGUAGE} | missing translations: {len(missing)}")
+if missing:
+    for item in missing[:15]:
+        print("   MISSING:", item)
 if errors:
     print("\n=== ERRORS ===")
     print("\n".join(errors))

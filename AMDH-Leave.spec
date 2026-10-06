@@ -21,11 +21,17 @@ hidden = [
     "PyQt6.QtNetwork",
 ]
 
+# الصور (الشعارات) وملفات الترجمة تُضمَّن داخل الحزمة
+datas = [
+    (str(ROOT / "amdh_leave" / "assets"), "amdh_leave/assets"),
+    (str(ROOT / "amdh_leave" / "locales"), "amdh_leave/locales"),
+]
+
 a = Analysis(
     ["leave_system_deep.py"],
     pathex=[str(ROOT)],
     binaries=[],
-    datas=[],
+    datas=datas,
     hiddenimports=hidden,
     hookspath=[],
     hooksconfig={},

@@ -4,3 +4,10 @@ openpyxl>=3.1
 reportlab>=4.0
 arabic-reshaper>=3.0
 python-bidi>=0.4.2
+
+# اختياري: تشفير قاعدة البيانات (SQLCipher)
+# ثبّته بأحد الأوامر التالية ثم أعد تشغيل البرنامج:
+#     pip install sqlcipher3-binary      (ويندوز/ماك — الأسهل)
+#     pip install sqlcipher3             (لينكس بعد تثبيت libsqlcipher-dev)
+# دون تثبيته يبقى البرنامج يعمل كاملاً مع تعطيل ميزة التشفير فقط.
+# sqlcipher3-binary>=0.5

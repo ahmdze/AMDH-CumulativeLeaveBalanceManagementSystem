@@ -21,6 +21,8 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.4", "pyinstaller>=6.0"]
+# تشفير قاعدة البيانات (اختياري)
+encryption = ["sqlcipher3-binary>=0.5"]
 
 [project.scripts]
 amdh-leave = "amdh_leave.app:main"

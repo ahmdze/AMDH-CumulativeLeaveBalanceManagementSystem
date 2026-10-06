@@ -2,18 +2,31 @@
 
 from __future__ import annotations
 
+import faulthandler
 import os
 import shutil
 import sys
 import tempfile
 from pathlib import Path
 
+# حماية من التعليق: يطبع آثار كل الخيوط ويخرج بخطأ إن تجاوز الفحص 60 ثانية
+faulthandler.dump_traceback_later(60, exit=True)
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+os.environ.setdefault("AMDH_SETTINGS_SUFFIX", "-smoke")
 ROOT = Path(r"G:\Download\AMDH-Calculator")
 sys.path.insert(0, str(ROOT))
 
 TMP = Path(tempfile.mkdtemp(prefix="amdh_launch_"))
 shutil.copy2(ROOT / "employees_leave.db", TMP / "employees_leave.db")
+
+# عزل الفحص: تعطيل تسجيل الدخول والإشعارات داخل نسخة الاختبار فقط
+from amdh_leave.db import Database as _Db                       # noqa: E402
+_probe = _Db(TMP / "employees_leave.db", TMP / "backups")
+_probe.set_meta({"auth_enabled": "0"})
+_probe.close()
+import shutil as _shutil                                       # noqa: E402
+_shutil.rmtree(TMP / "backups", ignore_errors=True)
 
 from PyQt6.QtCore import QTimer                                  # noqa: E402
 from PyQt6.QtWidgets import QApplication                         # noqa: E402
