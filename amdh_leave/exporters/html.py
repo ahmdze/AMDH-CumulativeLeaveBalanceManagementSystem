@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from .. import config
-from ..models import Employee, Leave
+from ..models import Employee
 from ..rules import Policy
 from ..services import balance as B
 from ..services import dates as D

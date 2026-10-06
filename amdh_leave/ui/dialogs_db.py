@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import shutil
 from datetime import date
 from pathlib import Path
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtCore import QUrl
 from PyQt6.QtWidgets import (

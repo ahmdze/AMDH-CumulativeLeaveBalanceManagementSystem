@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from datetime import date
 
-from PyQt6.QtCore import Qt, QTimer, QUrl
-from PyQt6.QtGui import QAction, QColor, QDesktopServices, QFont, QKeySequence
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QAction, QFont, QKeySequence
 from PyQt6.QtWidgets import (
     QApplication, QComboBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QMenu, QScrollArea, QVBoxLayout, QWidget,
@@ -17,7 +17,7 @@ from ..exporters import html as H
 from ..exporters import pdf as P
 from ..services import balance as B
 from ..services import dates as D
-from ..services import reports, validation
+from ..services import reports
 from . import theme, widgets as W
 from .calendar_view import CalendarDialog
 from .dashboard import DashboardDialog

@@ -19,7 +19,6 @@ from PyQt6.QtWidgets import (
 from .. import config
 from ..models import Issue
 from ..services import dates as D
-from ..services import validation
 from . import theme, widgets as W
 
 
@@ -229,6 +228,15 @@ class SettingsDialog(BaseDialog):
             self.cb_first_day.addItem(name, i)
         self.cb_first_day.setCurrentIndex(self._policy.first_day_of_week)
         form.addRow("أول أيام الأسبوع في التقويم", self.cb_first_day)
+
+        self.cb_theme = QComboBox()
+        for key in ("dark", "light"):
+            self.cb_theme.addItem(config.THEME_LABELS[key], key)
+        current_theme = self.ctx.ui_get("theme", "dark") or "dark"
+        if current_theme in config.THEME_KEYS:
+            current_theme = config.THEME_KEYS[current_theme]
+        form.addRow("وضع العرض", self.cb_theme)
+        self.cb_theme.setCurrentIndex(max(0, self.cb_theme.findData(current_theme)))
 
         outer.addLayout(form)
         outer.addWidget(W.separator())
@@ -445,7 +453,6 @@ class SettingsDialog(BaseDialog):
 
     # -- الحفظ ---------------------------------------------------------
     def _save(self) -> None:
-        from ..rules import Policy
         weekend = tuple(i for i, box in enumerate(self.weekend_boxes) if box.isChecked())
         policy = replace(
             self._policy,
@@ -467,12 +474,16 @@ class SettingsDialog(BaseDialog):
             backup_keep=self.sp_keep.value(),
         )
         self.ctx.db.save_policy(policy)
+        new_theme = self.cb_theme.currentData() or "dark"
         old_theme = self.ctx.ui_get("theme", "dark")
+        self.ctx.ui_set("theme", new_theme)
         self.ctx.ui_set("notifications", self.chk_notifications.isChecked())
         self.ctx.ui_set("auto_backup", self.chk_backup_exit.isChecked())
         self.ctx.db.log(self.ctx.user(), "تعديل", "settings", "", "تحديث إعدادات النظام")
         self._policy = self.ctx.db.policy(refresh=True)
-        self.theme_changed.emit(old_theme)
+        theme.set_theme(new_theme)
+        if new_theme != old_theme:
+            self.theme_changed.emit(new_theme)
         W.info(self, "تم حفظ الإعدادات.")
         self.accept()
 

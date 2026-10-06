@@ -7,7 +7,6 @@ from PyQt6.QtWidgets import (
     QComboBox, QFormLayout, QLineEdit, QTextEdit, QVBoxLayout,
 )
 
-from .. import config
 from ..models import Employee
 from ..services import dates as D
 from ..services import validation

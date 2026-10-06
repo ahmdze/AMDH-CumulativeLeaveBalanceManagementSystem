@@ -8,8 +8,11 @@ _state = {"theme": "dark"}
 
 
 def set_theme(name: str) -> str:
+    """يقبل dark/light وكذلك القيم العربية القديمة (داكن/فاتح) للتوافق مع الإعدادات السابقة."""
     if name in config.PALETTES:
         _state["theme"] = name
+    elif name in config.THEME_KEYS:
+        _state["theme"] = config.THEME_KEYS[name]
     return _state["theme"]
 
 

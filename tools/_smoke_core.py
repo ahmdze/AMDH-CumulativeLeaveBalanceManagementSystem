@@ -37,8 +37,13 @@ for lv in emp.leaves:
 
 bal = B.compute_balance(emp, emp.leaves, policy)
 print("BALANCE:", bal)
-assert (bal.raw_days, bal.outside, bal.net_days, bal.earned, bal.taken, bal.balance) == \
-       (2716, 1825, 891, 89, 20, 69), "انحرفت الأرقام المعتمدة!"
+from datetime import date as _d
+raw = (min(_d.today(), emp.end_date) if emp.end_date else _d.today()) - emp.start_date
+raw = max(0, raw.days)
+net = max(0, raw - 1825)
+earned = net // policy.days_per_leave
+assert (bal.raw_days, bal.outside, bal.net_days) == (raw, 1825, net), "انحرفت أيام الخدمة!"
+assert (bal.earned, bal.taken, bal.balance) == (earned, 20, earned - 20), "انحرفت الأرقام المعتمدة!"
 
 st = B.yearly_statement(emp, emp.leaves, policy)
 print("statement lines:", len(st.lines), "| note:", st.policy_note)

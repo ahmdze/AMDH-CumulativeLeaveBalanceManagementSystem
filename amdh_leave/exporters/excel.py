@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .. import config
 from ..logging_setup import get_logger
-from ..models import Employee, Leave
+from ..models import Employee
 from ..rules import Policy
 from ..services import balance as B
 from ..services import dates as D
