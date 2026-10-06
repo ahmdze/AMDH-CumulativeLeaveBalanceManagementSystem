@@ -9,20 +9,23 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import shutil
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 
 from . import config
-from .models import AppUser, Attachment, AuditEntry, Employee, Holiday, Leave
+from .models import (AppUser, Attachment, AuditEntry, Employee, EmployeeMove, Holiday,
+                     ImportRecord, Institution, Leave)
 from .rules import LeaveRule, Policy, default_rules
 from .services import crypto
 from .services.dates import parse_iso, to_iso
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 LOG = logging.getLogger("amdh.db")
 
@@ -34,6 +37,9 @@ _EMPLOYEE_COLUMNS: list[tuple[str, str]] = [
     ("updated_at", "TEXT"),
     ("deleted_at", "TEXT"),
     ("deleted_by", "TEXT"),
+    ("uid", "TEXT"),
+    ("previous_institution", "TEXT"),
+    ("moved_on", "TEXT"),
 ]
 
 _LEAVE_COLUMNS: list[tuple[str, str]] = [
@@ -50,6 +56,15 @@ _LEAVE_COLUMNS: list[tuple[str, str]] = [
     ("deleted_by", "TEXT"),
     ("is_adjustment", "INTEGER DEFAULT 0"),
     ("manual_days", "INTEGER DEFAULT 0"),
+    ("uid", "TEXT"),
+    ("institution", "TEXT"),
+]
+
+_ATTACHMENT_COLUMNS: list[tuple[str, str]] = [
+    ("uid", "TEXT"),
+    ("leave_uid", "TEXT"),
+    ("sha256", "TEXT"),
+    ("institution", "TEXT"),
 ]
 
 
@@ -175,7 +190,16 @@ class Database:
                     gender TEXT,
                     start_date TEXT,
                     notes TEXT,
-                    institution TEXT
+                    institution TEXT,
+                    end_date TEXT,
+                    status TEXT DEFAULT 'active',
+                    created_at TEXT,
+                    updated_at TEXT,
+                    deleted_at TEXT,
+                    deleted_by TEXT,
+                    uid TEXT,
+                    previous_institution TEXT,
+                    moved_on TEXT
                 )""")
             c.execute("""
                 CREATE TABLE IF NOT EXISTS leaves (
@@ -192,17 +216,23 @@ class Database:
                     outside_balance INTEGER,
                     reason TEXT,
                     added_date TEXT,
+                    end_date TEXT,
+                    working_days INTEGER DEFAULT 0,
+                    count_mode TEXT DEFAULT 'calendar',
+                    status TEXT DEFAULT 'approved',
+                    approved_by TEXT,
+                    approved_at TEXT,
+                    created_by TEXT,
+                    modified_at TEXT,
+                    modified_by TEXT,
+                    deleted_at TEXT,
+                    deleted_by TEXT,
+                    is_adjustment INTEGER DEFAULT 0,
+                    manual_days INTEGER DEFAULT 0,
+                    uid TEXT,
+                    institution TEXT,
                     FOREIGN KEY(emp_id) REFERENCES employees(emp_id) ON DELETE CASCADE
                 )""")
-
-            # --- إضافة الأعمدة الناقصة ---------------------------------
-            added: dict[str, set[str]] = {"employees": set(), "leaves": set()}
-            for table, columns in (("employees", _EMPLOYEE_COLUMNS), ("leaves", _LEAVE_COLUMNS)):
-                existing = self._table_columns(c, table)
-                for name, ddl in columns:
-                    if name not in existing:
-                        c.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
-                        added[table].add(name)
 
             # --- الجداول الجديدة ---------------------------------------
             c.execute("""
@@ -257,24 +287,93 @@ class Database:
                     filename TEXT,
                     stored_name TEXT,
                     added_at TEXT,
-                    added_by TEXT
+                    added_by TEXT,
+                    uid TEXT,
+                    leave_uid TEXT,
+                    sha256 TEXT,
+                    institution TEXT
                 )""")
             c.execute("""
                 CREATE TABLE IF NOT EXISTS app_meta (
                     key TEXT PRIMARY KEY,
                     value TEXT
                 )""")
+            # --- المؤسسات وسجل النقل والاستيراد -------------------------
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS institutions (
+                    name TEXT PRIMARY KEY,
+                    code TEXT DEFAULT '',
+                    kind TEXT DEFAULT 'مستشفى',
+                    manager TEXT DEFAULT '',
+                    phone TEXT DEFAULT '',
+                    address TEXT DEFAULT '',
+                    notes TEXT DEFAULT '',
+                    is_center INTEGER DEFAULT 0,
+                    username TEXT DEFAULT '',
+                    active INTEGER DEFAULT 1,
+                    created_at TEXT DEFAULT '',
+                    updated_at TEXT DEFAULT '',
+                    last_import_at TEXT DEFAULT '',
+                    last_export_at TEXT DEFAULT '',
+                    last_import_user TEXT DEFAULT '',
+                    last_import_file TEXT DEFAULT '',
+                    last_import_counts TEXT DEFAULT ''
+                )""")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS imports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ts TEXT, username TEXT, direction TEXT, scope TEXT,
+                    institution TEXT, source_file TEXT, checksum TEXT,
+                    source_schema INTEGER DEFAULT 0, source_policy TEXT DEFAULT '',
+                    period_from TEXT DEFAULT '', period_to TEXT DEFAULT '',
+                    employees_added INTEGER DEFAULT 0, employees_updated INTEGER DEFAULT 0,
+                    employees_unchanged INTEGER DEFAULT 0, employees_conflict INTEGER DEFAULT 0,
+                    leaves_added INTEGER DEFAULT 0, leaves_updated INTEGER DEFAULT 0,
+                    leaves_unchanged INTEGER DEFAULT 0, moves INTEGER DEFAULT 0,
+                    attachments INTEGER DEFAULT 0, warnings INTEGER DEFAULT 0,
+                    report TEXT DEFAULT ''
+                )""")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS employee_moves (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    emp_id TEXT, from_institution TEXT, to_institution TEXT,
+                    moved_on TEXT, recorded_at TEXT, source_file TEXT, note TEXT
+                )""")
+            c.execute("""
+                CREATE TABLE IF NOT EXISTS transfer_manifest (
+                    key TEXT PRIMARY KEY,
+                    value TEXT
+                )""")
+
+            # --- إضافة الأعمدة الناقصة (بعد إنشاء كل الجداول) -------------
+            added: dict[str, set[str]] = {"employees": set(), "leaves": set(), "attachments": set()}
+            for table, columns in (("employees", _EMPLOYEE_COLUMNS),
+                                   ("leaves", _LEAVE_COLUMNS),
+                                   ("attachments", _ATTACHMENT_COLUMNS)):
+                existing = self._table_columns(c, table)
+                for name, ddl in columns:
+                    if name not in existing:
+                        c.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+                        added[table].add(name)
 
             # --- الفهارس ----------------------------------------------
             for ddl in (
                 "CREATE INDEX IF NOT EXISTS idx_leaves_emp ON leaves(emp_id)",
                 "CREATE INDEX IF NOT EXISTS idx_leaves_start ON leaves(start_date)",
                 "CREATE INDEX IF NOT EXISTS idx_leaves_deleted ON leaves(deleted_at)",
+                "CREATE INDEX IF NOT EXISTS idx_leaves_uid ON leaves(uid)",
+                "CREATE INDEX IF NOT EXISTS idx_leaves_institution ON leaves(institution)",
                 "CREATE INDEX IF NOT EXISTS idx_emp_inst ON employees(institution)",
                 "CREATE INDEX IF NOT EXISTS idx_emp_work ON employees(workplace)",
                 "CREATE INDEX IF NOT EXISTS idx_emp_deleted ON employees(deleted_at)",
+                "CREATE INDEX IF NOT EXISTS idx_emp_uid ON employees(uid)",
                 "CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(ts)",
                 "CREATE INDEX IF NOT EXISTS idx_attach_leave ON attachments(leave_id)",
+                "CREATE INDEX IF NOT EXISTS idx_attach_uid ON attachments(uid)",
+                "CREATE INDEX IF NOT EXISTS idx_attach_sha ON attachments(sha256)",
+                "CREATE INDEX IF NOT EXISTS idx_imports_ts ON imports(ts)",
+                "CREATE INDEX IF NOT EXISTS idx_imports_inst ON imports(institution)",
+                "CREATE INDEX IF NOT EXISTS idx_moves_emp ON employee_moves(emp_id)",
             ):
                 c.execute(ddl)
 
@@ -317,9 +416,10 @@ class Database:
 
         لا تُعدّل الأرقام المعتمدة (days_actual) إطلاقاً.
         """
-        added = added or {"employees": set(), "leaves": set()}
+        added = added or {"employees": set(), "leaves": set(), "attachments": set()}
         leave_cols = added.get("leaves", set())
         emp_cols = added.get("employees", set())
+        attach_cols = added.get("attachments", set())
 
         if "end_date" in leave_cols:
             c.execute("""UPDATE leaves
@@ -341,6 +441,43 @@ class Database:
         if "created_at" in emp_cols:
             c.execute("UPDATE employees SET created_at = ? WHERE created_at IS NULL OR created_at = ''",
                       (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
+
+        # --- الإصدار 5: الهوية الثابتة (uid) والمؤسسات -------------------
+        if "uid" in emp_cols:
+            for row in c.execute("SELECT emp_id FROM employees WHERE uid IS NULL OR uid = ''").fetchall():
+                c.execute("UPDATE employees SET uid=? WHERE emp_id=?", (uuid.uuid4().hex, row[0]))
+        if "previous_institution" in emp_cols:
+            c.execute("""UPDATE employees SET previous_institution = institution
+                         WHERE previous_institution IS NULL""")
+        if "uid" in leave_cols:
+            for row in c.execute("SELECT id FROM leaves WHERE uid IS NULL OR uid = ''").fetchall():
+                c.execute("UPDATE leaves SET uid=? WHERE id=?", (uuid.uuid4().hex, row[0]))
+        if "institution" in leave_cols:
+            c.execute("""UPDATE leaves SET institution = COALESCE(
+                            (SELECT e.institution FROM employees e WHERE e.emp_id = leaves.emp_id), '')
+                         WHERE institution IS NULL OR institution = ''""")
+        if "uid" in attach_cols:
+            for row in c.execute("SELECT id FROM attachments WHERE uid IS NULL OR uid = ''").fetchall():
+                c.execute("UPDATE attachments SET uid=? WHERE id=?", (uuid.uuid4().hex, row[0]))
+        if "leave_uid" in attach_cols:
+            c.execute("""UPDATE attachments SET leave_uid = COALESCE(
+                            (SELECT l.uid FROM leaves l WHERE l.id = attachments.leave_id), '')
+                         WHERE leave_uid IS NULL OR leave_uid = ''""")
+        if "institution" in attach_cols:
+            c.execute("""UPDATE attachments SET institution = COALESCE(
+                            (SELECT l.institution FROM leaves l WHERE l.id = attachments.leave_id), '')
+                         WHERE institution IS NULL OR institution = ''""")
+        # تسجيل المؤسسات الموجودة فعلاً في البيانات
+        c.execute("""INSERT OR IGNORE INTO institutions(name, kind, created_at, updated_at)
+                     SELECT DISTINCT TRIM(institution), 'مؤسسة', ?, ?
+                     FROM employees
+                     WHERE institution IS NOT NULL AND TRIM(institution) <> ''""",
+                  (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),) * 2)
+        c.execute("""INSERT OR IGNORE INTO institutions(name, kind, created_at, updated_at)
+                     SELECT DISTINCT TRIM(institution), 'مؤسسة', ?, ?
+                     FROM leaves
+                     WHERE institution IS NOT NULL AND TRIM(institution) <> ''""",
+                  (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),) * 2)
 
     @property
     def schema_version(self) -> int:
@@ -477,13 +614,16 @@ class Database:
         with self.transaction() as c:
             c.execute("""INSERT INTO employees
                          (emp_id, name, job_title, workplace, gender, start_date, end_date,
-                          notes, institution, status, created_at, updated_at)
-                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                          notes, institution, status, created_at, updated_at, uid,
+                          previous_institution)
+                         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                       (emp_id, fields.get("name", ""), fields.get("job_title", ""),
                        fields.get("workplace", ""), fields.get("gender", "ذكر"),
                        fields.get("start_date", ""), fields.get("end_date", ""),
                        fields.get("notes", ""), fields.get("institution", ""),
-                       fields.get("status", "active"), now, now))
+                       fields.get("status", "active"), now, now,
+                       fields.get("uid") or uuid.uuid4().hex,
+                       fields.get("previous_institution", fields.get("institution", ""))))
         self.log(user, "إضافة", "employee", emp_id, fields.get("name", ""))
 
     def update_employee(self, emp_id: str, fields: dict, user: str = "") -> None:
@@ -569,8 +709,8 @@ class Database:
                 (emp_id, type, start_date, end_date, from_date, amount, unit, days_actual,
                  working_days, count_mode, order_num, order_date, outside_balance, reason,
                  added_date, status, approved_by, approved_at, created_by, modified_at,
-                 modified_by, is_adjustment, manual_days)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                 modified_by, is_adjustment, manual_days, uid, institution)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                       (emp_id, fields.get("type", ""), fields.get("start_date", ""),
                        fields.get("end_date", ""), fields.get("from_date", fields.get("start_date", "")),
                        fields.get("amount", 0), fields.get("unit", "يوم"),
@@ -579,20 +719,32 @@ class Database:
                        fields.get("order_date", ""), int(fields.get("outside_balance", False)),
                        fields.get("reason", ""), fields.get("added_date") or _now(),
                        fields.get("status", "approved"), fields.get("approved_by", ""),
-                       fields.get("approved_at", ""), user, _now(), user,
-                       int(fields.get("is_adjustment", False)), int(fields.get("manual_days", False))))
+                       fields.get("approved_at", ""), user, fields.get("modified_at") or _now(), user,
+                       int(fields.get("is_adjustment", False)), int(fields.get("manual_days", False)),
+                       fields.get("uid") or uuid.uuid4().hex,
+                       fields.get("institution") or self._employee_institution(emp_id)))
             leave_id = int(c.execute("SELECT last_insert_rowid()").fetchone()[0])
         self.log(user, "إضافة", "leave", str(leave_id),
                  f"{emp_id} - {fields.get('type', '')} - {fields.get('days_actual', 0)} يوم")
         return leave_id
 
+    def _employee_institution(self, emp_id: str) -> str:
+        if not emp_id:
+            return ""
+        row = self.conn.execute("SELECT institution FROM employees WHERE emp_id=?",
+                                (emp_id,)).fetchone()
+        return str(row[0] or "") if row else ""
+
     def update_leave(self, leave_id: int, fields: dict, user: str = "") -> None:
         """تعديل إجازة: لا يمسّ تاريخ الإضافة ولا منشئ السجل (يُسجَّل التعديل في modified_*)."""
+        current = self.get_leave(leave_id)
+        emp_id = str(fields.get("emp_id") or (current.emp_id if current else ""))
         with self.transaction() as c:
             c.execute("""UPDATE leaves SET type=?, start_date=?, end_date=?, from_date=?,
                          amount=?, unit=?, days_actual=?, working_days=?, count_mode=?,
                          order_num=?, order_date=?, outside_balance=?, reason=?, status=?,
-                         is_adjustment=?, manual_days=?, modified_at=?, modified_by=?
+                         is_adjustment=?, manual_days=?, modified_at=?, modified_by=?,
+                         institution=COALESCE(NULLIF(institution, ''), ?)
                          WHERE id=?""",
                       (fields.get("type", ""), fields.get("start_date", ""), fields.get("end_date", ""),
                        fields.get("from_date", fields.get("start_date", "")), fields.get("amount", 0),
@@ -601,7 +753,9 @@ class Database:
                        fields.get("order", ""), fields.get("order_date", ""),
                        int(fields.get("outside_balance", False)), fields.get("reason", ""),
                        fields.get("status", "approved"), int(fields.get("is_adjustment", False)),
-                       int(fields.get("manual_days", False)), _now(), user, leave_id))
+                       int(fields.get("manual_days", False)), _now(), user,
+                       fields.get("institution") or self._employee_institution(emp_id),
+                       leave_id))
         self.log(user, "تعديل", "leave", str(leave_id),
                  f"{fields.get('type', '')} - {fields.get('days_actual', 0)} يوم")
 
@@ -641,17 +795,24 @@ class Database:
     def list_attachments(self, leave_id: int) -> list[Attachment]:
         rows = self.conn.execute("SELECT * FROM attachments WHERE leave_id=? ORDER BY id",
                                  (leave_id,)).fetchall()
-        return [Attachment(id=r["id"], leave_id=r["leave_id"], emp_id=r["emp_id"],
-                           filename=r["filename"], stored_name=r["stored_name"],
-                           added_at=r["added_at"], added_by=r["added_by"]) for r in rows]
+        return [Attachment.from_mapping(dict(row)) for row in rows]
 
     def add_attachment(self, leave_id: int, emp_id: str, filename: str, stored_name: str,
-                       user: str = "") -> int:
+                       user: str = "", *, attachments_dir: str | Path | None = None,
+                       sha256: str = "", institution: str = "") -> int:
+        """يضيف مرفقاً مع بصمة sha256 ومعرّف ثابت لتنتقل المرفقات مع ملفات النقل."""
+        leave = self.get_leave(leave_id) if leave_id else None
+        if not sha256 and attachments_dir and stored_name:
+            candidate = Path(attachments_dir) / stored_name
+            if candidate.exists():
+                sha256 = _sha256_file(candidate)
         with self.transaction() as c:
-            c.execute("""INSERT INTO attachments(leave_id, emp_id, filename, stored_name, added_at, added_by)
-                         VALUES (?,?,?,?,?,?)""",
-                      (leave_id, emp_id, filename, stored_name, _now(), user))
-            return int(c.execute("SELECT last_insert_rowid()").fetchone()[0])
+            return self.add_attachment_row(
+                c, leave_id=leave_id, emp_id=emp_id, filename=filename, stored_name=stored_name,
+                sha256=sha256, leave_uid=(leave.uid if leave else ""),
+                institution=institution or (leave.institution if leave else
+                                            self._employee_institution(emp_id)),
+                user=user)
 
     def delete_attachment(self, attachment_id: int, user: str = "") -> None:
         with self.transaction() as c:
@@ -790,6 +951,261 @@ class Database:
     def __exit__(self, *exc) -> None:
         self.close()
 
+    # ==================================================================
+    # المؤسسات (وحدة النقل والدمج)
+    # ==================================================================
+    def list_institutions(self, active_only: bool = False) -> list[Institution]:
+        sql = "SELECT i.*, (SELECT COUNT(*) FROM employees e WHERE e.institution = i.name " \
+              "AND (e.deleted_at IS NULL OR e.deleted_at='')) AS employees FROM institutions i"
+        if active_only:
+            sql += " WHERE i.active = 1"
+        sql += " ORDER BY i.is_center DESC, i.name"
+        return [Institution.from_mapping(dict(row)) for row in self.conn.execute(sql)]
+
+    def get_institution(self, name: str) -> Institution | None:
+        row = self.conn.execute("SELECT * FROM institutions WHERE name=?", (name,)).fetchone()
+        return Institution.from_mapping(dict(row)) if row else None
+
+    def save_institution(self, fields: dict, user: str = "") -> Institution:
+        name = str(fields.get("name") or "").strip()
+        if not name:
+            raise ValueError("اسم المؤسسة إلزامي")
+        now = _now()
+        existing = self.get_institution(name)
+        payload = {
+            "code": str(fields.get("code") or "").strip(),
+            "kind": str(fields.get("kind") or "مستشفى").strip(),
+            "manager": str(fields.get("manager") or "").strip(),
+            "phone": str(fields.get("phone") or "").strip(),
+            "address": str(fields.get("address") or "").strip(),
+            "notes": str(fields.get("notes") or "").strip(),
+            "is_center": int(bool(fields.get("is_center"))),
+            "username": str(fields.get("username") or "").strip(),
+            "active": int(fields.get("active", 1)),
+        }
+        with self.transaction() as c:
+            if existing:
+                c.execute("""UPDATE institutions SET code=?, kind=?, manager=?, phone=?, address=?,
+                             notes=?, is_center=?, username=?, active=?, updated_at=? WHERE name=?""",
+                          (payload["code"], payload["kind"], payload["manager"], payload["phone"],
+                           payload["address"], payload["notes"], payload["is_center"],
+                           payload["username"], payload["active"], now, name))
+            else:
+                c.execute("""INSERT INTO institutions
+                             (name, code, kind, manager, phone, address, notes, is_center,
+                              username, active, created_at, updated_at)
+                             VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+                          (name, payload["code"], payload["kind"], payload["manager"],
+                           payload["phone"], payload["address"], payload["notes"],
+                           payload["is_center"], payload["username"], payload["active"], now, now))
+        self.log(user or "—", "إضافة" if not existing else "تعديل", "institution", name,
+                 payload["kind"])
+        return self.get_institution(name)  # type: ignore[return-value]
+
+    def register_institutions(self, names, user: str = "") -> list[str]:
+        """يتأكد من وجود المؤسسات (يُنشئ الناقص) — تُستخدم عند الدمج والتصدير."""
+        created: list[str] = []
+        now = _now()
+        with self.transaction() as c:
+            for raw in names:
+                name = str(raw or "").strip()
+                if not name:
+                    continue
+                row = c.execute("SELECT 1 FROM institutions WHERE name=?", (name,)).fetchone()
+                if not row:
+                    c.execute("""INSERT INTO institutions(name, kind, created_at, updated_at)
+                                 VALUES (?,?,?,?)""", (name, "مؤسسة", now, now))
+                    created.append(name)
+        if created and user:
+            self.log(user, "إضافة", "institution", ", ".join(created), "أُنشئت تلقائياً عند الاستيراد")
+        return created
+
+    def delete_institution(self, name: str) -> tuple[bool, str]:
+        """يحذف مؤسسة بشرط ألا يكون لها موظفون أو إجازات."""
+        employees = self.conn.execute(
+            "SELECT COUNT(*) FROM employees WHERE institution=?", (name,)).fetchone()[0]
+        if employees:
+            return False, f"لا يمكن الحذف: هناك {employees} موظفاً مرتبطاً بهذه المؤسسة."
+        with self.transaction() as c:
+            c.execute("DELETE FROM institutions WHERE name=?", (name,))
+        return True, "تم حذف المؤسسة."
+
+    def set_institution_import(self, name: str, *, when: str, user: str = "",
+                               filename: str = "", counts: str = "") -> None:
+        with self.transaction() as c:
+            c.execute("""UPDATE institutions SET last_import_at=?, last_import_user=?,
+                         last_import_file=?, last_import_counts=? WHERE name=?""",
+                      (when, user, filename, counts, name))
+
+    def set_institution_export(self, name: str, when: str) -> None:
+        with self.transaction() as c:
+            c.execute("UPDATE institutions SET last_export_at=? WHERE name=?", (when, name))
+
+    def center_institution(self) -> str:
+        value = self.get_meta().get("center_institution", "")
+        if value:
+            return value
+        row = self.conn.execute("SELECT name FROM institutions WHERE is_center=1 LIMIT 1").fetchone()
+        return row[0] if row else ""
+
+    def set_center_institution(self, name: str) -> None:
+        name = str(name or "").strip()
+        with self.transaction() as c:
+            c.execute("UPDATE institutions SET is_center=0")
+            if name:
+                c.execute("UPDATE institutions SET is_center=1 WHERE name=?", (name,))
+        self.set_meta({"center_institution": name})
+
+    def institution_employee_counts(self) -> dict[str, int]:
+        rows = self.conn.execute(
+            "SELECT institution, COUNT(*) FROM employees WHERE (deleted_at IS NULL OR deleted_at='') "
+            "GROUP BY institution").fetchall()
+        return {row[0] or "": row[1] for row in rows}
+
+    # ==================================================================
+    # سجل الاستيراد/التصدير
+    # ==================================================================
+    def add_import(self, record: dict, user: str = "") -> int:
+        columns = ["ts", "username", "direction", "scope", "institution", "source_file",
+                   "checksum", "source_schema", "source_policy", "period_from", "period_to",
+                   "employees_added", "employees_updated", "employees_unchanged",
+                   "employees_conflict", "leaves_added", "leaves_updated", "leaves_unchanged",
+                   "moves", "attachments", "warnings", "report"]
+        values = [record.get(column, "" if column in {"ts", "username", "direction", "scope",
+                                                      "institution", "source_file", "checksum",
+                                                      "source_policy", "period_from", "period_to",
+                                                      "report"} else 0)
+                  for column in columns]
+        if not record.get("ts"):
+            values[0] = _now()
+        if not record.get("username"):
+            values[1] = user or "—"
+        with self.transaction() as c:
+            c.execute(f"INSERT INTO imports ({','.join(columns)}) "
+                      f"VALUES ({','.join('?' * len(columns))})", values)
+            return int(c.execute("SELECT last_insert_rowid()").fetchone()[0])
+
+    def list_imports(self, limit: int = 50, institution: str = "",
+                     direction: str = "") -> list[ImportRecord]:
+        conditions, params = ["1=1"], []
+        if institution:
+            conditions.append("institution = ?")
+            params.append(institution)
+        if direction:
+            conditions.append("direction = ?")
+            params.append(direction)
+        params.append(int(limit))
+        rows = self.conn.execute(
+            f"SELECT * FROM imports WHERE {' AND '.join(conditions)} ORDER BY id DESC LIMIT ?",
+            params).fetchall()
+        return [ImportRecord.from_mapping(dict(row)) for row in rows]
+
+    def get_import(self, import_id: int) -> ImportRecord | None:
+        row = self.conn.execute("SELECT * FROM imports WHERE id=?", (import_id,)).fetchone()
+        return ImportRecord.from_mapping(dict(row)) if row else None
+
+    def last_import_for(self, institution: str) -> ImportRecord | None:
+        rows = self.list_imports(limit=1, institution=institution, direction="import")
+        return rows[0] if rows else None
+
+    def checksum_seen(self, checksum: str) -> ImportRecord | None:
+        if not checksum:
+            return None
+        row = self.conn.execute(
+            "SELECT * FROM imports WHERE checksum=? ORDER BY id DESC LIMIT 1", (checksum,)).fetchone()
+        return ImportRecord.from_mapping(dict(row)) if row else None
+
+    # ==================================================================
+    # انتقال الموظفين بين المؤسسات
+    # ==================================================================
+    def add_move(self, emp_id: str, from_institution: str, to_institution: str,
+                 moved_on=None, source_file: str = "", note: str = "", user: str = "") -> int:
+        with self.transaction() as c:
+            c.execute("""INSERT INTO employee_moves
+                         (emp_id, from_institution, to_institution, moved_on, recorded_at,
+                          source_file, note)
+                         VALUES (?,?,?,?,?,?,?)""",
+                      (emp_id, from_institution, to_institution, to_iso(moved_on), _now(),
+                       source_file, note))
+            return int(c.execute("SELECT last_insert_rowid()").fetchone()[0])
+
+    def list_moves(self, emp_id: str = "", limit: int = 200) -> list[EmployeeMove]:
+        if emp_id:
+            rows = self.conn.execute(
+                "SELECT * FROM employee_moves WHERE emp_id=? ORDER BY id DESC LIMIT ?",
+                (emp_id, int(limit))).fetchall()
+        else:
+            rows = self.conn.execute(
+                "SELECT * FROM employee_moves ORDER BY id DESC LIMIT ?", (int(limit),)).fetchall()
+        return [EmployeeMove.from_mapping(dict(row)) for row in rows]
+
+    def set_employee_institution(self, emp_id: str, institution: str, moved_on=None,
+                                 user: str = "") -> None:
+        with self.transaction() as c:
+            c.execute("""UPDATE employees SET previous_institution = institution,
+                         institution = ?, moved_on = ?, updated_at = ? WHERE emp_id = ?""",
+                      (institution, to_iso(moved_on), _now(), emp_id))
+        self.log(user, "نقل", "employee", emp_id, f"إلى {institution}")
+
+    # ==================================================================
+    # بيانات خامة للمقارنة في الدمج
+    # ==================================================================
+    def raw_employees(self, include_deleted: bool = True) -> dict[str, dict]:
+        sql = "SELECT * FROM employees"
+        if not include_deleted:
+            sql += " WHERE deleted_at IS NULL OR deleted_at=''"
+        return {str(row["emp_id"]): dict(row) for row in self.conn.execute(sql)}
+
+    def raw_leaves(self, include_deleted: bool = True) -> dict[str, dict]:
+        """مفتاح القاموس هو uid الإجازة (أو مفتاح بديل إن غاب)."""
+        sql = "SELECT * FROM leaves"
+        if not include_deleted:
+            sql += " WHERE deleted_at IS NULL OR deleted_at=''"
+        result: dict[str, dict] = {}
+        for row in self.conn.execute(sql):
+            data = dict(row)
+            result[data.get("uid") or _fallback_leave_key(data)] = data
+        return result
+
+    def raw_attachments(self) -> list[dict]:
+        return [dict(row) for row in self.conn.execute("SELECT * FROM attachments")]
+
+    def get_leave_by_uid(self, uid: str) -> Leave | None:
+        row = self.conn.execute("SELECT * FROM leaves WHERE uid=?", (uid,)).fetchone()
+        return _row_to_leave(dict(row)) if row else None
+
+    def attachment_hashes(self) -> dict[str, dict]:
+        rows = self.conn.execute(
+            "SELECT * FROM attachments WHERE sha256 IS NOT NULL AND sha256 <> ''").fetchall()
+        return {row["sha256"]: dict(row) for row in rows}
+
+    def add_attachment_row(self, c: sqlite3.Cursor, *, leave_id=None, emp_id: str = "",
+                           filename: str = "", stored_name: str = "", sha256: str = "",
+                           leave_uid: str = "", institution: str = "", uid: str = "",
+                           user: str = "") -> int:
+        """إدراج مرفق داخل معاملة قائمة (يُستخدم في الدمج والواجهة)."""
+        c.execute("""INSERT INTO attachments
+                     (leave_id, emp_id, filename, stored_name, added_at, added_by,
+                      uid, leave_uid, sha256, institution)
+                     VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                  (leave_id, emp_id, filename, stored_name, _now(), user,
+                   uid or uuid.uuid4().hex, leave_uid, sha256, institution))
+        return int(c.execute("SELECT last_insert_rowid()").fetchone()[0])
+
+    def set_transfer_manifest(self, values: dict) -> None:
+        with self.transaction() as c:
+            for key, value in values.items():
+                c.execute("INSERT INTO transfer_manifest(key, value) VALUES (?,?) "
+                          "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                          (str(key), str(value)))
+
+    def get_transfer_manifest(self) -> dict[str, str]:
+        try:
+            rows = self.conn.execute("SELECT key, value FROM transfer_manifest").fetchall()
+        except sqlite3.DatabaseError:
+            return {}
+        return {row["key"]: row["value"] for row in rows}
+
 
 # ---------------------------------------------------------------------------
 # أدوات
@@ -808,3 +1224,17 @@ def _row_to_leave(data: dict) -> Leave:
     if "order_num" in data:
         data.setdefault("order", data.get("order_num") or "")
     return Leave.from_mapping(data)
+
+
+def _fallback_leave_key(data: dict) -> str:
+    """مفتاح بديل للإجازات القديمة بلا uid (نوع + تاريخ بدء + رقم الأمر + الأيام)."""
+    return "|".join(str(data.get(field) or "") for field in
+                    ("type", "start_date", "order_num", "days_actual"))
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
