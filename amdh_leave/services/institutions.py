@@ -331,6 +331,7 @@ def institutions_status(db, month: str = "") -> list[dict]:
             "name": inst.name,
             "code": inst.code,
             "kind": inst.kind,
+            "username": inst.username,
             "employees": inst.employees,
             "last_import_at": last,
             "last_import_user": inst.last_import_user,
@@ -356,3 +357,43 @@ def month_label(month: str = "") -> str:
         return parsed.strftime("%m/%Y")
     except ValueError:
         return month
+
+
+def institution_counts(db, name: str = "") -> dict:
+    """أعداد الموظفين والإجازات والمرفقات لمؤسسة (أو للكل عند تركها فارغة)."""
+    live = "(deleted_at IS NULL OR deleted_at='')"
+    where = "WHERE institution=?" if name else ""
+    args = (name,) if name else ()
+    employees = db.conn.execute(
+        f"SELECT COUNT(*) FROM employees {where} {('AND' if where else 'WHERE')} {live}",
+        args).fetchone()[0]
+    if name:
+        leaves = db.conn.execute(
+            f"SELECT COUNT(*) FROM leaves l JOIN employees e ON e.emp_id=l.emp_id "
+            f"WHERE e.institution=? AND (l.deleted_at IS NULL OR l.deleted_at='')",
+            (name,)).fetchone()[0]
+        attachments = db.conn.execute(
+            f"SELECT COUNT(*) FROM attachments a JOIN employees e ON e.emp_id=a.emp_id "
+            f"WHERE e.institution=?", (name,)).fetchone()[0]
+    else:
+        leaves = db.conn.execute(
+            f"SELECT COUNT(*) FROM leaves WHERE {live}").fetchone()[0]
+        attachments = db.conn.execute("SELECT COUNT(*) FROM attachments").fetchone()[0]
+    return {"employees": employees, "leaves": leaves, "attachments": attachments}
+
+
+def last_change_at(db, name: str = "") -> str:
+    """أحدث طابع زمني لتغيير بيانات المؤسسة (لمقارنته بآخر تصدير)."""
+    scope = "WHERE e.institution=?" if name else ""
+    args = (name,) if name else ()
+    rows = [
+        db.conn.execute(
+            f"SELECT MAX(updated_at) FROM employees e {scope}", args).fetchone()[0],
+        db.conn.execute(
+            f"SELECT MAX(COALESCE(l.modified_at, l.added_date)) FROM leaves l "
+            f"JOIN employees e ON e.emp_id=l.emp_id {scope}", args).fetchone()[0],
+        db.conn.execute(
+            f"SELECT MAX(a.added_at) FROM attachments a "
+            f"JOIN employees e ON e.emp_id=a.emp_id {scope}", args).fetchone()[0],
+    ]
+    return max([str(item) for item in rows if item] or [""])

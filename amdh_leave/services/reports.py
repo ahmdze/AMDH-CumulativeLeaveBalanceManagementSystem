@@ -229,3 +229,80 @@ def calendar_month(employees: list[Employee], policy: Policy, year: int, month: 
                 day += timedelta(days=1)
     return {"grid": grid, "per_day": per_day, "weekdays": D.weekday_labels(first_day_of_week),
             "year": year, "month": month}
+
+
+def advanced_statistics(employees: list[Employee], policy: Policy,
+                        today: date | None = None) -> dict:
+    """إحصائيات متقدمة: متوسط الإجازات، أكثر الأنواع، التوزيع حسب المؤسسة، إلخ."""
+    today = today or date.today()
+    live = [e for e in employees if not e.is_deleted]
+    rows = global_report(live, policy, today)
+
+    if not rows:
+        return {
+            "avg_balance": 0, "avg_taken": 0, "avg_earned": 0,
+            "most_used_type": "", "most_used_count": 0,
+            "consumption_rate": 0,
+            "by_institution_stats": {},
+            "yearly_trend": [],
+        }
+
+    # المتوسطات
+    avg_balance = sum(r["balance"] for r in rows) / len(rows)
+    avg_taken = sum(r["taken"] for r in rows) / len(rows)
+    avg_earned = sum(r["earned"] for r in rows) / len(rows)
+
+    # أكثر الأنواع استخداماُ
+    by_type: dict[str, int] = {}
+    for emp in live:
+        for lv in emp.leaves:
+            if lv.is_deleted or lv.status == "rejected":
+                continue
+            by_type[lv.type or "غير محددة"] = by_type.get(lv.type or "غير محددة", 0) + 1
+    most_used_type = max(by_type, key=by_type.get) if by_type else ""
+    most_used_count = by_type.get(most_used_type, 0)
+
+    # نسبة الاستهلاك
+    total_earned = sum(r["earned"] for r in rows)
+    total_taken = sum(r["taken"] for r in rows)
+    consumption_rate = (total_taken / total_earned * 100) if total_earned > 0 else 0
+
+    # التوزيع حسب المؤسسة
+    by_inst: dict[str, dict] = {}
+    for r in rows:
+        key = r["institution"] or "(غير محددة)"
+        item = by_inst.setdefault(key, {"count": 0, "balance": 0, "taken": 0, "earned": 0})
+        item["count"] += 1
+        item["balance"] += r["balance"]
+        item["taken"] += r["taken"]
+        item["earned"] += r["earned"]
+    for item in by_inst.values():
+        c = item["count"]
+        item["avg_balance"] = item["balance"] / c if c else 0
+        item["avg_taken"] = item["taken"] / c if c else 0
+
+    # الاتجاه السنوي
+    yearly_trend = []
+    for year in range(today.year - 4, today.year + 1):
+        year_taken = 0
+        year_count = 0
+        for emp in live:
+            for lv in emp.leaves:
+                if lv.is_deleted or lv.status == "rejected":
+                    continue
+                if lv.start_date and lv.start_date.year == year:
+                    excluded, consumed = B.leave_effect(policy, lv)
+                    year_taken += consumed or excluded
+                    year_count += 1
+        yearly_trend.append({"year": year, "taken": year_taken, "count": year_count})
+
+    return {
+        "avg_balance": round(avg_balance, 1),
+        "avg_taken": round(avg_taken, 1),
+        "avg_earned": round(avg_earned, 1),
+        "most_used_type": most_used_type,
+        "most_used_count": most_used_count,
+        "consumption_rate": round(consumption_rate, 1),
+        "by_institution_stats": by_inst,
+        "yearly_trend": yearly_trend,
+    }

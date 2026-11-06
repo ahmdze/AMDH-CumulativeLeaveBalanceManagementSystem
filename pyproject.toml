@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "amdh-leave-system"
-version = "3.0.0"
-description = "نظام إدارة الإجازات التراكمية — واجهة عربية RTL لإدارة إجازات الموظفين وأرصدتها"
+version = "1.0.0"
+description = "نظام إدارة الرصيد التراكمي للإجازات — واجهة عربية RTL لإدارة إجازات الموظفين وأرصدتها"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "Proprietary" }
-authors = [{ name = "أحمد زياد رحيمه", email = "ahmdze@gmail.com" }]
+authors = [{ name = "احمد زياد رحيمه", email = "ahmdze@gmail.com" }]
 keywords = ["leave", "hr", "arabic", "pyqt6", "sqlite", "إجازات"]
 dependencies = [
     "PyQt6>=6.6,<7",
@@ -17,12 +17,11 @@ dependencies = [
     "reportlab>=4.0",
     "arabic-reshaper>=3.0",
     "python-bidi>=0.4.2",
+    "sqlcipher3>=0.6.4",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=7.4", "pyinstaller>=6.0"]
-# تشفير قاعدة البيانات (اختياري)
-encryption = ["sqlcipher3-binary>=0.5"]
 
 [project.scripts]
 amdh-leave = "amdh_leave.app:main"

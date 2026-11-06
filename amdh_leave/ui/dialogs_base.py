@@ -110,64 +110,14 @@ class SettingsDialog(BaseDialog):
         tabs.addTab(self._tab_general(), "⚙ عام")
         tabs.addTab(self._tab_notifications(), "🔔 الإشعارات")
         tabs.addTab(self._tab_backup(), "💾 النسخ الاحتياطي")
-        tabs.addTab(self._tab_sharing(), "📤 المشاركة")
         tabs.addTab(self._tab_security(), "🔒 الأمان والتشفير")
         tabs.addTab(self._tab_data(), "🗄 البيانات والصيانة")
+        for index, permission in ((0, "edit_policy"), (2, "backup_restore"),
+                                  (3, "manage_encryption"), (4, "db_operations")):
+            if not self.ctx.can(permission):
+                tabs.setTabVisible(index, False)
         layout.addWidget(tabs)
         layout.addLayout(self.buttons_row(self.close_button("إلغاء"), self.save_button()))
-
-    # -- تبويب المشاركة -------------------------------------------------
-    def _tab_sharing(self) -> QWidget:
-        from ..services.sharing import EmailConfig, TelegramConfig
-        page = QWidget()
-        outer = QVBoxLayout(page)
-
-        email = EmailConfig.from_settings(self.ctx.settings)
-        box = QGroupBox("البريد الإلكتروني (SMTP)")
-        form = QFormLayout(box)
-        self.e_smtp_host = QLineEdit(email.host)
-        self.e_smtp_host.setPlaceholderText("smtp.gmail.com")
-        self.sp_smtp_port = QSpinBox()
-        self.sp_smtp_port.setRange(1, 65535)
-        self.sp_smtp_port.setValue(int(email.port or 587))
-        self.cb_smtp_security = QComboBox()
-        self.cb_smtp_security.addItem("STARTTLS (587)", "starttls")
-        self.cb_smtp_security.addItem("SSL/TLS (465)", "ssl")
-        self.cb_smtp_security.addItem("بلا حماية", "none")
-        index = self.cb_smtp_security.findData(email.security)
-        self.cb_smtp_security.setCurrentIndex(max(0, index))
-        self.e_smtp_user = QLineEdit(email.username)
-        self.e_smtp_password = QLineEdit(email.password)
-        self.e_smtp_password.setEchoMode(QLineEdit.EchoMode.Password)
-        self.e_smtp_sender = QLineEdit(email.sender or email.username)
-        self.e_smtp_recipients = QLineEdit(", ".join(email.recipients))
-        form.addRow("الخادم", self.e_smtp_host)
-        form.addRow("المنفذ", self.sp_smtp_port)
-        form.addRow("الحماية", self.cb_smtp_security)
-        form.addRow("اسم المستخدم", self.e_smtp_user)
-        form.addRow("كلمة المرور", self.e_smtp_password)
-        form.addRow("بريد المُرسل", self.e_smtp_sender)
-        form.addRow("المستلمون الافتراضيون", self.e_smtp_recipients)
-        outer.addWidget(box)
-        outer.addWidget(W.muted_label("يُنصح باستخدام «كلمة مرور تطبيق» مخصّصة من مزوّد البريد، لا كلمة مرور الحساب الأساسية."))
-
-        telegram = TelegramConfig.from_settings(self.ctx.settings)
-        tg_box = QGroupBox("تلغرام (Bot API)")
-        tg_form = QFormLayout(tg_box)
-        self.e_tg_token = QLineEdit(telegram.bot_token)
-        self.e_tg_token.setEchoMode(QLineEdit.EchoMode.Password)
-        self.e_tg_token.setPlaceholderText("123456:ABC-DEF...")
-        self.e_tg_chat = QLineEdit(telegram.chat_id)
-        self.e_tg_chat.setPlaceholderText("123456789")
-        tg_form.addRow("رمز البوت", self.e_tg_token)
-        tg_form.addRow("معرّف المحادثة", self.e_tg_chat)
-        outer.addWidget(tg_box)
-        hint = W.muted_label("لإنشاء بوت: افتح تلغرام ← @BotFather ← /newbot ← انسخ الرمز. "
-                                "ولمعرفة معرّف المحادثة استخدم getUpdates.")
-        hint.setWordWrap(True)
-        outer.addWidget(hint)
-        outer.addStretch()
-        return page
 
     # -- تبويب الأمان والتشفير -------------------------------------------
     def _tab_security(self) -> QWidget:
@@ -178,19 +128,28 @@ class SettingsDialog(BaseDialog):
         self.chk_auth_page = QCheckBox("تفعيل تسجيل الدخول (أدوار وصلاحيات)")
         self.chk_auth_page.setChecked(self._policy.auth_enabled)
         outer.addWidget(self.chk_auth_page)
-        outer.addWidget(W.muted_label("معطَّل افتراضياً. المستخدم الافتراضي admin — غيّر كلمة المرور من «إدارة المستخدمين»."))
+        outer.addWidget(W.muted_label("مطلوب في النسخ الجديدة. المستخدم الافتراضي admin — "
+                                      "غيّر كلمة المرور فوراً من «إدارة المستخدمين»."))
 
         box = QGroupBox("تشفير قاعدة البيانات (SQLCipher)")
         box_layout = QVBoxLayout(box)
         state = ("مُفعَّل" if summary["encryption_enabled"] else "غير مُفعَّل")
         available = "مثبتة" if summary["sqlcipher_available"] else "غير مثبتة"
-        box_layout.addWidget(QLabel(f"{'الحالة'}: {state} | {'حزمة SQLCipher'}: {available}"))
+        mode = summary.get("mode") or ""
+        mode_label = {"keyfile": "مفتاح تلقائي (نسخة مؤسسة)",
+                      "password": "كلمة مرور"}.get(mode, "—")
+        box_layout.addWidget(QLabel(f"{'الحالة'}: {state} | {'حزمة SQLCipher'}: {available} | "
+                                   f"{'الوضع'}: {mode_label}"))
+        if summary.get("key_file"):
+            box_layout.addWidget(W.muted_label(
+                "هذه النسخة تُفتح بمفتاح تلقائي في data/.amdh_dbkey؛ لا تحذفه."))
         if not summary["sqlcipher_available"]:
             hint = W.muted_label(crypto.install_hint())
             hint.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             box_layout.addWidget(hint)
         box_layout.addLayout(W.button_row(
-            W.button("🔒 إدارة التشفير", "Accent", self._open_encryption), stretch=False))
+            W.button("🔒 إدارة التشفير", "Accent", self._open_encryption),
+            W.button("🔐 خزنة كلمات المرور", "Ghost", self._open_vault), stretch=False))
         outer.addWidget(box)
         outer.addStretch()
         return page
@@ -201,6 +160,10 @@ class SettingsDialog(BaseDialog):
         dialog.exec()
         if dialog.changed:
             self.reject()
+
+    def _open_vault(self) -> None:
+        from .dialogs_vault import VaultDialog
+        VaultDialog(self, self.ctx).exec()
 
     # -- تبويب عام -----------------------------------------------------
     def _tab_general(self) -> QWidget:
@@ -578,21 +541,6 @@ class SettingsDialog(BaseDialog):
         self.ctx.ui_set("tray_notifications", self.chk_tray_popups.isChecked())
         self.ctx.ui_set("close_to_tray", self.chk_close_to_tray.isChecked())
         self.ctx.ui_set("tray_check_minutes", self.sp_tray_minutes.value())
-        # إعدادات المشاركة (بريد/تلغرام)
-        from ..services.sharing import EmailConfig, TelegramConfig
-        recipients = [item.strip() for item in
-                      self.e_smtp_recipients.text().replace(";", ",").split(",") if item.strip()]
-        EmailConfig(
-            host=self.e_smtp_host.text().strip(),
-            port=self.sp_smtp_port.value(),
-            security=self.cb_smtp_security.currentData(),
-            username=self.e_smtp_user.text().strip(),
-            password=self.e_smtp_password.text(),
-            sender=self.e_smtp_sender.text().strip(),
-            recipients=recipients,
-        ).save(self.ctx.settings)
-        TelegramConfig(bot_token=self.e_tg_token.text().strip(),
-                       chat_id=self.e_tg_chat.text().strip()).save(self.ctx.settings)
         self.ctx.db.log(self.ctx.user(), "تعديل", "settings", "", "تحديث إعدادات النظام")
         self._policy = self.ctx.db.policy(refresh=True)
         theme.set_theme(new_theme)
@@ -608,6 +556,10 @@ class SettingsDialog(BaseDialog):
 class TrashDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None):
         super().__init__(parent, ctx, "سلة المحذوفات")
+        if ctx is not None and not ctx.can("purge"):
+            W.error(self, "سلة المحذوفات متاحة لمن يملك صلاحية الإفراغ النهائي.")
+            self.reject()
+            return
         self.resize(860, 560)
         layout = QVBoxLayout(self)
         layout.addWidget(W.title_label("العناصر المحذوفة (قابلة للاستعادة)", 14))

@@ -36,7 +36,8 @@ OUT = ROOT / "screenshots"
 
 
 def build_context(tmp: Path) -> AppContext:
-    shutil.copy2(ROOT / "employees_leave.db", tmp / "employees_leave.db")
+    from tests.conftest import create_legacy_db
+    create_legacy_db(tmp / "employees_leave.db")
     paths = config.Paths(tmp).ensure()
     db = Database(paths.db_path, paths.backups_dir)
     db.set_meta({"auth_enabled": "0"})

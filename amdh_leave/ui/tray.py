@@ -48,7 +48,7 @@ class TrayController(QObject):
             return True
         self.tray = QSystemTrayIcon(assets.app_icon(), self.window)
         self.tray.setToolTip(f"{self.ctx.ui_get('app_name', '') or ''}".strip() or
-                             "نظام إدارة الإجازات التراكمية")
+                             "نظام إدارة الرصيد التراكمي للإجازات")
         self._build_menu()
         self.tray.activated.connect(self._on_activated)
         self.tray.show()
@@ -83,14 +83,20 @@ class TrayController(QObject):
         act_calendar.triggered.connect(self.window._open_calendar)
         menu.addAction(act_calendar)
 
-        act_leave = QAction("تسجيل إجازة", self)
-        act_leave.triggered.connect(self.window._quick_leave)
-        menu.addAction(act_leave)
+        def allowed(permission: str) -> bool:
+            checker = getattr(self.ctx, "can", None)
+            return True if not callable(checker) else bool(checker(permission))
+
+        if allowed("edit_leave"):
+            act_leave = QAction("تسجيل إجازة", self)
+            act_leave.triggered.connect(self.window._quick_leave)
+            menu.addAction(act_leave)
         menu.addSeparator()
 
-        act_backup = QAction("نسخة احتياطية الآن", self)
-        act_backup.triggered.connect(self.backup_now)
-        menu.addAction(act_backup)
+        if allowed("backup_restore"):
+            act_backup = QAction("نسخة احتياطية الآن", self)
+            act_backup.triggered.connect(self.backup_now)
+            menu.addAction(act_backup)
 
         theme_menu = menu.addMenu("الثيم")
         theme_menu.setLayoutDirection(self.window.layoutDirection())

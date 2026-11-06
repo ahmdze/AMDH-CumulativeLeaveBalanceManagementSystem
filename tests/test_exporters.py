@@ -45,7 +45,7 @@ def test_excel_export_leaves_includes_summary_sheet(tmp_path, employee, policy):
     if not X.HAS_XLSX:
         pytest.skip("openpyxl غير مثبت")
     path = tmp_path / "leaves.xlsx"
-    X.export_leaves(path, employee, policy)
+    X.export_leaves(path, employee, policy, date(2026, 10, 6))
     import openpyxl
     wb = openpyxl.load_workbook(path)
     assert wb.sheetnames == ["سجل الإجازات", "ملخص"]

@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from PyQt6.QtWidgets import QFileDialog, QGridLayout, QHBoxLayout, QVBoxLayout
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QScrollArea,
+    QVBoxLayout, QWidget,
+)
 
 from ..exporters import excel as X
 from ..exporters import html as H
@@ -18,21 +22,44 @@ class DashboardDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None):
         super().__init__(parent, ctx, "لوحة المؤشرات")
         self.policy = self.ctx.db.policy(refresh=True)
-        self.resize(1180, 720)
+        self.resize(980, 650)
+        self._filter_institution = ""
         self._build()
         self._refresh()
 
     # ------------------------------------------------------------------
     def _build(self) -> None:
         layout = QVBoxLayout(self)
+
+        # الشريط العلوي (خارج الـ scroll)
         header = QHBoxLayout()
         header.addWidget(W.title_label("لوحة المؤشرات", 16))
         header.addStretch()
+
+        # فلتر المؤسسة
+        self.cb_institution = QComboBox()
+        self.cb_institution.addItem("الكل", "")
+        institutions = self.ctx.db.distinct_values("institution")
+        for inst in institutions:
+            self.cb_institution.addItem(inst, inst)
+        self.cb_institution.currentTextChanged.connect(self._on_filter_change)
+        header.addWidget(W.muted_label("المؤسسة:"))
+        header.addWidget(self.cb_institution, 0, Qt.AlignmentFlag.AlignVCenter)
+
         header.addWidget(W.button("🔄 تحديث", "Blue", self._refresh))
         header.addWidget(W.button("📊 Excel", "Ghost", self._export_excel))
         header.addWidget(W.button("📄 HTML", "Ghost", self._export_html))
         header.addWidget(self.close_button())
         layout.addLayout(header)
+
+        # Scroll area للمحتوى الكبير
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
 
         self.kpi_grid = QGridLayout()
         self.kpis: dict[str, W.KPICard] = {}
@@ -41,39 +68,54 @@ class DashboardDialog(BaseDialog):
             ("earned", "إجمالي المستحقة"), ("taken", "إجمالي المأخوذة"),
             ("negative", "أرصدة سالبة (مسموح)"), ("on_leave_today", "على إجازة اليوم"),
             ("pending", "إجازات قيد الانتظار"), ("institutions", "عدد المؤسسات"),
+            ("avg_balance", "متوسط الرصيد"), ("most_used_type", "أكثر نوع استخداماُ"),
+            ("consumption_rate", "نسبة الاستهلاك"), ("low_balance", "أرصدة منخفضة"),
         ]
         for i, (key, title) in enumerate(cards):
             card = W.KPICard(title)
             self.kpis[key] = card
             self.kpi_grid.addWidget(card, i // 4, i % 4)
-        layout.addLayout(self.kpi_grid)
+        content_layout.addLayout(self.kpi_grid)
 
+        # الصف الأول: أعلى أرصدة + رسم دائري
         charts = QHBoxLayout()
         self.chart_top = W.BarChart(value_suffix=" يوم")
-        self.chart_inst = W.BarChart(value_suffix=" يوم")
+        self.chart_pie = W.PieChart()
         charts.addWidget(self.chart_top)
-        charts.addWidget(self.chart_inst)
-        layout.addLayout(charts)
+        charts.addWidget(self.chart_pie)
+        content_layout.addLayout(charts)
 
+        # الصف الثاني: رسم خطي + رسم أعمدة حسب المؤسسة
         charts2 = QHBoxLayout()
-        self.chart_type = W.BarChart(value_suffix=" يوم")
-        self.chart_month = W.BarChart(value_suffix=" يوم")
-        charts2.addWidget(self.chart_type)
+        self.chart_month = W.LineChart()
+        self.chart_inst = W.BarChart(value_suffix=" يوم")
         charts2.addWidget(self.chart_month)
-        layout.addLayout(charts2)
+        charts2.addWidget(self.chart_inst)
+        content_layout.addLayout(charts2)
 
-        layout.addWidget(W.muted_label("الموظفون على إجازة اليوم"))
+        content_layout.addWidget(W.muted_label("الموظفون على إجازة اليوم"))
         self.on_leave = W.TablePanel(["الاسم", "الرقم الوظيفي", "المؤسسة", "النوع", "من", "إلى"])
-        layout.addWidget(self.on_leave)
+        content_layout.addWidget(self.on_leave)
+
+        scroll.setWidget(content)
+        layout.addWidget(scroll)
+
+    def _on_filter_change(self, text: str) -> None:
+        self._filter_institution = self.cb_institution.currentData() or ""
+        self._refresh()
 
     # ------------------------------------------------------------------
     def _collect(self) -> dict:
         employees = self.ctx.employees()
-        return reports.dashboard_data(employees, self.policy)
+        if self._filter_institution:
+            employees = [e for e in employees if e.institution == self._filter_institution]
+        data = reports.dashboard_data(employees, self.policy)
+        stats = reports.advanced_statistics(employees, self.policy)
+        return data, stats
 
     def _refresh(self) -> None:
         self.policy = self.ctx.db.policy(refresh=True)
-        data = self._collect()
+        data, stats = self._collect()
         self.data = data
         kpis = data["kpis"]
         self.kpis["employees"].set_value(kpis["employees"])
@@ -84,13 +126,22 @@ class DashboardDialog(BaseDialog):
         self.kpis["on_leave_today"].set_value(kpis["on_leave_today"])
         self.kpis["pending"].set_value(kpis["pending"], "gold" if kpis["pending"] else "muted")
         self.kpis["institutions"].set_value(kpis["institutions"])
+        # KPIs جديدة
+        self.kpis["avg_balance"].set_value(f"{stats['avg_balance']:.1f}", "accent", " يوم")
+        self.kpis["most_used_type"].set_value(stats["most_used_type"] or "—")
+        self.kpis["consumption_rate"].set_value(f"{stats['consumption_rate']:.1f}%", 
+                                                "gold" if stats["consumption_rate"] > 80 else "pos")
+        self.kpis["low_balance"].set_value(kpis.get("low_balance", 0), 
+                                           "neg" if kpis.get("low_balance") else "muted")
 
         self.chart_top.set_data([(r["name"] or r["emp_id"], r["balance"]) for r in data["top"]],
                                 "أعلى 10 أرصدة (يوم)")
         self.chart_inst.set_data([(k, v["balance"]) for k, v in data["by_institution"].items()],
                                  "إجمالي الرصيد حسب المؤسسة")
-        self.chart_type.set_data([(k, v["days"]) for k, v in data["by_type"].items()],
-                                 "أيام الإجازات حسب النوع")
+        # رسم دائري للإجازات حسب النوع
+        self.chart_pie.set_data([(k, v["days"]) for k, v in data["by_type"].items()],
+                                "توزيع الإجازات حسب النوع")
+        # رسم خطي شهري
         self.chart_month.set_data([(MONTHS[i], days) for i, days in enumerate(data["monthly"])],
                                   f"أيام الإجازات شهرياً لعام {data['year']}")
 

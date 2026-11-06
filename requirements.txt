@@ -1,13 +1,14 @@
-# متطلبات التشغيل الأساسية لنظام إدارة الإجازات التراكمية
-PyQt6>=6.6,<7
-openpyxl>=3.1
-reportlab>=4.0
-arabic-reshaper>=3.0
-python-bidi>=0.4.2
+# متطلبات التشغيل الأساسية لنظام إدارة الرصيد التراكمي للإجازات
+PyQt6>=6.12.0,<7
+openpyxl>=3.1.5
+reportlab>=5.1.0
+arabic-reshaper>=3.1.0
+python-bidi>=0.6.12.2
 
-# اختياري: تشفير قاعدة البيانات (SQLCipher)
-# ثبّته بأحد الأوامر التالية ثم أعد تشغيل البرنامج:
-#     pip install sqlcipher3-binary      (ويندوز/ماك — الأسهل)
-#     pip install sqlcipher3             (لينكس بعد تثبيت libsqlcipher-dev)
-# دون تثبيته يبقى البرنامج يعمل كاملاً مع تعطيل ميزة التشفير فقط.
-# sqlcipher3-binary>=0.5
+# تشفير قاعدة البيانات (SQLCipher) — مطلوب لنسخ المؤسسات المشفّرة
+# على ويندوز تُثبَّت من wheel جاهز: sqlcipher3-0.6.4-cp314-win_amd64
+sqlcipher3>=0.6.5
+
+# API REST (اختياري) — مطلوب لتشغيل الـ API
+fastapi>=0.162.0
+uvicorn>=0.54.0

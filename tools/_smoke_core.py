@@ -5,7 +5,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-ROOT = Path(r"G:\Download\AMDH-Calculator")
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from amdh_leave import config
@@ -16,7 +16,8 @@ from amdh_leave.services import reports
 from amdh_leave.services.backup import BackupService
 
 tmp = Path(tempfile.mkdtemp(prefix="amdh_check_"))
-shutil.copy2(ROOT / "employees_leave.db", tmp / "employees_leave.db")
+from tests.conftest import create_legacy_db
+create_legacy_db(tmp / "employees_leave.db")
 setup_logging(tmp / "logs")
 
 paths = config.Paths(tmp).ensure()

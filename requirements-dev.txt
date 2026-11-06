@@ -1,4 +1,5 @@
 # متطلبات التطوير والاختبار
 -r requirements.txt
-pytest>=7.4
-pyinstaller>=6.0
+pytest>=9.2.0
+pytest-cov>=7.1.0
+pyinstaller>=6.22.3

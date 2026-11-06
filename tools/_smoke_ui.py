@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-ROOT = Path(r"G:\Download\AMDH-Calculator")
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from PyQt6.QtCore import QSettings, QTimer                      # noqa: E402
@@ -37,7 +37,8 @@ from amdh_leave.ui.notifications import NotificationsDialog      # noqa: E402
 from amdh_leave.ui.register import LeavesRegisterDialog          # noqa: E402
 
 TMP = Path(tempfile.mkdtemp(prefix="amdh_ui_"))
-shutil.copy2(ROOT / "employees_leave.db", TMP / "employees_leave.db")
+from tests.conftest import create_legacy_db                       # noqa: E402
+create_legacy_db(TMP / "employees_leave.db")
 
 app = QApplication(sys.argv[:1])
 setup_logging(TMP / "logs")

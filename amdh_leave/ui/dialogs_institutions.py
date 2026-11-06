@@ -6,18 +6,22 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QGridLayout,
-                             QHBoxLayout, QLabel, QLineEdit, QPlainTextEdit, QPushButton,
-                             QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget)
+                             QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPlainTextEdit,
+                             QPushButton, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget)
 
 from .. import config
 from ..services import institutions as INST
 from ..services import merge as M
+from ..services import provisioning as P
 from ..services import transfer as T
 from . import dialogs_import as DI
+from .dialogs_credentials import CredentialsDialog
+from .dialogs_export import export_for_center
 from . import theme
 from . import widgets as W
 
@@ -365,6 +369,7 @@ class InstitutionsDialog(QDialog):
         row3 = QHBoxLayout()
         row3.addWidget(W.button("📥 استيراد ملف مؤسسة", "Accent", self._import_transfer))
         row3.addWidget(W.button("📤 تصدير ملف نقل للمؤسسة", "Blue", self._export_transfer))
+        row3.addWidget(W.button("📦 تجهيز نسخة المؤسسة", "Gold", self._provision))
         row3.addWidget(W.button("🖨 آخر تقرير استيراد", "Ghost", self._last_report))
         row3.addWidget(W.button("⚠ المؤسسات التي لم تُرسل", "Warn", self._show_pending))
         row3.addStretch()
@@ -388,7 +393,7 @@ class InstitutionsDialog(QDialog):
                 continue
             rows.append(item)
         self.table.set_rows([[item["name"], item["code"], item["kind"],
-                              item["last_import_user"] or "",
+                              item.get("username") or "",
                               item["employees"], item["last_import_at"] or "—",
                               "نعم" if item["reported_this_month"] else "لا",
                               "نعم" if item["active"] else "لا"] for item in rows])
@@ -413,14 +418,19 @@ class InstitutionsDialog(QDialog):
             self.ctx.db.set_meta({"last_institution": name})
 
     # -- عمليات --------------------------------------------------------
+    def _show_credentials(self, institution, username: str, password: str) -> None:
+        CredentialsDialog(
+            self, self.ctx, institution=institution.name, code=institution.code,
+            username=username, password=password,
+            role_label=config.ROLE_LABELS.get("editor", "مدخل بيانات")).exec()
+
     def _add(self) -> None:
         dialog = InstitutionDialog(self, self.ctx)
         if dialog.exec() and dialog.created_user:
-            W.info(self, "أُنشئ المستخدم المرتبط:\n\n"
-                         f"المؤسسة: {dialog.created_user['institution']}\n"
-                         f"اسم المستخدم: {dialog.created_user['username']}\n"
-                         f"كلمة المرور: {dialog.created_user['password']}\n\n"
-                         "احفظ كلمة المرور وسلّمها للمؤسسة.", "مستخدم المؤسسة")
+            institution = self.ctx.db.get_institution(dialog.created_user["institution"])
+            if institution:
+                self._show_credentials(institution, dialog.created_user["username"],
+                                       dialog.created_user["password"])
         self._refresh()
 
     def _edit(self) -> None:
@@ -433,9 +443,9 @@ class InstitutionsDialog(QDialog):
             return
         dialog = InstitutionDialog(self, self.ctx, institution)
         if dialog.exec() and dialog.created_user:
-            W.info(self, f"اسم المستخدم: {dialog.created_user['username']}\n"
-                         f"كلمة المرور: {dialog.created_user['password']}",
-                   "مستخدم المؤسسة")
+            refreshed = self.ctx.db.get_institution(name) or institution
+            self._show_credentials(refreshed, dialog.created_user["username"],
+                                   dialog.created_user["password"])
         self._refresh()
 
     def _delete(self) -> None:
@@ -443,9 +453,10 @@ class InstitutionsDialog(QDialog):
         if not name:
             W.warn(self, "حدد مؤسسة أولاً.")
             return
-        if not W.confirm(self, f"حذف المؤسسة «{name}»؟"):
+        if not W.confirm(self, f"حذف المؤسسة «{name}» ومستخدمها المرتبط؟\n\n"
+                               "لا يمكن التراجع، ولا يمكن الحذف إن كان لها موظفون."):
             return
-        ok, message = self.ctx.db.delete_institution(name)
+        ok, message = self.ctx.db.delete_institution(name, user=self.ctx.user())
         (W.info if ok else W.warn)(self, message)
         self._refresh()
 
@@ -462,8 +473,7 @@ class InstitutionsDialog(QDialog):
             return
         account, password = INST.create_user_for_institution(self.ctx.db, institution,
                                                              user=self.ctx.user())
-        W.info(self, f"اسم المستخدم: {account.username}\nكلمة المرور: {password}",
-               "مستخدم المؤسسة")
+        self._show_credentials(institution, account.username, password)
         self._refresh()
 
     def _open_users(self) -> None:
@@ -535,7 +545,103 @@ class InstitutionsDialog(QDialog):
         if not name:
             W.warn(self, "حدد مؤسسة لتصدير ملف نقله.")
             return
-        DI.export_for_institution(self, self.ctx, name)
+        export_for_center(self, self.ctx, name)
+        self._refresh()
+
+    def _provision(self) -> None:
+        """تجهيز حزمة تشغيل كاملة للمؤسسة (برنامج + بيانات + مستخدم + مفتاح)."""
+        name = self._selected_name()
+        if not name:
+            W.warn(self, "حدد مؤسسة أولاً.")
+            return
+        if not self.ctx.session.is_admin:
+            W.error(self, "تجهيز نسخ المؤسسات متاح لمدير النظام فقط.")
+            return
+        institution = self.ctx.db.get_institution(name)
+        if institution is None:
+            return
+        if institution.is_center or self.ctx.db.center_institution() == name:
+            W.warn(self, "لا يمكن تجهيز نسخة لمؤسسة مركز الدائرة نفسها.")
+            return
+        admin_password, ok = QInputDialog.getText(
+            self, "نسخة المؤسسة",
+            "كلمة مرور admin للصيانة في هذه النسخة:\n"
+            "(تُحفظ كبصمة فقط، ولا تُكتب في ملفات الحزمة)",
+            QLineEdit.EchoMode.Password)
+        if not ok or not admin_password:
+            return
+        if len(admin_password) < 8:
+            if not W.confirm(self, "كلمة مرور الصيانة قصيرة (أقل من 8 أحرف).\n"
+                                   "هل تريد المتابعة على أي حال؟"):
+                return
+        if not W.confirm(
+                self,
+                f"سيُجهَّز مجلد كامل للمؤسسة «{name}» يحوي:\n"
+                "• نسخة البرنامج (AMDH-Leave.exe و_internal)\n"
+                "• قاعدة بيانات مؤسستها + admin + مستخدمها\n"
+                "• مفتاح فتح تلقائي + مرفقات + بيانات دخول\n\n"
+                "وسيُصفَّر مستخدم المؤسسة الحالي وتُعرض كلمة مروره الجديدة مرة واحدة.\n"
+                "متابعة؟", "تجهيز نسخة المؤسسة"):
+            return
+        parent = QFileDialog.getExistingDirectory(self, "اختر مجلداً لحزمة المؤسسة")
+        if not parent:
+            return
+        try:
+            account, user_password = INST.create_user_for_institution(
+                self.ctx.db, institution, user=self.ctx.user())
+        except Exception as exc:                      # noqa: BLE001
+            W.error(self, f"تعذّر إنشاء مستخدم المؤسسة: {exc}")
+            return
+        code = (institution.code or "INST").replace(" ", "_")
+        folder = Path(parent) / f"AMDH_{code}_{datetime.now():%Y%m%d}"
+        suffix = 2
+        while folder.exists():
+            folder = Path(parent) / f"AMDH_{code}_{datetime.now():%Y%m%d}_{suffix}"
+            suffix += 1
+        try:
+            result = P.build_institution_folder(
+                self.ctx, name, folder, admin_password=admin_password,
+                user_password=user_password, include_program=True, make_zip=True)
+        except Exception as exc:                      # noqa: BLE001
+            W.error(self, f"تعذّر تجهيز الحزمة: {exc}\n\n"
+                          f"مستخدم المؤسسة: {account.username}\nكلمة المرور: {user_password}")
+            return
+        try:
+            package_file = result.get("zip") or result.get("folder")
+            file_name = Path(package_file).name if package_file else ""
+            self.ctx.db.add_vault_entry(
+                kind="institution_key", label=f"مفتاح نسخة {name}", institution=name,
+                file_name=file_name, file_path=str(result.get("folder", "")),
+                password=result["key"], note="مفتاح فتح تلقائي لنسخة المؤسسة.",
+                user=self.ctx.user())
+            self.ctx.db.add_vault_entry(
+                kind="maintenance", label=f"admin — {name}", institution=name,
+                file_name=file_name, password=admin_password,
+                note="كلمة مرور حساب الصيانة في نسخة المؤسسة.", user=self.ctx.user())
+            self.ctx.db.add_vault_entry(
+                kind="institution_user", label=result["username"], institution=name,
+                file_name=file_name, password=result["password"],
+                note="حساب مدخل البيانات في نسخة المؤسسة.", user=self.ctx.user())
+        except Exception:                             # noqa: BLE001
+            pass
+        lines = [
+            f"تم تجهيز نسخة المؤسسة: {name}",
+            f"المجلد: {result['folder']}",
+        ]
+        if result.get("zip"):
+            lines.append(f"ملف ZIP: {result['zip']}")
+        lines.extend([
+            "",
+            f"اسم المستخدم: {result['username']}",
+            f"كلمة المرور: {result['password']}",
+            f"الموظفون: {result['counts']['employees']} | "
+            f"الإجازات: {result['counts']['leaves']} | "
+            f"المرفقات: {result['counts']['attachments']}",
+            "",
+            "حساب admin في النسخة يستخدم كلمة مرور الصيانة التي أدخلتها، وهي غير مكتوبة في الحزمة.",
+            "سلّم بيانات_الدخول.txt مع الحزمة، واحفظ كلمة مرور admin في مكان آمن.",
+        ])
+        W.info(self, "\n".join(lines), "نسخة المؤسسة")
         self._refresh()
 
     def _open_history(self) -> None:

@@ -34,14 +34,16 @@ def test_login_with_correct_password_authenticates(qapp, ctx):
 
 
 def test_login_with_wrong_password_shows_remaining_attempts(qapp, ctx):
-    """كان هذا المسار يُسقط البرنامج (NameError: trf) قبل إصلاح الاستيراد."""
+    """كان هذا المسار يُسقط البرنامج (NameError: trf) قبل إصلاح الاستيراد.
+    الآن يعرض تأخير تصاعدي بدلاً من المحاولات المتبقية مباشرة."""
     dialog = LoginDialog(None, ctx)
     dialog.e_user.setText("admin")
     dialog.e_pass.setText("كلمة خاطئة")
     dialog._login()
     assert dialog.user is None
     assert dialog.lbl_error.text()                     # لا يظهر خطأ فارغ
-    assert str(MAX_ATTEMPTS - 1) in dialog.lbl_error.text()   # المحاولات المتبقية
+    # التأخير التصاعدي يعرض رسالة الانتظار بدلاً من المحاولات المتبقية
+    assert "انتظر" in dialog.lbl_error.text()
     assert dialog.e_pass.text() == ""                  # يُفرَّغ الحقل
     dialog.close()
 

@@ -22,14 +22,23 @@ def qapp():
 
 
 def test_placeholder_assets_are_detected():
-    """الملفات المسلَّمة فارغة (شفافة) فيُستخدم البديل المرسوم."""
-    for name in (assets.LOGO, assets.DEPARTMENT_LOGO, assets.DEVELOPER_PHOTO, assets.APP_ICON):
+    """الشعارات المسلَّمة فارغة (شفافة) فيُستخدم البديل المرسوم."""
+    for name in (assets.LOGO, assets.DEPARTMENT_LOGO, assets.APP_ICON):
         path = assets.PACKAGE_ASSETS / name
         if not path.exists():
             pytest.skip(f"{name} غير موجود")
         assert path.stat().st_size < assets.PLACEHOLDER_MAX_BYTES
         assert assets.asset_path(name) is None
         assert assets.is_placeholder(name) is True
+
+
+def test_developer_photo_is_fixed_in_package(qapp):
+    """صورة المطوّر حقيقية وثابتة من الحزمة، ولا يستبدلها مجلد المستخدم."""
+    path = assets.PACKAGE_ASSETS / assets.DEVELOPER_PHOTO
+    assert path.exists() and path.stat().st_size >= assets.PLACEHOLDER_MAX_BYTES
+    assert assets.package_asset_path(assets.DEVELOPER_PHOTO) is not None
+    assert assets.is_placeholder(assets.DEVELOPER_PHOTO) is False
+    assert assets.developer_photo(240, 300) is not None
 
 
 def test_user_assets_dir_takes_priority(qapp, tmp_path):

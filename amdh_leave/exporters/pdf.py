@@ -52,8 +52,16 @@ _registered: str | None = None
 _tried = False
 
 
+FONT_BOLD_NAME = "ArabicFont-Bold"
+FONT_ITALIC_NAME = "ArabicFont-Italic"
+
+
 def register_font() -> str | None:
-    """يسجّل أول خط عربي متاح. يعيد اسم الخط أو None."""
+    """يسجّل أول خط عربي متاح. يعيد اسم الخط أو None.
+    
+    يسجل 3 نسخ: Regular, Bold, Italic — كلها من نفس الملف لتجنب خطأ
+    "Can't map determine family/bold/italic" عند استخدام ParagraphStyle.
+    """
     global _registered, _tried
     if _registered or _tried:
         return _registered
@@ -66,6 +74,9 @@ def register_font() -> str | None:
             continue
         try:
             pdfmetrics.registerFont(TTFont(FONT_NAME, candidate))
+            # تسجيل نسخ bold و italic من نفس الملف لتجنب خطأ family/bold/italic
+            pdfmetrics.registerFont(TTFont(FONT_BOLD_NAME, candidate))
+            pdfmetrics.registerFont(TTFont(FONT_ITALIC_NAME, candidate))
             _registered = FONT_NAME
             LOG.info("خط PDF: %s", candidate)
             return _registered
@@ -101,9 +112,18 @@ def available() -> tuple[bool, str]:
 
 
 def _styles():
+    """يعيد ParagraphStyle مع تحديد fontName صريح لـ bold و italic لتجنب الخطأ."""
     base = getSampleStyleSheet()
-    title = ParagraphStyle("ArTitle", parent=base["Title"], fontName=FONT_NAME, fontSize=15, alignment=1)
-    info = ParagraphStyle("ArInfo", parent=base["Normal"], fontName=FONT_NAME, fontSize=10, alignment=1)
+    title = ParagraphStyle(
+        "ArTitle", parent=base["Title"], fontName=FONT_NAME, fontSize=15, alignment=1,
+        fontNameBold=FONT_BOLD_NAME, fontNameItalic=FONT_ITALIC_NAME,
+        fontNameBoldItalic=FONT_BOLD_NAME,
+    )
+    info = ParagraphStyle(
+        "ArInfo", parent=base["Normal"], fontName=FONT_NAME, fontSize=10, alignment=1,
+        fontNameBold=FONT_BOLD_NAME, fontNameItalic=FONT_ITALIC_NAME,
+        fontNameBoldItalic=FONT_BOLD_NAME,
+    )
     return title, info
 
 
@@ -184,4 +204,9 @@ def export_statement(path: str | Path, employee: Employee, policy: Policy, state
              r["earned"], r["taken"], r["expired"], r["carry_out"]] for r in statement_rows]
     subtitle = (f"{employee.name} | الرقم الوظيفي: {employee.emp_id} | المستحقة: {balance.earned} | "
                 f"المأخوذة: {balance.taken} | الرصيد: {balance.balance} يوم")
+    if getattr(balance, "has_opening", False):
+        subtitle = (f"{employee.name} | الرقم الوظيفي: {employee.emp_id} | "
+                    f"الرصيد الافتتاحي: {balance.opening_balance} "
+                    f"({D.to_iso(balance.opening_date)}) | المستحقة بعد الافتتاحي: {balance.earned} | "
+                    f"المأخوذة: {balance.taken} | الرصيد: {balance.balance} يوم")
     return _build(Path(path), "كشف حساب الرصيد التراكمي", subtitle, headers, data, landscape_mode=False)

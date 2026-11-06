@@ -24,7 +24,7 @@ APP_ICON = "icon.ico"
 
 PLACEHOLDER_MAX_BYTES = 1500      # أي ملف أصغر من هذا يُعدّ فارغاً
 _user_assets_dir: Path | None = None
-_cache: dict[tuple[str, int, int], QPixmap | None] = {}
+_cache: dict[tuple[str, int, int, bool], QPixmap | None] = {}
 
 
 def set_user_assets_dir(path: Path | None) -> None:
@@ -53,16 +53,27 @@ def asset_path(name: str) -> Path | None:
     return None
 
 
+def package_asset_path(name: str) -> Path | None:
+    """مسار الصورة من الحزمة فقط (لتثبيت صورة المطوّر مثلاً)."""
+    path = PACKAGE_ASSETS / name
+    try:
+        if path.exists() and path.stat().st_size >= PLACEHOLDER_MAX_BYTES:
+            return path
+    except OSError:
+        pass
+    return None
+
+
 def is_placeholder(name: str) -> bool:
     return asset_path(name) is None
 
 
 def load_pixmap(name: str, width: int = 0, height: int = 0,
-                keep_aspect: bool = True) -> QPixmap | None:
-    path = asset_path(name)
+                keep_aspect: bool = True, allow_user: bool = True) -> QPixmap | None:
+    path = asset_path(name) if allow_user else package_asset_path(name)
     if path is None:
         return None
-    key = (name, width, height)
+    key = (name, width, height, allow_user)
     if key in _cache:
         return _cache[key]
     pixmap = QPixmap(str(path))
@@ -198,7 +209,8 @@ def department_logo(size: int = 64, fallback: bool = True) -> QPixmap | None:
 
 
 def developer_photo(width: int = 320, height: int = 400, fallback: bool = True) -> QPixmap | None:
-    pixmap = load_pixmap(DEVELOPER_PHOTO, width, height)
+    """صورة المطوّر ثابتة من الحزمة (لا يستبدلها مجلد بيانات المستخدم)."""
+    pixmap = load_pixmap(DEVELOPER_PHOTO, width, height, allow_user=False)
     if pixmap is None and fallback:
         return draw_developer_photo(width, height)
     return pixmap

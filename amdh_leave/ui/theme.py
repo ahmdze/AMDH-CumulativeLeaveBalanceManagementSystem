@@ -7,7 +7,7 @@ from PyQt6.QtGui import QColor, QIcon, QPainter, QPixmap
 
 from .. import colors, config, style
 
-_state: dict[str, object] = {"theme": "dark", "accent": None}
+_state: dict[str, object] = {"theme": "light", "accent": None}
 _accent_cache: dict[str, dict[str, str]] = {}
 
 

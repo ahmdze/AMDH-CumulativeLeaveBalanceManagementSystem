@@ -117,8 +117,9 @@ def test_quota_warning(employee, policy):
 def test_preview_balance_excludes_edited_leave(employee, policy):
     leave = employee.leaves[1]
     before = validation.preview_balance(employee, employee.leaves, policy, None,
-                                        exclude_id=leave.id)
-    after = validation.preview_balance(employee, employee.leaves, policy, leave)
+                                        today=date(2026, 10, 6), exclude_id=leave.id)
+    after = validation.preview_balance(employee, employee.leaves, policy, leave,
+                                       today=date(2026, 10, 6))
     assert before.balance == 89      # بدون الإجازة الاعتيادية: لا شيء مأخوذ
     assert before.taken == 0
     assert after.balance == 69

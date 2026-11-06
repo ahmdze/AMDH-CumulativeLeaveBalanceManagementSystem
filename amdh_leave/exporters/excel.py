@@ -33,6 +33,19 @@ def _check() -> None:
         raise RuntimeError("مكتبة openpyxl غير مثبتة — لا يمكن التصدير إلى Excel.")
 
 
+def _build_custom(path: str | Path, headers: list[str], rows: list[list],
+                  title: str = "تقرير مخصص") -> Path:
+    """تصدير تقرير مخصص إلى Excel."""
+    _check()
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = title[:31]
+    _style_sheet(sheet, headers, rows)
+    path = Path(path)
+    workbook.save(path)
+    return path
+
+
 def _style_sheet(ws, headers: list[str], rows: list[list], widths: list[int] | None = None,
                  negative_columns: tuple[int, ...] = ()) -> None:
     ws.sheet_view.rightToLeft = True
@@ -63,6 +76,71 @@ def _style_sheet(ws, headers: list[str], rows: list[list], widths: list[int] | N
         ws.auto_filter.ref = f"A1:{get_column_letter(len(headers))}{len(rows) + 1}"
 
 
+EMPLOYEE_MASTER_HEADERS = [
+    "الرقم الوظيفي", "الاسم", "العنوان الوظيفي", "مكان العمل", "المؤسسة/القسم",
+    "الجنس", "الحالة", "تاريخ المباشرة", "تاريخ انتهاء الخدمة", "ملاحظات",
+    "له رصيد افتتاحي", "الرصيد الافتتاحي (أيام)", "تاريخ احتساب الرصيد",
+    "من قام بالحساب", "تفاصيل الرصيد",
+]
+STATUS_LABELS = {"active": "على الملاك", "leave": "بإجازة", "retired": "متقاعد/منتهية خدمته"}
+
+
+def export_employee_master(path: str | Path, employees: list[Employee]) -> Path:
+    """تصدير بيانات الموظفين كاملة (الحقول القابلة للإدخال) إلى Excel."""
+    _check()
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "الموظفون"
+    rows = []
+    for employee in employees:
+        rows.append([
+            employee.emp_id, employee.name, employee.job_title, employee.workplace,
+            employee.institution, employee.gender,
+            STATUS_LABELS.get(employee.status, employee.status),
+            D.to_iso(employee.start_date), D.to_iso(employee.end_date), employee.notes,
+            "نعم" if employee.has_opening_balance else "لا",
+            int(employee.opening_balance or 0) if employee.has_opening_balance else "",
+            D.to_iso(employee.opening_balance_date) if employee.has_opening_balance else "",
+            employee.opening_balance_by if employee.has_opening_balance else "",
+            employee.opening_balance_note if employee.has_opening_balance else "",
+        ])
+    _style_sheet(sheet, EMPLOYEE_MASTER_HEADERS, rows,
+                 widths=[14, 26, 20, 18, 20, 8, 16, 13, 13, 28, 12, 14, 13, 20, 30])
+    path = Path(path)
+    workbook.save(path)
+    return path
+
+
+def export_employee_template(path: str | Path) -> Path:
+    """قالب فارغ لاستيراد الموظفين بنفس الحقول."""
+    _check()
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "الموظفون"
+    example = [
+        "1001", "مثال: أحمد زياد", "تقني طبي", "المركز الصحي", "مستشفى الكرامة",
+        "ذكر", "على الملاك", "2019-04-30", "", "ملاحظة",
+        "نعم", 20, "2025-12-31", "اسم المحاسب", "آخر رصيد معتمد",
+    ]
+    _style_sheet(sheet, EMPLOYEE_MASTER_HEADERS, [example],
+                 widths=[14, 26, 20, 18, 20, 8, 16, 13, 13, 28, 12, 14, 13, 20, 30])
+    note = workbook.create_sheet("تعليمات")
+    note.sheet_view.rightToLeft = True
+    for line in (
+        "الأعمدة الإلزامية: الرقم الوظيفي، الاسم، تاريخ المباشرة.",
+        "الحالة: على الملاك / بإجازة / متقاعد.",
+        "إذا «له رصيد افتتاحي = نعم» فيجب إدخال الرصيد وتاريخ الاحتساب ومن قام بالحساب.",
+        "الرصيد الافتتاحي هو المتبقي كما في تاريخ الاحتساب، ويُحسب من اليوم التالي.",
+        "لا تُدخل إجازات تخصم من الرصيد قبل/عند تاريخ الاحتساب.",
+        "الخانات الفارغة في الرصيد الافتتاحي تعني عدم تغيير رصيد الموظف الموجود.",
+    ):
+        note.append([line])
+    note.column_dimensions["A"].width = 100
+    path = Path(path)
+    workbook.save(path)
+    return path
+
+
 def export_employees(path: str | Path, rows: list[dict], *, title: str = "الموظفون") -> Path:
     _check()
     wb = openpyxl.Workbook()
@@ -83,7 +161,8 @@ def export_employees(path: str | Path, rows: list[dict], *, title: str = "الم
     return path
 
 
-def export_leaves(path: str | Path, employee: Employee, policy: Policy) -> Path:
+def export_leaves(path: str | Path, employee: Employee, policy: Policy,
+                  today=None) -> Path:
     _check()
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -101,7 +180,7 @@ def export_leaves(path: str | Path, employee: Employee, policy: Policy) -> Path:
     _style_sheet(ws, headers, data, widths=[5, 16, 13, 13, 9, 8, 13, 11, 12, 12, 16, 13, 26, 18, 14])
     info = wb.create_sheet("ملخص")
     info.sheet_view.rightToLeft = True
-    bal = B.compute_balance(employee, employee.leaves, policy)
+    bal = B.compute_balance(employee, employee.leaves, policy, today)
     for label, value in (("الرقم الوظيفي", employee.emp_id), ("الاسم", employee.name),
                          ("العنوان الوظيفي", employee.job_title), ("مكان العمل", employee.workplace),
                          ("المؤسسة", employee.institution), ("تاريخ المباشرة", D.to_iso(employee.start_date)),
@@ -159,10 +238,19 @@ def export_statement(path: str | Path, employee: Employee, policy: Policy,
     _style_sheet(ws, headers, data, widths=[12, 13, 13, 13, 13, 13, 10, 10, 10, 14])
     summary = wb.create_sheet("الملخص")
     summary.sheet_view.rightToLeft = True
-    for label, value in (("الاسم", employee.name), ("الرقم الوظيفي", employee.emp_id),
-                         ("أيام الخدمة الكلية", balance.raw_days), ("خارج الرصيد", balance.outside),
-                         ("الدوام المحسوبة", balance.net_days), ("المستحقة", balance.earned),
-                         ("المأخوذة", balance.taken), ("الرصيد", balance.balance)):
+    rows = [("الاسم", employee.name), ("الرقم الوظيفي", employee.emp_id)]
+    if getattr(balance, "has_opening", False):
+        rows.extend([
+            ("الرصيد الافتتاحي", balance.opening_balance),
+            ("تاريخ الاحتساب", D.to_iso(balance.opening_date)),
+            ("من قام بالحساب", balance.extra.get("opening_by", "")),
+        ])
+    rows.extend([
+        ("أيام الخدمة الكلية", balance.raw_days), ("خارج الرصيد", balance.outside),
+        ("الدوام المحسوبة", balance.net_days), ("المستحقة بعد الافتتاحي", balance.earned),
+        ("المأخوذة بعد الافتتاحي", balance.taken), ("الرصيد", balance.balance),
+    ])
+    for label, value in rows:
         summary.append([label, value])
     summary.column_dimensions["A"].width = 22
     summary.column_dimensions["B"].width = 22

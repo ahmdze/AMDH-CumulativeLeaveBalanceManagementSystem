@@ -36,18 +36,23 @@ class LeavesRegisterDialog(BaseDialog):
         summary_layout = QHBoxLayout(summary)
         self.lbls: dict[str, W.LabeledValue] = {}
         for key, title in (("raw_days", "أيام الخدمة"), ("outside", "خارج الرصيد"),
-                           ("net_days", "الدوام المحسوبة"), ("earned", "المستحقة"),
-                           ("taken", "المأخوذة"), ("balance", "الرصيد")):
+                           ("net_days", "الدوام المحسوبة"), ("opening", "الرصيد الافتتاحي"),
+                           ("earned", "المستحقة"), ("taken", "المأخوذة"), ("balance", "الرصيد")):
             widget = W.LabeledValue(title)
             self.lbls[key] = widget
             summary_layout.addWidget(widget)
         layout.addWidget(summary)
 
         row = QHBoxLayout()
-        row.addWidget(W.button("➕ إضافة إجازة", "Accent", self._add))
-        row.addWidget(W.button("✏ تعديل المحددة", "Blue", self._edit))
-        row.addWidget(W.button("🗑 حذف المحددة", "Warn", self._delete))
-        row.addWidget(W.button("📎 مرفقات", "Ghost", self._attachments))
+        btn_add = W.button("➕ إضافة إجازة", "Accent", self._add)
+        btn_edit = W.button("✏ تعديل المحددة", "Blue", self._edit)
+        btn_delete = W.button("🗑 حذف المحددة", "Warn", self._delete)
+        btn_attach = W.button("📎 مرفقات", "Ghost", self._attachments)
+        for button, permission in ((btn_add, "edit_leave"), (btn_edit, "edit_leave"),
+                                   (btn_delete, "delete_leave"),
+                                   (btn_attach, "manage_attachments")):
+            button.setVisible(self.ctx.can(permission))
+            row.addWidget(button)
         row.addWidget(W.button("📄 كشف الحساب", "Gold", self._statement))
         row.addStretch()
         row.addWidget(W.button("📊 Excel", "Ghost", self._export_excel))
@@ -74,14 +79,19 @@ class LeavesRegisterDialog(BaseDialog):
         self.employee = employee
         self.leaves = self._leaves()
         balance = B.compute_balance(employee, employee.leaves, self.policy)
-        for key in ("raw_days", "outside", "net_days", "earned", "taken", "balance"):
-            value = getattr(balance, key)
-            key_color = theme.balance_color(balance.balance, self.policy.low_balance_days) \
-                if key == "balance" else "text"
-            if key == "earned":
-                key_color = "pos"
-            if key == "taken":
-                key_color = "gold"
+        self.lbls["opening"].setVisible(balance.has_opening)
+        for key in ("raw_days", "outside", "net_days", "opening", "earned", "taken", "balance"):
+            if key == "opening":
+                value = balance.opening_balance
+                key_color = "blue"
+            else:
+                value = getattr(balance, key)
+                key_color = theme.balance_color(balance.balance, self.policy.low_balance_days) \
+                    if key == "balance" else "text"
+                if key == "earned":
+                    key_color = "pos"
+                if key == "taken":
+                    key_color = "gold"
             self.lbls[key].set_value(value, key_color, " يوم")
 
         rows = []

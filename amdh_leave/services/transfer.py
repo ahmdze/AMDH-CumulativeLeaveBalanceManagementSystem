@@ -27,7 +27,8 @@ FORMAT = "amdh-transfer-1"
 MANIFEST_NAME = "manifest.json"
 DATA_NAME = "data.db"
 ATTACHMENTS_DIR = "attachments"
-DROP_TABLES = ("app_users", "audit_log", "imports")
+DROP_TABLES = ("app_users", "audit_log", "imports", "password_vault",
+               "employee_opening_history")
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +48,9 @@ def export_transfer(db, dest_path: str | Path, *, institution: str = "",
     work_dir = Path(tempfile.mkdtemp(prefix="amdh_export_"))
     try:
         staging = work_dir / DATA_NAME
-        db.backup_to(staging)
+        # ملف النقل يجب أن يكون عادياً (غير مشفّر) حتى يُقرأ ويُدمج في أي نسخة؛
+        # لذلك نُصدّر نسخة نصية من القاعدة المشفّرة بدل نسخها كما هي.
+        db.export_plaintext(staging)
         counts = _sanitize(staging, institution, db.conn)
         manifest = {
             "format": FORMAT,

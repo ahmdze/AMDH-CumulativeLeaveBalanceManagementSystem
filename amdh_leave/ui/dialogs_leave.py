@@ -309,9 +309,13 @@ class AttachmentsDialog(BaseDialog):
         self.table = W.TablePanel(["#", "الملف", "أُضيف في", "بواسطة"])
         layout.addWidget(self.table)
         row = QHBoxLayout()
-        row.addWidget(W.button("➕ إضافة مرفق", "Accent", self._add))
+        btn_add = W.button("➕ إضافة مرفق", "Accent", self._add)
+        btn_add.setVisible(self.ctx.can("manage_attachments"))
+        row.addWidget(btn_add)
         row.addWidget(W.button("📂 فتح المحدد", "Blue", self._open))
-        row.addWidget(W.button("🗑 حذف المحدد", "Warn", self._delete))
+        btn_delete = W.button("🗑 حذف المحدد", "Warn", self._delete)
+        btn_delete.setVisible(self.ctx.can("manage_attachments"))
+        row.addWidget(btn_delete)
         row.addStretch()
         row.addWidget(self.close_button())
         layout.addLayout(row)
@@ -327,6 +331,9 @@ class AttachmentsDialog(BaseDialog):
         self.table.set_rows(rows, empty_text="لا توجد مرفقات")
 
     def _add(self) -> None:
+        if not self.ctx.can("manage_attachments"):
+            W.error(self, "لا تملك صلاحية إدارة المرفقات.")
+            return
         if not self.leave_id:
             W.info(self, "احفظ الإجازة أولاً ثم أضف المرفقات.")
             return
@@ -359,6 +366,9 @@ class AttachmentsDialog(BaseDialog):
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
 
     def _delete(self) -> None:
+        if not self.ctx.can("manage_attachments"):
+            W.error(self, "لا تملك صلاحية إدارة المرفقات.")
+            return
         row = self.table.current_row()
         if row < 0:
             W.warn(self, "حدد مرفقاً.")
@@ -403,16 +413,30 @@ class StatementDialog(BaseDialog):
             ("أيام الخدمة", self.balance.raw_days, "text"),
             ("خارج الرصيد", self.balance.outside, "text"),
             ("الدوام المحسوبة", self.balance.net_days, "text"),
-            ("المستحقة", self.balance.earned, "pos"),
-            ("المأخوذة", self.balance.taken, "gold"),
+        ]
+        if self.balance.has_opening:
+            values.append(("الرصيد الافتتاحي", self.balance.opening_balance, "blue"))
+        values.extend([
+            ("المستحقة بعد الافتتاحي" if self.balance.has_opening else "المستحقة",
+             self.balance.earned, "pos"),
+            ("المأخوذة بعد الافتتاحي" if self.balance.has_opening else "المأخوذة",
+             self.balance.taken, "gold"),
             ("الرصيد", self.balance.balance,
              theme.balance_color(self.balance.balance, self.policy.low_balance_days)),
-        ]
+        ])
         for title, value, key in values:
             widget = W.LabeledValue(title)
             widget.set_value(value, key, " يوم")
             summary_layout.addWidget(widget)
         layout.addWidget(summary)
+
+        if self.statement.opening_date:
+            opening = (
+                f"قبل النظام: الرصيد الافتتاحي {self.statement.opening_balance} يوم "
+                f"كما في {D.to_iso(self.statement.opening_date)}"
+                + (f" — حسبه: {self.statement.opening_by}" if self.statement.opening_by else "")
+                + (f" — {self.statement.opening_note}" if self.statement.opening_note else ""))
+            layout.addWidget(W.muted_label(opening))
 
         layout.addWidget(W.muted_label(self.statement.policy_note +
                                        " — قد يختلف مجموع الاستحقاق السنوي بيوم عن الاحتساب المتواصل "
@@ -496,11 +520,13 @@ class SettlementDialog(BaseDialog):
         summary = W.card()
         summary_layout = QHBoxLayout(summary)
         self.lbl_service = W.LabeledValue("صافي أيام الخدمة")
+        self.lbl_opening = W.LabeledValue("الرصيد الافتتاحي")
         self.lbl_earned = W.LabeledValue("المستحقة")
         self.lbl_taken = W.LabeledValue("المأخوذة")
         self.lbl_balance = W.LabeledValue("الرصيد المستحق")
         self.lbl_amount = W.LabeledValue("المبلغ")
-        for widget in (self.lbl_service, self.lbl_earned, self.lbl_taken, self.lbl_balance, self.lbl_amount):
+        for widget in (self.lbl_service, self.lbl_opening, self.lbl_earned, self.lbl_taken,
+                       self.lbl_balance, self.lbl_amount):
             summary_layout.addWidget(widget)
         layout.addWidget(summary)
         layout.addWidget(W.muted_label("الرصيد السالب يعني أن الموظف استهلك أكثر من استحقاقه "
@@ -514,6 +540,9 @@ class SettlementDialog(BaseDialog):
         result = B.settlement(self.employee, self.employee.leaves, self.policy,
                               today=as_of, day_value=value, as_of_end_of_service=False)
         self.lbl_service.set_value(result.service_days, "text", " يوم")
+        self.lbl_opening.setVisible(self.employee.has_opening_balance)
+        if self.employee.has_opening_balance:
+            self.lbl_opening.set_value(self.employee.opening_balance, "blue", " يوم")
         self.lbl_earned.set_value(result.earned, "pos", " يوم")
         self.lbl_taken.set_value(result.taken, "gold", " يوم")
         self.lbl_balance.set_value(result.balance_days,

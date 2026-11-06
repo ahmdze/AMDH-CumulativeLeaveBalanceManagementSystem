@@ -37,15 +37,20 @@ def test_permission_matrix():
     admin = S.make_session(None, False)
     assert admin.is_admin and admin.can("purge") and admin.can("manage_users")
     assert admin.can("delete_employee") and admin.can("edit_policy")
+    assert admin.can("view_holidays") and admin.can("manage_holidays")
 
     editor = S.make_session(AppUser(username="e", role="editor"), True)
     assert editor.can("edit_leave") and editor.can("edit_employee") and editor.can("export")
-    assert not editor.can("delete_employee") and not editor.can("purge")
-    assert not editor.can("manage_users") and not editor.can("edit_policy")
+    assert editor.can("view_holidays") and editor.can("manage_holidays")
+    assert editor.can("delete_employee") and editor.can("delete_leave") and editor.can("purge")
+    assert editor.can("edit_policy") and editor.can("backup_restore")
+    assert editor.can("manage_encryption") and editor.can("db_operations")
+    assert not editor.can("manage_users") and not editor.can("manage_institutions")
+    assert not editor.can("view_audit") and not editor.can("edit_rules")
     assert editor.read_only is False
 
     viewer = S.make_session(AppUser(username="v", role="viewer"), True)
-    assert viewer.can("export")
+    assert viewer.can("export") and viewer.can("view_holidays")
     assert not viewer.can("edit_leave") and not viewer.can("edit_employee")
     assert viewer.read_only is True
 

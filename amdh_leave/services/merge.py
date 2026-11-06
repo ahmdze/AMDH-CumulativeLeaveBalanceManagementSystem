@@ -25,13 +25,15 @@ from datetime import date, datetime
 from pathlib import Path
 
 from .. import config
+from ..db import SCHEMA_VERSION
 from ..logging_setup import get_logger
 from . import crypto, dates as D
 
 LOG = get_logger("merge")
 
 EMPLOYEE_CONTENT = ("name", "job_title", "workplace", "gender", "start_date", "end_date",
-                    "notes", "status")
+                    "notes", "status", "opening_balance_set", "opening_balance",
+                    "opening_balance_date", "opening_balance_by", "opening_balance_note")
 LEAVE_CONTENT = ("type", "start_date", "end_date", "amount", "unit", "days_actual",
                  "working_days", "count_mode", "order_num", "order_date", "outside_balance",
                  "reason", "status", "is_adjustment", "manual_days")
@@ -39,7 +41,7 @@ ALLOWED_LEAVE_FIELDS = LEAVE_CONTENT + ("uid", "institution", "deleted_at", "del
                                         "created_by", "approved_by", "approved_at")
 LEAVE_NUMERIC = {"amount", "days_actual", "working_days", "outside_balance", "is_adjustment",
                  "manual_days"}
-EMPLOYEE_TIMESTAMPS = ("created_at", "updated_at")
+EMPLOYEE_TIMESTAMPS = ("created_at", "updated_at", "opening_updated_at")
 LEAVE_TIMESTAMPS = ("added_date", "modified_at")
 
 
@@ -354,11 +356,11 @@ def build_plan(target, source_path: Path, options: MergeOptions | None = None) -
     plan.institution = declared
 
     # تحذيرات أولية
-    if plan.source_schema and plan.source_schema < 5:
+    if plan.source_schema and plan.source_schema < SCHEMA_VERSION:
         plan.warnings.append(
             f"الملف من إصدار مخطط أقدم ({plan.source_schema}) — ستُنقل البيانات المتاحة فقط، "
             "ويُستحسن تحديث نسخة المؤسسة إلى الإصدار الحالي.")
-    if plan.source_schema > 5:
+    if plan.source_schema > SCHEMA_VERSION:
         plan.warnings.append(f"الملف من إصدار أحدث ({plan.source_schema}) — حدّث نسخة المركز أولاً.")
     source_policy = plan.manifest.get("policy_fingerprint", "")
     if source_policy and source_policy != policy_fingerprint(target):
@@ -373,6 +375,29 @@ def build_plan(target, source_path: Path, options: MergeOptions | None = None) -
 
     target_employees = target.raw_employees()
     target_leaves = target.raw_leaves()
+    policy = target.policy(refresh=True)
+
+    def opening_conflicts(emp_id: str, date_text: str) -> list[str]:
+        cutoff = D.parse_iso(date_text)
+        if not cutoff:
+            return []
+        found: list[str] = []
+        for leave in target_leaves.values():
+            if str(leave.get("emp_id") or "") != emp_id:
+                continue
+            if leave.get("deleted_at"):
+                continue
+            start = D.parse_iso(leave.get("start_date"))
+            end = D.parse_iso(leave.get("end_date")) or start
+            if not start:
+                continue
+            rule = policy.rule(str(leave.get("type") or ""))
+            if (rule.consumes_balance or leave.get("is_adjustment")) and start <= cutoff:
+                found.append(f"{leave.get('type')} {D.to_iso(start)}")
+            elif rule.service_exclusion and start <= cutoff <= (end or start):
+                found.append(f"{leave.get('type')} {D.to_iso(start)}")
+        return found
+
     target_hashes = target.attachment_hashes()
     target_attachment_uids = {row["uid"] for row in target.raw_attachments() if row.get("uid")}
     today = date.today()
@@ -391,6 +416,20 @@ def build_plan(target, source_path: Path, options: MergeOptions | None = None) -
                 "reason": f"مؤسسة أخرى ({source_inst})"})
             continue
         existing = target_employees.get(emp_id)
+        if existing and source.get("opening_balance_set"):
+            conflicts = opening_conflicts(emp_id, str(source.get("opening_balance_date") or ""))
+            if conflicts:
+                source = dict(source)
+                for field in ("opening_balance_set", "opening_balance", "opening_balance_date",
+                              "opening_balance_by", "opening_balance_note",
+                              "opening_updated_at", "opening_updated_by"):
+                    source[field] = existing.get(field)
+                plan.conflicts.append({
+                    "kind": "opening_balance", "emp_id": emp_id,
+                    "name": source.get("name") or "",
+                    "fields": ["opening_balance_date"], "winner": "المركز (رصيده الحالي)",
+                    "detail": "الرصيد الافتتاحي الوارد يتعارض مع إجازات موجودة قبل تاريخه: "
+                              + "، ".join(conflicts[:5])})
         if not existing:
             record = dict(source)
             record.setdefault("uid", uuid.uuid4().hex)
@@ -598,14 +637,20 @@ def execute_plan(target, plan: MergePlan, *, user: str = "",
         for record in plan.employees_add:
             columns = ["emp_id", "name", "job_title", "workplace", "institution", "gender",
                        "start_date", "end_date", "notes", "status", "created_at", "updated_at",
-                       "deleted_at", "deleted_by", "uid", "previous_institution", "moved_on"]
+                       "deleted_at", "deleted_by", "uid", "previous_institution", "moved_on",
+                       "opening_balance_set", "opening_balance", "opening_balance_date",
+                       "opening_balance_by", "opening_balance_note", "opening_updated_at",
+                       "opening_updated_by"]
             c.execute(f"INSERT INTO employees ({','.join(columns)}) "
                       f"VALUES ({','.join('?' * len(columns))})",
                       [_employee_value(record, column, now) for column in columns])
         for emp_id, record, _old in plan.employees_update:
             columns = ["name", "job_title", "workplace", "institution", "gender", "start_date",
                        "end_date", "notes", "status", "updated_at", "deleted_at", "deleted_by",
-                       "uid", "previous_institution", "moved_on"]
+                       "uid", "previous_institution", "moved_on",
+                       "opening_balance_set", "opening_balance", "opening_balance_date",
+                       "opening_balance_by", "opening_balance_note", "opening_updated_at",
+                       "opening_updated_by"]
             c.execute(f"UPDATE employees SET {','.join(f'{column}=?' for column in columns)} "
                       "WHERE emp_id=?",
                       [_employee_value(record, column, now) for column in columns] + [emp_id])
@@ -683,6 +728,8 @@ def _employee_value(record: dict, column: str, now: str):
     """قيمة عمود موظف مع النوع الصحيح (لا نصوص في أعمدة نصية/زمنية)."""
     if column == "emp_id":
         return str(record.get("emp_id") or "")
+    if column == "opening_updated_at":
+        return record.get(column) or ""
     if column in EMPLOYEE_TIMESTAMPS:
         return record.get(column) or now
     value = record.get(column)

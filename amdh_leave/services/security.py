@@ -14,14 +14,17 @@ PERMISSIONS: dict[str, set[str]] = {
     "admin": {
         "edit_employee", "delete_employee", "purge", "edit_leave", "delete_leave",
         "manage_users", "edit_policy", "edit_rules", "backup_restore", "import_db",
-        "export", "view_audit", "manage_holidays", "manage_attachments", "approve",
-        "manage_institutions", "import_transfer", "export_transfer", "transfer_employee",
+        "export", "view_audit", "view_holidays", "manage_holidays", "manage_attachments",
+        "approve", "manage_institutions", "import_transfer", "export_transfer",
+        "transfer_employee", "manage_encryption", "db_operations",
     },
     "editor": {
-        "edit_employee", "edit_leave", "export", "manage_attachments", "approve",
-        "export_transfer",
+        "edit_employee", "delete_employee", "edit_leave", "delete_leave", "purge",
+        "export", "manage_attachments", "approve", "export_transfer", "view_holidays",
+        "manage_holidays", "transfer_employee", "edit_policy", "backup_restore",
+        "manage_encryption", "db_operations",
     },
-    "viewer": {"export"},
+    "viewer": {"export", "view_holidays"},
 }
 
 ROLE_ORDER = ("admin", "editor", "viewer")

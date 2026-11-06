@@ -9,7 +9,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import date
+from datetime import date, timedelta
 
 from .. import config as cfg
 from ..models import Balance, Employee, Leave, Settlement, Statement, YearLine
@@ -129,20 +129,63 @@ def compute_continuous(employee: Employee, leaves: list[Leave], policy: Policy,
         excluded, consumed = leave_effect(policy, lv)
         outside += excluded
         taken += consumed
-
     net_days = max(0, raw_days - outside)
+
+    if employee.has_opening_balance:
+        cutoff = employee.opening_balance_date
+        calc_start = max(start, cutoff + timedelta(days=1)) if cutoff else start
+        service_after = max(0, (limit - calc_start).days)
+        outside_after = 0
+        taken_after = 0
+        for lv in leaves:
+            s, e = leave_span(lv)
+            if not s:
+                continue
+            excluded, consumed = leave_effect(policy, lv)
+            if cutoff and s <= cutoff:
+                # إجازة مستبعدة من الخدمة تمتد بعد التاريخ: نحسب الجزء الواقع بعده فقط
+                if excluded and e and e > cutoff:
+                    rule = policy.rule(lv.type)
+                    partial = D.days_count(cutoff + timedelta(days=1), e, rule.count_mode,
+                                           policy.weekend, policy.holidays)
+                    outside_after += min(excluded, partial)
+                # ما يخصم من الرصيد قبل/عند التاريخ ممنوع أصلاً
+                continue
+            outside_after += excluded
+            taken_after += consumed
+        net_after = max(0, service_after - outside_after)
+        earned_after = _cap(net_after // policy.days_per_leave, net_after, policy)
+        final = int(employee.opening_balance or 0) + earned_after - taken_after
+        return Balance(
+            raw_days=raw_days, outside=outside, net_days=net_days,
+            earned=earned_after, taken=taken_after, balance=final,
+            opening_balance=int(employee.opening_balance or 0), opening_date=cutoff,
+            earned_after=earned_after, taken_after=taken_after,
+            service_days_after=service_after, net_days_after=net_after, has_opening=True,
+            extra={
+                "opening_by": employee.opening_balance_by,
+                "opening_note": employee.opening_balance_note,
+                "full_outside": outside,
+                "full_taken": taken,
+                "full_net_days": net_days,
+                "outside_after": outside_after,
+            })
+
     earned = _cap(net_days // policy.days_per_leave, net_days, policy)
     return Balance(raw_days=raw_days, outside=outside, net_days=net_days,
-                   earned=earned, taken=taken, balance=earned - taken)
+                   earned=earned, taken=taken, balance=earned - taken,
+                   earned_after=earned, taken_after=taken, service_days_after=raw_days,
+                   net_days_after=net_days, has_opening=False)
 
 
 # ---------------------------------------------------------------------------
 # كشف الحساب السنوي + الترحيل والصلاحية
 # ---------------------------------------------------------------------------
 def _year_lines(employee: Employee, items: list[Leave], policy: Policy,
-                limit: date, max_years: int) -> list[YearLine]:
+                limit: date, max_years: int, start_override: date | None = None,
+                initial_carry: int = 0) -> list[YearLine]:
     """يبني سطور سنوات الخدمة (بلا أي استدعاء للرصيد ⇒ لا ارتداد)."""
-    start = employee.start_date
+    start = start_override or employee.start_date
     if not start or limit < start:
         return []
     lines: list[YearLine] = []
@@ -175,7 +218,7 @@ def _year_lines(employee: Employee, items: list[Leave], policy: Policy,
         for idx, share in shares.items():
             bucket[idx] = bucket.get(idx, 0) + share
 
-    carry = 0
+    carry = initial_carry
     for idx, (lo, hi) in enumerate(spans):
         if lo > limit:
             break
@@ -215,20 +258,58 @@ def yearly_statement(employee: Employee, leaves: list[Leave], policy: Policy,
     if not start:
         return Statement(employee=employee, balance=base, lines=[],
                          policy_note="لا يوجد تاريخ مباشرة")
+    cutoff = employee.opening_balance_date if employee.has_opening_balance else None
+    opening_fields = {
+        "opening_balance": int(employee.opening_balance or 0) if cutoff else 0,
+        "opening_date": cutoff,
+        "opening_by": employee.opening_balance_by if cutoff else "",
+        "opening_note": employee.opening_balance_note if cutoff else "",
+    }
+    calc_start = (cutoff + timedelta(days=1)) if cutoff else start
+    calc_start = max(calc_start, start)
     limit = min(today, employee.end_date) if employee.end_date else today
-    if limit < start:
+    if limit < calc_start:
         return Statement(employee=employee, balance=base, lines=[],
-                         policy_note="تاريخ المباشرة بعد تاريخ الحساب")
+                         policy_note="تاريخ المباشرة بعد تاريخ الحساب", **opening_fields)
 
-    lines = _year_lines(employee, items, policy, limit, max_years)
+    # الإجازات السابقة/المشملة في الرصيد الافتتاحي لا تُحسب مرة ثانية
+    if cutoff:
+        adjusted: list[Leave] = []
+        for lv in items:
+            s, e = leave_span(lv)
+            if not s:
+                continue
+            rule = policy.rule(lv.type)
+            if s <= cutoff:
+                if (e and e > cutoff and rule.service_exclusion
+                        and not (rule.consumes_balance or lv.is_adjustment)):
+                    partial = D.days_count(cutoff + timedelta(days=1), e, rule.count_mode,
+                                           policy.weekend, policy.holidays)
+                    if partial > 0:
+                        adjusted.append(replace(
+                            lv, start_date=cutoff + timedelta(days=1), end_date=e,
+                            days_actual=min(int(lv.days_actual or 0), partial),
+                            working_days=D.count_working_days(
+                                cutoff + timedelta(days=1), e, policy.weekend, policy.holidays)))
+                continue
+            adjusted.append(lv)
+        items = adjusted
+    lines = _year_lines(employee, items, policy, limit, max_years,
+                        start_override=calc_start,
+                        initial_carry=opening_fields["opening_balance"])
     balance = base
     if policy.basis == cfg.BASIS_ANNUAL and lines:
         earned = sum(line.earned for line in lines) - sum(line.expired for line in lines)
         taken = sum(line.taken for line in lines)
-        balance = replace(base, earned=earned, taken=taken, balance=earned - taken)
+        balance = replace(base, earned=earned, taken=taken,
+                          earned_after=earned, taken_after=taken,
+                          balance=lines[-1].carry_out)
     note = ("الاحتساب المتواصل (من تاريخ المباشرة حتى اليوم)"
             if policy.basis == cfg.BASIS_CONTINUOUS else "الترصيد السنوي (سنة خدمة)")
-    return Statement(employee=employee, balance=balance, lines=lines, policy_note=note)
+    if cutoff:
+        note += f" | الرصيد الافتتاحي كما في {D.to_iso(cutoff)}"
+    return Statement(employee=employee, balance=balance, lines=lines,
+                     policy_note=note, **opening_fields)
 
 
 def compute_annual(employee: Employee, leaves: list[Leave], policy: Policy,

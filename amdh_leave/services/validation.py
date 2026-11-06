@@ -32,15 +32,54 @@ def validate_employee(fields: dict, emp_id: str, *, edit_mode: bool = False,
     end = D.parse_iso(fields.get("end_date"))
     if not start:
         issues.append(Issue("error", "تاريخ المباشرة إلزامي وبصيغة صحيحة."))
-    else:
-        if start > date.today():
-            issues.append(Issue("warning", "تاريخ المباشرة في المستقبل."))
+    elif start > date.today():
+        issues.append(Issue("warning", "تاريخ المباشرة في المستقبل."))
     if end and start and end < start:
         issues.append(Issue("error", "تاريخ انتهاء الخدمة قبل تاريخ المباشرة."))
     if fields.get("gender") not in ("ذكر", "أنثى"):
         issues.append(Issue("error", "الجنس غير محدد بشكل صحيح."))
     if fields.get("status") and fields["status"] not in ("active", "leave", "retired"):
         issues.append(Issue("warning", "حالة الموظف غير معروفة."))
+
+    # الرصيد الافتتاحي (اختياري)
+    if fields.get("opening_balance_set"):
+        opening_date = D.parse_iso(fields.get("opening_balance_date"))
+        if not opening_date:
+            issues.append(Issue("error", "تاريخ احتساب الرصيد الافتتاحي إلزامي."))
+        elif opening_date > date.today():
+            issues.append(Issue("error", "تاريخ احتساب الرصيد الافتتاحي في المستقبل."))
+        elif start and opening_date < start:
+            issues.append(Issue("error", "تاريخ الرصيد الافتتاحي قبل تاريخ المباشرة."))
+        if not str(fields.get("opening_balance_by") or "").strip():
+            issues.append(Issue("error", "اسم من قام باحتساب الرصيد الافتتاحي إلزامي."))
+        try:
+            int(fields.get("opening_balance") or 0)
+        except (TypeError, ValueError):
+            issues.append(Issue("error", "الرصيد الافتتاحي يجب أن يكون عدداً صحيحاً من الأيام."))
+    return issues
+
+
+def validate_opening_against_leaves(fields: dict, leaves: list[Leave],
+                                    policy: Policy) -> list[Issue]:
+    """يمنع تعارض الرصيد الافتتاحي مع إجازات موجودة قبل/عند تاريخه."""
+    issues: list[Issue] = []
+    if not fields.get("opening_balance_set"):
+        return issues
+    cutoff = D.parse_iso(fields.get("opening_balance_date"))
+    if not cutoff:
+        return issues
+    for lv in leaves:
+        if lv.is_deleted:
+            continue
+        start, end = B.leave_span(lv)
+        if not start:
+            continue
+        if B.consumes_balance(policy, lv):
+            if start <= cutoff:
+                issues.append(Issue(
+                    "error",
+                    f"الإجازة «{lv.type}» بتاريخ {D.to_iso(start)} تخصم من الرصيد "
+                    f"ولا يمكن أن تكون قبل/عند تاريخ الرصيد الافتتاحي ({D.to_iso(cutoff)})."))
     return issues
 
 
@@ -67,7 +106,7 @@ def validate_leave(leave: Leave, employee: Employee, existing: list[Leave], poli
             issues.append(Issue("error", "التسوية تتطلب سبباً/سنداً إدارياً."))
     else:
         if leave.amount is None or leave.amount <= 0:
-            issues.append(Issue("error", "العدد يجب أن يكون أكبر من صفر (للتسويات استخدم نوع «تسوية رصيد»)."))
+            issues.append(Issue("error", "العدد يجب أن يكون أكبر من صفر."))
 
     if not leave.start_date:
         issues.append(Issue("error", "تاريخ بدء الإجازة إلزامي."))
@@ -80,6 +119,16 @@ def validate_leave(leave: Leave, employee: Employee, existing: list[Leave], poli
 
     if leave.end_date and leave.start_date and leave.end_date < leave.start_date:
         issues.append(Issue("error", "تاريخ النهاية قبل تاريخ البداية."))
+
+    # منع الإجازات المتعارضة مع الرصيد الافتتاحي (ما يخصم من الرصيد فقط)
+    if employee.has_opening_balance and leave.start_date:
+        cutoff = employee.opening_balance_date
+        if cutoff and B.consumes_balance(policy, leave):
+            if leave.start_date <= cutoff:
+                issues.append(Issue(
+                    "error",
+                    "لا يمكن تسجيل إجازة تخصم من الرصيد قبل أو عند تاريخ "
+                    f"الرصيد الافتتاحي ({D.to_iso(cutoff)})."))
 
     if rule.requires_order and not (leave.order or "").strip():
         issues.append(Issue("error", f"نوع «{leave.type}» يتطلب رقم الأمر."))
@@ -196,4 +245,19 @@ def validate_import_row(row: dict, existing_ids: set[str], seen_ids: set[str]) -
         issues.append(Issue("error", "تاريخ المباشرة غير صالح."))
     if row.get("gender") not in ("ذكر", "أنثى", None, ""):
         issues.append(Issue("error", "الجنس يجب أن يكون «ذكر» أو «أنثى»."))
+    if row.get("opening_balance_set"):
+        opening_date = D.parse_iso(row.get("opening_balance_date"))
+        start = D.parse_iso(row.get("start_date"))
+        if not opening_date:
+            issues.append(Issue("error", "تاريخ الرصيد الافتتاحي غير صالح."))
+        elif opening_date > date.today():
+            issues.append(Issue("error", "تاريخ الرصيد الافتتاحي في المستقبل."))
+        elif start and opening_date < start:
+            issues.append(Issue("error", "تاريخ الرصيد الافتتاحي قبل تاريخ المباشرة."))
+        if not str(row.get("opening_balance_by") or "").strip():
+            issues.append(Issue("error", "اسم من قام باحتساب الرصيد الافتتاحي فارغ."))
+        try:
+            int(row.get("opening_balance") or 0)
+        except (TypeError, ValueError):
+            issues.append(Issue("error", "الرصيد الافتتاحي ليس عدداً صحيحاً."))
     return issues

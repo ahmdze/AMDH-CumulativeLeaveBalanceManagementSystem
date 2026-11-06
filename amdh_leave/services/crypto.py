@@ -8,7 +8,7 @@
   * إن لم تكن حزمة SQLCipher مثبتة، يبقى البرنامج يعمل بلا تشفير مع رسالة واضحة
     وخطوات التثبيت — بلا أي إتلاف للبيانات.
 
-التثبيت:  pip install sqlcipher3-binary
+التثبيت:  pip install sqlcipher3==0.6.4
 """
 
 from __future__ import annotations
@@ -27,6 +27,7 @@ from ..logging_setup import get_logger
 LOG = get_logger("crypto")
 
 LOCK_FILENAME = ".amdh_lock.json"
+KEY_FILENAME = ".amdh_dbkey"
 KDF_ITERATIONS = 200_000
 KEY_BYTES = 32
 SQLCIPHER_MODULES = ("sqlcipher3", "sqlcipher3.dbapi2", "pysqlcipher3.dbapi2")
@@ -56,7 +57,7 @@ def sqlcipher_available() -> bool:
 
 def install_hint() -> str:
     return ("لتشفير قاعدة البيانات يجب تثبيت حزمة SQLCipher:\n\n"
-            "    pip install sqlcipher3-binary\n\n"
+            "    pip install sqlcipher3==0.6.4\n\n"
             "ثم أعد تشغيل البرنامج. (على لينكس قد تحتاج:\n"
             "    pip install sqlcipher3  أو  apt install libsqlcipher-dev)")
 
@@ -107,9 +108,69 @@ def read_lock(data_dir: Path) -> dict | None:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None
-    if not isinstance(data, dict) or not data.get("salt") or not data.get("verifier"):
+    if not isinstance(data, dict):
+        return None
+    if data.get("mode") == "keyfile":
+        return data
+    if not data.get("salt") or not data.get("verifier"):
         return None
     return data
+
+
+# ---------------------------------------------------------------------------
+# ملف المفتاح التلقائي (نسخ المؤسسات): يفتح القاعدة دون سؤال كلمة مرور
+# ---------------------------------------------------------------------------
+def key_file_path(data_dir: Path) -> Path:
+    return Path(data_dir) / KEY_FILENAME
+
+
+def read_key_file(data_dir: Path) -> str | None:
+    """يعيد مفتاحاً سداسياً صالحاً من ملف المفتاح، أو None."""
+    path = key_file_path(data_dir)
+    try:
+        text = path.read_text(encoding="utf-8").strip().lower()
+    except OSError:
+        return None
+    if len(text) != KEY_BYTES * 2:
+        return None
+    try:
+        bytes.fromhex(text)
+    except ValueError:
+        return None
+    return text
+
+
+def write_key_file(data_dir: Path, key_hex: str) -> Path:
+    path = key_file_path(data_dir)
+    path.write_text(key_hex.strip().lower(), encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    return path
+
+
+def remove_key_file(data_dir: Path) -> None:
+    path = key_file_path(data_dir)
+    if path.exists():
+        try:
+            path.unlink()
+        except OSError:
+            pass
+
+
+def write_key_lock(data_dir: Path) -> Path:
+    """قفل وضع «المفتاح التلقائي» — لا يحمل كلمة مرور ولا بصمة."""
+    payload = {
+        "version": 1,
+        "enabled": True,
+        "mode": "keyfile",
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "cipher": "sqlcipher",
+    }
+    path = lock_path(data_dir)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
 
 
 def is_encryption_enabled(data_dir: Path) -> bool:
@@ -118,9 +179,13 @@ def is_encryption_enabled(data_dir: Path) -> bool:
 
 
 def write_lock(data_dir: Path, password: str, iterations: int = KDF_ITERATIONS,
-               enabled: bool = True) -> Path:
-    """يكتب ملف القفل (ملح + بصمة تحقق) بعد تشفير ناجح."""
-    salt = new_salt()
+               enabled: bool = True, salt: str | None = None) -> Path:
+    """يكتب ملف القفل (ملح + بصمة تحقق) بعد تشفير ناجح.
+
+    ``salt`` يجب أن يكون **نفس الملح** المستخدم في اشتقاق مفتاح التشفير، وإلا
+    أصبح الملف المشفّر غير قابل للفتح. يُولَّد تلقائياً فقط عند التفعيل الأولي.
+    """
+    salt = salt or new_salt()
     payload = {
         "version": 1,
         "enabled": bool(enabled),
@@ -150,7 +215,7 @@ def remove_lock(data_dir: Path) -> None:
 
 def check_password(data_dir: Path, password: str) -> bool:
     data = read_lock(data_dir)
-    if not data:
+    if not data or not data.get("salt"):
         return False
     candidate = verifier(password, data["salt"], int(data.get("iterations", KDF_ITERATIONS)))
     return hmac.compare_digest(candidate, str(data["verifier"]))
@@ -216,9 +281,8 @@ def _table_names(connection) -> set[str]:
         "SELECT name FROM sqlite_master WHERE type='table'")}
 
 
-def encrypt_database(source: str | Path, password: str, *, keep_backup: bool = True,
-                     iterations: int = KDF_ITERATIONS) -> Path:
-    """يحوّل قاعدة عادية إلى قاعدة مشفّرة (يستبدل الملف الأصلي بعد نسخة أمان)."""
+def _encrypt_to(source: str | Path, key_hex: str, *, keep_backup: bool = True) -> tuple[Path, Path | None]:
+    """ينفّذ تحويل قاعدة عادية إلى مشفّرة بمفتاح خام (بلا كتابة قفل)."""
     module = _require_sqlcipher()
     source = Path(source)
     if is_encrypted_database(source):
@@ -228,8 +292,6 @@ def encrypt_database(source: str | Path, password: str, *, keep_backup: bool = T
         backup = source.with_name(f"{source.stem}_plain_{datetime.now():%Y%m%d_%H%M%S}.db")
         shutil.copy2(source, backup)
 
-    salt = new_salt()
-    key_hex = derive_key(password, salt, iterations)
     temp = source.with_name(source.name + ".enc.tmp")
     if temp.exists():
         temp.unlink()
@@ -245,17 +307,37 @@ def encrypt_database(source: str | Path, password: str, *, keep_backup: bool = T
         raise CryptoError(f"فشل التشفير: {exc}") from exc
     connection.close()
 
-    # استبدال الملف الأصلي بالمشفّر + كتابة ملف القفل
     for suffix in ("-wal", "-shm"):
         side = Path(str(source) + suffix)
         if side.exists():
             side.unlink()
     source.write_bytes(temp.read_bytes())
     temp.unlink()
-    write_lock(source.parent, password, iterations)
+    return source, backup
+
+
+def encrypt_database(source: str | Path, password: str, *, keep_backup: bool = True,
+                     iterations: int = KDF_ITERATIONS) -> Path:
+    """يحوّل قاعدة عادية إلى قاعدة مشفّرة بكلمة مرور (نمط المركز)."""
+    source = Path(source)
+    salt = new_salt()
+    key_hex = derive_key(password, salt, iterations)
+    output, backup = _encrypt_to(source, key_hex, keep_backup=keep_backup)
+    remove_key_file(output.parent)
+    write_lock(output.parent, password, iterations, salt=salt)
     LOG.warning("تم تشفير قاعدة البيانات (%s) — نسخة غير مشفّرة: %s",
-                source.name, backup.name if backup else "—")
-    return source
+                output.name, backup.name if backup else "—")
+    return output
+
+
+def encrypt_with_key(source: str | Path, key_hex: str, *, keep_backup: bool = False) -> Path:
+    """يشفّر قاعدة عادية بمفتاح خام ويكتب ملف المفتاح (نمط نسخة المؤسسة)."""
+    source = Path(source)
+    output, backup = _encrypt_to(source, key_hex, keep_backup=keep_backup)
+    write_key_file(output.parent, key_hex)
+    write_key_lock(output.parent)
+    LOG.warning("تم تشفير نسخة المؤسسة بمفتاح تلقائي (%s)", output.name)
+    return output
 
 
 def decrypt_database(source: str | Path, password: str, *, destination: str | Path | None = None,
@@ -265,6 +347,9 @@ def decrypt_database(source: str | Path, password: str, *, destination: str | Pa
     source = Path(source)
     data_dir = source.parent
     lock = read_lock(data_dir)
+    if lock and lock.get("mode") == "keyfile":
+        raise CryptoError("هذه نسخة مؤسسة تعمل بمفتاح تلقائي؛ لا تُفك بكلمة مرور. "
+                          "استخدم أداة المفتاح في مركز الدائرة.")
     if not lock and iterations is None:
         raise CryptoError("ملف القفل غير موجود — لا يمكن اشتقاق المفتاح.")
     salt = lock["salt"] if lock else new_salt()
@@ -299,7 +384,6 @@ def change_password(source: str | Path, old_password: str, new_password: str) ->
     try:
         encrypt_database(plain, new_password, keep_backup=False)
         shutil.copy2(plain, source)
-        write_lock(source.parent, new_password)
     finally:
         if plain.exists():
             plain.unlink()
@@ -327,16 +411,20 @@ def disable_encryption(data_dir: Path, db_path: str | Path, password: str) -> Pa
         if plain.exists():
             plain.unlink()
     remove_lock(data_dir)
+    remove_key_file(data_dir)
     LOG.warning("تم إلغاء تشفير قاعدة البيانات: %s", db_path.name)
     return db_path
 
 
 def security_summary(data_dir: Path, db_path: Path) -> dict:
     """ملخص حالة التشفير لعرضه في الواجهة."""
+    lock = read_lock(data_dir) or {}
     return {
         "sqlcipher_available": sqlcipher_available(),
         "lock_file": lock_path(data_dir).exists(),
         "encryption_enabled": is_encryption_enabled(data_dir),
         "database_encrypted": is_encrypted_database(db_path),
-        "lock_data": read_lock(data_dir) or {},
+        "key_file": bool(read_key_file(data_dir)),
+        "mode": lock.get("mode", "password" if lock else ""),
+        "lock_data": lock,
     }

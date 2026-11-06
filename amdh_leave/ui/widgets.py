@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import math
+
 from PyQt6.QtCore import Qt, QRectF, QDate
-from PyQt6.QtGui import QColor, QFont, QPainter, QPen
+from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
     QAbstractItemView, QCheckBox, QDateEdit, QFrame, QHBoxLayout, QHeaderView, QLabel,
-    QMessageBox, QPushButton, QSizePolicy, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QLineEdit, QMessageBox, QPushButton, QSizePolicy, QTableWidget, QTableWidgetItem,
+    QVBoxLayout, QWidget,
 )
 
 from ..services import dates as D
@@ -134,6 +137,14 @@ def open_path(parent, path, title: str = "فتح الملف") -> bool:
         warn(parent, f"الملف غير موجود:\n{target}", title)
         return False
     return QDesktopServices.openUrl(QUrl.fromLocalFile(str(target)))
+
+
+def search_line(placeholder: str = "") -> QLineEdit:
+    """مربع بحث بسيط مع نص توضيحي."""
+    line = QLineEdit()
+    if placeholder:
+        line.setPlaceholderText(placeholder)
+    return line
 
 
 def button(text: str, style: str = "Ghost", slot=None, width: int | None = None,
@@ -294,9 +305,14 @@ class TablePanel(QWidget):
     def set_rows(self, rows: list[list], numeric_columns: set[int] | None = None,
                  colors: dict[tuple[int, int], str] | None = None,
                  empty_text: str = "لا توجد بيانات للعرض",
-                 footer: str = "") -> None:
+                 footer: str = "", headers: list[str] | None = None) -> None:
         numeric_columns = numeric_columns or set()
         colors = colors or {}
+        # تحديث الـ headers ديناميكياً إذا وُفرت
+        if headers is not None:
+            self.headers = headers
+            self.table.setColumnCount(len(headers))
+            self.table.setHorizontalHeaderLabels(headers)
         self.table.setSortingEnabled(False)
         self.table.setRowCount(0)
         self.table.setRowCount(len(rows))
@@ -424,4 +440,186 @@ class BarChart(QWidget):
             painter.drawText(value_rect,
                              int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
                              f"{value:,.0f}{self._suffix}")
+        painter.end()
+
+
+class PieChart(QWidget):
+    """رسم دائري بسيط (بلا اعتماد على مكتبات خارجية) مع دعم RTL."""
+
+    def __init__(self, parent=None, max_slices: int = 8):
+        super().__init__(parent)
+        self._items: list[tuple[str, float]] = []
+        self._title = ""
+        self._max_slices = max_slices
+        self.setMinimumHeight(200)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+    def set_data(self, items: list[tuple[str, float]], title: str = "") -> None:
+        self._items = [(str(k), float(v)) for k, v in items if v > 0][: self._max_slices]
+        self._title = title
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.fillRect(self.rect(), QColor(theme.color("surface")))
+
+        rows = self._items
+        top = 8
+        if self._title:
+            painter.setPen(QPen(QColor(theme.color("accent"))))
+            font = QFont("Segoe UI", 10, QFont.Weight.Bold)
+            painter.setFont(font)
+            painter.drawText(QRectF(8, 2, self.width() - 16, 20),
+                             int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), self._title)
+            top = 28
+
+        if not rows:
+            painter.setPen(QPen(QColor(theme.color("muted"))))
+            painter.setFont(QFont("Segoe UI", 10))
+            painter.drawText(self.rect(), int(Qt.AlignmentFlag.AlignCenter), "لا توجد بيانات")
+            painter.end()
+            return
+
+        total = sum(v for _, v in rows) or 1.0
+        colors = [
+            "#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6",
+            "#ec4899", "#06b6d4", "#f97316", "#6366f1", "#14b8a6",
+        ]
+
+        # منطقة الرسم الدائري
+        chart_size = min(self.width() - 160, self.height() - top - 16)
+        chart_size = max(80, chart_size)
+        cx = (self.width() - 120) / 2
+        cy = top + (self.height() - top) / 2
+        radius = chart_size / 2
+
+        start_angle = 0
+        for i, (label, value) in enumerate(rows):
+            slice_angle = int(360 * value / total * 16)
+            painter.setBrush(QColor(colors[i % len(colors)]))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawPie(int(cx - radius), int(cy - radius),
+                            int(radius * 2), int(radius * 2),
+                            start_angle, slice_angle)
+            start_angle += slice_angle
+
+            # التسمية
+            mid_angle = start_angle - slice_angle / 2
+            mid_rad = math.radians(mid_angle / 16 - 90)
+            label_r = radius * 0.65
+            lx = cx + label_r * math.cos(mid_rad)
+            ly = cy + label_r * math.sin(mid_rad)
+            pct = f"{value / total * 100:.0f}%"
+            if value / total > 0.05:
+                painter.setPen(QPen(QColor("#ffffff")))
+                painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+                painter.drawText(int(lx - 20), int(ly + 4), 40, 16,
+                                 int(Qt.AlignmentFlag.AlignCenter), pct)
+
+        # المفتاح
+        legend_x = self.width() - 110
+        legend_y = top + 4
+        painter.setFont(QFont("Segoe UI", 9))
+        for i, (label, value) in enumerate(rows):
+            y = legend_y + i * 20
+            painter.setBrush(QColor(colors[i % len(colors)]))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawRoundedRect(legend_x, y, 12, 12, 2, 2)
+            painter.setPen(QPen(QColor(theme.color("text"))))
+            short = label if len(label) <= 20 else label[:18] + "…"
+            painter.drawText(legend_x + 16, y - 2, 90, 16,
+                             int(Qt.AlignmentFlag.AlignRight), short)
+        painter.end()
+
+
+class LineChart(QWidget):
+    """رسم خطي بسيط (بلا اعتماد على مكتبات خارجية) مع دعم RTL."""
+
+    def __init__(self, parent=None, max_points: int = 12):
+        super().__init__(parent)
+        self._items: list[tuple[str, float]] = []
+        self._title = ""
+        self._max_points = max_points
+        self.setMinimumHeight(180)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+
+    def set_data(self, items: list[tuple[str, float]], title: str = "") -> None:
+        self._items = [(str(k), float(v)) for k, v in items][: self._max_points]
+        self._title = title
+        self.update()
+
+    def paintEvent(self, event):  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.fillRect(self.rect(), QColor(theme.color("surface")))
+
+        rows = self._items
+        top = 8
+        if self._title:
+            painter.setPen(QPen(QColor(theme.color("accent"))))
+            font = QFont("Segoe UI", 10, QFont.Weight.Bold)
+            painter.setFont(font)
+            painter.drawText(QRectF(8, 2, self.width() - 16, 20),
+                             int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), self._title)
+            top = 28
+
+        if not rows:
+            painter.setPen(QPen(QColor(theme.color("muted"))))
+            painter.setFont(QFont("Segoe UI", 10))
+            painter.drawText(self.rect(), int(Qt.AlignmentFlag.AlignCenter), "لا توجد بيانات")
+            painter.end()
+            return
+
+        plot_left = 40.0
+        plot_right = self.width() - 16.0
+        plot_top = top + 4.0
+        plot_bottom = self.height() - 30.0
+        plot_height = max(40.0, plot_bottom - plot_top)
+        plot_width = max(40.0, plot_right - plot_left)
+
+        max_val = max(v for _, v in rows) or 1.0
+        n = len(rows)
+
+        # المحور Y
+        painter.setPen(QPen(QColor(theme.color("muted")), 0.5))
+        painter.setFont(QFont("Segoe UI", 8))
+        for i in range(5):
+            y = plot_top + plot_height * i / 4
+            val = max_val * (1 - i / 4)
+            painter.drawLine(int(plot_left), int(y), int(plot_right), int(y))
+            painter.drawText(2, int(y) + 4, 36, 14,
+                             int(Qt.AlignmentFlag.AlignRight), f"{val:,.0f}")
+
+        # الخط
+        points = []
+        for i, (label, value) in enumerate(rows):
+            x = plot_left + plot_width * i / max(1, n - 1) if n > 1 else plot_left + plot_width / 2
+            y = plot_top + plot_height * (1 - value / max_val)
+            points.append((x, y))
+
+            # التسمية X
+            if n <= 12:
+                painter.setPen(QPen(QColor(theme.color("muted"))))
+                painter.save()
+                painter.translate(int(x), int(plot_bottom + 14))
+                painter.rotate(-45)
+                painter.drawText(0, 0, 60, 14, int(Qt.AlignmentFlag.AlignRight), label)
+                painter.restore()
+
+        # رسم الخط
+        if len(points) > 1:
+            painter.setPen(QPen(QColor(theme.color("accent")), 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            path = QPainterPath()
+            path.moveTo(points[0][0], points[0][1])
+            for px, py in points[1:]:
+                path.lineTo(px, py)
+            painter.drawPath(path)
+
+        # النقاط
+        for px, py in points:
+            painter.setBrush(QColor(theme.color("accent")))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(int(px - 3), int(py - 3), 6, 6)
         painter.end()

@@ -27,9 +27,8 @@ FEATURES = [
     "نسخ احتياطي بدوران واستعادة وفحص سلامة وضغط القاعدة",
     "تقارير Excel (RTL) وPDF بالعربية وصفحات طباعة HTML",
     "لوحة مؤشرات، تقويم إجازات، مركز تنبيهات، مرفقات، ومستخدمون بأدوار",
-    "تعدد اللغات (عربية/كردية/إنجليزية) و5 ثيمات",
-    "مشاركة التقارير عبر البريد الإلكتروني وتلغرام",
-    "تشفير قاعدة البيانات عبر SQLCipher (اختياري)",
+    "إدارة المؤسسات وملفات النقل والدمج غير المُدمّر بين المركز والمؤسسات",
+    "تشفير قاعدة البيانات عبر SQLCipher مع خزنة كلمات مرور وبطاقة استرداد",
     "إشعارات سطح المكتب (Tray) مع فحص دوري",
 ]
 
@@ -149,18 +148,7 @@ class AboutDialog(BaseDialog):
             row.addStretch()
             info.addLayout(row)
 
-        info.addWidget(W.separator())
-        hint = W.muted_label("يمكنك استبدال صورة المطوّر وشعار البرنامج وشعار الدائرة بصورك: "
-            "ضع الملفات في مجلد assets داخل مجلد البيانات (راجع assets/README.md).")
-        hint.setWordWrap(True)
-        info.addWidget(hint)
         info.addStretch()
-
-        buttons = QHBoxLayout()
-        buttons.addWidget(W.button("📂 فتح مجلد الصور", "Ghost", self._open_assets))
-        buttons.addWidget(W.button(f"✉️ {'مراسلة'}", "Ghost", self._send_email))
-        buttons.addStretch()
-        info.addLayout(buttons)
 
         layout.addLayout(info, 1)
         return page
@@ -230,14 +218,6 @@ class AboutDialog(BaseDialog):
             clipboard.setText(self._system_summary())
             W.info(self, "تم نسخ معلومات النظام إلى الحافظة.", "حول النظام")
 
-    def _assets_dir(self):
-        base = self.ctx.paths.data_dir / "assets" if self.ctx else assets.PACKAGE_ASSETS
-        base.mkdir(parents=True, exist_ok=True)
-        return base
-
-    def _open_assets(self) -> None:
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self._assets_dir())))
-
     def _open_data(self) -> None:
         if self.ctx:
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.ctx.paths.data_dir)))
@@ -248,6 +228,3 @@ class AboutDialog(BaseDialog):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
         else:
             W.warn(self, "ملف السجل غير متاح.")
-
-    def _send_email(self) -> None:
-        QDesktopServices.openUrl(QUrl(f"mailto:{config.APP_EMAIL}?subject={config.APP_NAME}"))

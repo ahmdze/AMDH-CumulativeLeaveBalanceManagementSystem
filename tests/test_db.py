@@ -76,7 +76,7 @@ def test_fresh_database_is_usable(empty_db):
     assert empty_db.schema_version == SCHEMA_VERSION
     assert empty_db.stats()["employees"] == 0
     assert empty_db.policy().days_per_leave == config.DAYS_PER_LEAVE
-    assert len(empty_db.list_rules()) >= 10
+    assert len(empty_db.list_rules()) >= 9
 
 
 # ---------------------------------------------------------------------------

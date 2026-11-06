@@ -7,7 +7,10 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from string import Template
+
+ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
 TEMPLATE = Template(
     """
@@ -91,6 +94,10 @@ QDoubleSpinBox:focus, QTextEdit:focus, QPlainTextEdit:focus {
     background-color: $elevated;
     padding: 5px 8px;
 }
+QSpinBox:focus, QDoubleSpinBox:focus, QDateEdit:focus {
+    padding-left: 27px;
+    padding-right: 8px;
+}
 QLineEdit:disabled, QComboBox:disabled, QDateEdit:disabled, QSpinBox:disabled,
 QDoubleSpinBox:disabled, QTextEdit:disabled {
     background-color: $bg_alt;
@@ -117,6 +124,62 @@ QComboBox QAbstractItemView {
     selection-color: $on_accent;
 }
 QAbstractItemView::item { min-height: 24px; padding: 2px 4px; }
+
+/* ===================== حقول الأرقام والتاريخ ===================== */
+QSpinBox, QDoubleSpinBox, QDateEdit {
+    padding-left: 28px;
+    padding-right: 9px;
+}
+QSpinBox::up-button, QDoubleSpinBox::up-button {
+    subcontrol-origin: border;
+    subcontrol-position: top left;
+    width: 24px;
+    background-color: $surface_alt;
+    border-left: 1px solid $border;
+    border-top-left-radius: 7px;
+}
+QSpinBox::down-button, QDoubleSpinBox::down-button {
+    subcontrol-origin: border;
+    subcontrol-position: bottom left;
+    width: 24px;
+    background-color: $surface_alt;
+    border-left: 1px solid $border;
+    border-bottom-left-radius: 7px;
+}
+QSpinBox::up-button:hover, QDoubleSpinBox::up-button:hover,
+QSpinBox::down-button:hover, QDoubleSpinBox::down-button:hover {
+    background-color: $accent_soft;
+}
+QSpinBox::up-arrow, QDoubleSpinBox::up-arrow {
+    image: url("$assets/chevron_up.png");
+    width: 9px;
+    height: 6px;
+}
+QSpinBox::down-arrow, QDoubleSpinBox::down-arrow {
+    image: url("$assets/chevron_down.png");
+    width: 9px;
+    height: 6px;
+}
+QDateEdit::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: center left;
+    width: 24px;
+    background-color: $surface_alt;
+    border-left: 1px solid $border;
+    border-top-left-radius: 7px;
+    border-bottom-left-radius: 7px;
+}
+QDateEdit::drop-down:hover { background-color: $accent_soft; }
+QDateEdit::down-arrow {
+    image: url("$assets/chevron_down.png");
+    width: 10px;
+    height: 7px;
+}
+QComboBox::down-arrow {
+    image: url("$assets/chevron_down.png");
+    width: 10px;
+    height: 7px;
+}
 
 /* ===================== الأزرار ===================== */
 QPushButton {
@@ -201,7 +264,7 @@ QPushButton#Nav {
     border-right: 3px solid transparent;
     border-radius: 8px;
     padding: 8px 12px;
-    text-align: right;
+    text-align: center;
     font-weight: normal;
     color: $text;
 }
@@ -452,7 +515,9 @@ QSizeGrip { background: transparent; width: 12px; height: 12px; }
 
 def build(palette: dict[str, str]) -> str:
     """يبني نص الأنماط من لوحة ألوان كاملة."""
-    return TEMPLATE.substitute(palette)
+    values = dict(palette)
+    values["assets"] = ASSETS_DIR.as_posix()
+    return TEMPLATE.substitute(values)
 
 
-REQUIRED_KEYS = tuple(sorted(TEMPLATE.get_identifiers()))
+REQUIRED_KEYS = tuple(sorted(name for name in TEMPLATE.get_identifiers() if name != "assets"))

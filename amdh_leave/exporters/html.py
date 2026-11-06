@@ -154,9 +154,14 @@ def employee_detail_html(employee: Employee, policy: Policy, balance, statement=
         "أيام الخدمة الكلية": balance.raw_days,
         "أيام خارج الرصيد": balance.outside,
         "أيام الدوام المحسوبة": balance.net_days,
-        "الإجازات المستحقة": balance.earned,
-        "الإجازات المأخوذة": balance.taken,
+        "الإجازات المستحقة بعد الافتتاحي" if balance.has_opening else "الإجازات المستحقة": balance.earned,
+        "الإجازات المأخوذة بعد الافتتاحي" if balance.has_opening else "الإجازات المأخوذة": balance.taken,
     }
+    if balance.has_opening:
+        info["الرصيد الافتتاحي"] = (
+            f"{balance.opening_balance} يوم كما في {D.to_iso(balance.opening_date)}"
+            + (f" — حسبه: {balance.extra.get('opening_by')}"
+               if balance.extra.get("opening_by") else ""))
     info_html = "".join(f"<div class='item'><label>{esc(k)}</label><span>{esc(v)}</span></div>"
                         for k, v in info.items())
     nums_html = "".join(f"<div class='item'><label>{esc(k)}</label><span>{v} يوم</span></div>"

@@ -98,7 +98,7 @@ def test_available_flag_matches_module_presence(monkeypatch):
 
 def test_install_hint_mentions_package():
     hint = C.install_hint()
-    assert "sqlcipher3-binary" in hint and "pip install" in hint
+    assert "sqlcipher3" in hint and "pip install" in hint
 
 
 def test_open_connection_without_key_is_plain_sqlite(tmp_path):
@@ -129,7 +129,7 @@ def test_encrypt_and_decrypt_require_sqlcipher(tmp_path, monkeypatch):
 def test_security_summary_shape(tmp_path, legacy_db):
     summary = C.security_summary(tmp_path, legacy_db)
     assert set(summary) == {"sqlcipher_available", "lock_file", "encryption_enabled",
-                            "database_encrypted", "lock_data"}
+                            "database_encrypted", "key_file", "mode", "lock_data"}
     assert summary["lock_file"] is False
     assert summary["database_encrypted"] is False
     C.write_lock(tmp_path, PASSWORD)

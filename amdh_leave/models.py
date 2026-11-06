@@ -29,6 +29,14 @@ class Employee:
     uid: str = ""
     previous_institution: str = ""
     moved_on: date | None = None
+    # الرصيد الافتتاحي: المتبقي كما في تاريخ الاحتساب اليدوي
+    opening_balance_set: bool = False
+    opening_balance: int = 0
+    opening_balance_date: date | None = None
+    opening_balance_by: str = ""
+    opening_balance_note: str = ""
+    opening_updated_at: str = ""
+    opening_updated_by: str = ""
     leaves: list["Leave"] = field(default_factory=list)
 
     # -- تحويل -------------------------------------------------------------
@@ -52,6 +60,13 @@ class Employee:
             uid=m.get("uid") or "",
             previous_institution=m.get("previous_institution") or "",
             moved_on=parse_iso(m.get("moved_on")),
+            opening_balance_set=bool(m.get("opening_balance_set")),
+            opening_balance=int(m.get("opening_balance") or 0),
+            opening_balance_date=parse_iso(m.get("opening_balance_date")),
+            opening_balance_by=m.get("opening_balance_by") or "",
+            opening_balance_note=m.get("opening_balance_note") or "",
+            opening_updated_at=m.get("opening_updated_at") or "",
+            opening_updated_by=m.get("opening_updated_by") or "",
         )
 
     def to_fields(self) -> dict:
@@ -67,11 +82,23 @@ class Employee:
             "status": self.status,
             "previous_institution": self.previous_institution,
             "moved_on": self.moved_on.strftime("%Y-%m-%d") if self.moved_on else "",
+            "opening_balance_set": int(bool(self.opening_balance_set)),
+            "opening_balance": int(self.opening_balance or 0),
+            "opening_balance_date": (self.opening_balance_date.strftime("%Y-%m-%d")
+                                     if self.opening_balance_date else ""),
+            "opening_balance_by": self.opening_balance_by,
+            "opening_balance_note": self.opening_balance_note,
+            "opening_updated_at": self.opening_updated_at,
+            "opening_updated_by": self.opening_updated_by,
         }
 
     @property
     def is_deleted(self) -> bool:
         return bool(self.deleted_at)
+
+    @property
+    def has_opening_balance(self) -> bool:
+        return bool(self.opening_balance_set and self.opening_balance_date)
 
     @property
     def label(self) -> str:
@@ -186,9 +213,16 @@ class Balance:
     raw_days: int = 0        # أيام الخدمة الكلية
     outside: int = 0         # أيام مستبعدة من الخدمة
     net_days: int = 0        # أيام الدوام المحسوبة
-    earned: int = 0          # الإجازات المستحقة
-    taken: int = 0           # المأخوذة
+    earned: int = 0          # الإجازات المستحقة بعد تاريخ الافتتاحي
+    taken: int = 0           # المأخوذة بعد تاريخ الافتتاحي
     balance: int = 0         # الرصيد (قد يكون سالباً وهو مشروع)
+    opening_balance: int = 0  # الرصيد الافتتاحي (المتبقي كما في تاريخه)
+    opening_date: date | None = None
+    earned_after: int = 0
+    taken_after: int = 0
+    service_days_after: int = 0
+    net_days_after: int = 0
+    has_opening: bool = False
     extra: dict = field(default_factory=dict)
 
     @property
@@ -218,6 +252,10 @@ class Statement:
     balance: Balance
     lines: list[YearLine] = field(default_factory=list)
     policy_note: str = ""
+    opening_balance: int = 0
+    opening_date: date | None = None
+    opening_by: str = ""
+    opening_note: str = ""
 
 
 @dataclass
@@ -418,6 +456,7 @@ class Holiday:
     id: int | None = None
     day: date | None = None
     name: str = ""
+    recurring: bool = False
 
 
 @dataclass

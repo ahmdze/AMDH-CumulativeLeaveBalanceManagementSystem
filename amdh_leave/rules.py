@@ -176,7 +176,7 @@ class Policy:
     def rule(self, leave_type: str) -> LeaveRule:
         return self.rules.get(leave_type, replace(_FALLBACK_RULE, type=leave_type))
 
-    def types_for_gender(self, gender: str, include_adjustment: bool = True) -> list[str]:
+    def types_for_gender(self, gender: str, include_adjustment: bool = False) -> list[str]:
         gender = gender or "ذكر"
         items = [
             r for r in self.rules.values()

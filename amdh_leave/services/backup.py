@@ -83,11 +83,14 @@ class BackupService:
             })
         return items
 
-    @staticmethod
-    def _is_valid(path: Path) -> bool:
-        """يتحقق أن الملف قاعدة SQLite سليمة تحتوي جدول الموظفين."""
+    def _is_valid(self, path: Path) -> bool:
+        """يتحقق أن الملف قاعدة سليمة (مشفّرة أو عادية) تحتوي جدول الموظفين."""
         try:
-            probe = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            if getattr(self.db, "key_hex", None):
+                from . import crypto
+                probe = crypto.open_connection(path, self.db.key_hex)
+            else:
+                probe = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
             try:
                 row = probe.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='employees'").fetchone()
                 if not row:
@@ -95,7 +98,7 @@ class BackupService:
                 return str(probe.execute("PRAGMA integrity_check").fetchone()[0]).lower() == "ok"
             finally:
                 probe.close()
-        except sqlite3.DatabaseError:
+        except Exception:                             # noqa: BLE001
             return False
 
     def rotate(self, keep: int | None = None) -> int:

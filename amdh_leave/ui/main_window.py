@@ -28,7 +28,7 @@ from .dialogs_base import SettingsDialog, TrashDialog
 from .dialogs_db import DatabaseOperationsDialog
 from .dialogs_employee import EmployeeDialog
 from .dialogs_import import ImportHistoryDialog, TransferImportDialog
-from .dialogs_import import export_for_institution as export_transfer_file
+from .dialogs_export import export_for_center as export_transfer_file
 from .dialogs_institutions import InstitutionsDialog
 from .dialogs_leave import AttachmentsDialog, LeaveDialog, SettlementDialog, StatementDialog
 from .notifications import NotificationsDialog
@@ -127,7 +127,8 @@ class MainWindow(QMainWindow):
     # -- الشريط الجانبي --------------------------------------------------
     def _sidebar(self) -> QScrollArea:
         area = QScrollArea()
-        area.setFixedWidth(236)
+        area.setMinimumWidth(200)
+        area.setMaximumWidth(280)
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.Shape.NoFrame)
         area.setStyleSheet("QScrollArea { background: transparent; }")
@@ -138,53 +139,228 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(3)
 
-        def add(text: str, style: str, slot, permission: str | None = None) -> None:
-            """عناصر التنقّل: خلفية شفافة وشريط تمييز عند المرور، والأزرار الرئيسية ملوّنة."""
-            if style == "Ghost":
-                btn = W.nav_button(text, slot)
-            else:
-                btn = W.button(text, style, slot)
-                btn.setMinimumHeight(34)
+        # تتبع هل تم إضافة فاصل سابقاً
+        section_added: list[bool] = [False]
+
+        def add(text: str, style: str, slot, permission: str | None = None, tooltip: str = "") -> None:
+            """عناصر التنقّل: تُخفى بالكامل إذا لم يملك المستخدم صلاحيتها."""
             if permission and not self.ctx.can(permission):
-                btn.setEnabled(False)
-                btn.setToolTip("لا تملك صلاحية هذا الإجراء")
+                return
+            if style == "Ghost":
+                btn = W.nav_button(text, slot, tooltip=tooltip)
+            else:
+                btn = W.button(text, style, slot, tooltip=tooltip)
+                btn.setMinimumHeight(34)
             layout.addWidget(btn)
 
-        add("➕  إضافة موظف جديد", "Accent", self._add_employee, "edit_employee")
-        add("✏  تعديل الموظف", "Ghost", self._edit_employee, "edit_employee")
-        add("🗑  حذف الموظف", "Warn", self._delete_employee, "delete_employee")
+        def add_section(title: str, is_first: bool = False) -> None:
+            """
+            تسجيل عنوان القسم لإضافته لاحقاً إذا كان هناك أزرار مرئية.
+            نستخدم قائمة مؤقتة لتخزين الأزرار وإضافتها بعد العنوان فقط إذا لزم الأمر.
+            """
+            # نجمع الأزرار في قائمة مؤقتة لهذا القسم
+            section_buttons: list[tuple[str, str, callable, str | None, str]] = []
+            section_label = None
+            
+            def make_label():
+                from ..ui import theme
+                lbl = QLabel(title)
+                text_color = theme.color("text")
+                lbl.setStyleSheet(f"""
+                    font-size: 15px;
+                    font-weight: bold;
+                    font-family: "Arial";
+                    color: {text_color};
+                    margin-top: 8px;
+                    margin-bottom: 4px;
+                """)
+                return lbl
+            
+            section_label = make_label()
+            
+            # نعيد تعريف add مؤقتاً لجمع الأزرار بدلاً من إضافتها مباشرة
+            original_add = add
+            def collect_button(text: str, style: str, slot, permission: str | None = None, tooltip: str = "") -> None:
+                if permission and not self.ctx.can(permission):
+                    return
+                section_buttons.append((text, style, slot, permission, tooltip))
+            
+            # إرجاع الدالة المجمعة لاستخدامها في هذا القسم
+            return collect_button, section_label, section_buttons, is_first
+
+        # 1. قسم إدارة الموظفين
+        collect, label, buttons, is_first = add_section("إدارة الموظفين", is_first=True)
+        collect("إضافة موظف جديد  ➕", "Accent", self._add_employee, "edit_employee",
+            tooltip="إضافة موظف جديد إلى قاعدة البيانات")
+        collect("تعديل الموظف  ✏", "Ghost", self._edit_employee, "edit_employee",
+            tooltip="تعديل بيانات الموظف المحدد")
+        collect("بطاقة الموظف  🪪", "Ghost", self._open_employee_card,
+            tooltip="عرض بطاقة الموظف الشخصية")
+        collect("كشف حساب الموظف  🧾", "Ghost", self._open_statement,
+            tooltip="عرض كشف حساب الإجازات للموظف")
+        collect("تصفية نهاية الخدمة  📤", "Ghost", self._open_settlement,
+            tooltip="تصفية حساب الموظف عند نهاية الخدمة")
+        collect("حذف الموظف  🗑", "Warn", self._delete_employee, "delete_employee",
+            tooltip="حذف الموظف من قاعدة البيانات")
+        # إضافة القسم إذا كان هناك أزرار مرئية
+        if buttons:
+            if not is_first and section_added[0]:
+                layout.addWidget(W.separator())
+            layout.addWidget(label)
+            for text, style, slot, permission, tooltip in buttons:
+                if style == "Ghost":
+                    btn = W.nav_button(text, slot, tooltip=tooltip)
+                else:
+                    btn = W.button(text, style, slot, tooltip=tooltip)
+                    btn.setMinimumHeight(34)
+                layout.addWidget(btn)
+            section_added[0] = True
+
+        # 2. قسم الإجازات والدوام
+        collect, label, buttons, is_first = add_section("الإجازات والدوام")
+        collect("تسجيل إجازة  📝", "Blue", self._quick_leave, "edit_leave",
+            tooltip="تسجيل إجازة جديدة للموظف")
+        collect("سجل الإجازات  📅", "Ghost", self._open_register,
+            tooltip="عرض سجل جميع الإجازات")
+        collect("تقويم الإجازات  🗓", "Ghost", self._open_calendar,
+            tooltip="عرض الإجازات على التقويم الشهري")
+        collect("مرفقات الإجازة  📎", "Ghost", self._open_attachments, "manage_attachments",
+            tooltip="إدارة مرفقات الإجازات")
+        if buttons:
+            if section_added[0]:
+                layout.addWidget(W.separator())
+            layout.addWidget(label)
+            for text, style, slot, permission, tooltip in buttons:
+                if style == "Ghost":
+                    btn = W.nav_button(text, slot, tooltip=tooltip)
+                else:
+                    btn = W.button(text, style, slot, tooltip=tooltip)
+                    btn.setMinimumHeight(34)
+                layout.addWidget(btn)
+            section_added[0] = True
+
+        # 3. قسم التقارير والبيانات
+        collect, label, buttons, is_first = add_section("التقارير والبيانات")
+        collect("لوحة المؤشرات  📊", "Gold", self._open_dashboard,
+            tooltip="عرض لوحة المؤشرات والإحصائيات")
+        collect("تقرير إجمالي  📄", "Ghost", self._global_report,
+            tooltip="توليد تقرير إجمالي لجميع الموظفين")
+        collect("تقرير مخصص  📑", "Ghost", self._open_custom_report,
+            tooltip="توليد تقرير مخصص حسب معايير محددة")
+        collect("استيراد موظفين Excel  📥", "Ghost", self._import_employee_data, "edit_employee",
+            tooltip="استيراد بيانات الموظفين من ملف Excel")
+        collect("تصدير الموظفين Excel  📤", "Ghost", self._export_employee_data,
+            tooltip="تصدير بيانات الموظفين إلى ملف Excel")
+        if buttons:
+            if section_added[0]:
+                layout.addWidget(W.separator())
+            layout.addWidget(label)
+            for text, style, slot, permission, tooltip in buttons:
+                if style == "Ghost":
+                    btn = W.nav_button(text, slot, tooltip=tooltip)
+                else:
+                    btn = W.button(text, style, slot, tooltip=tooltip)
+                    btn.setMinimumHeight(34)
+                layout.addWidget(btn)
+            section_added[0] = True
+
+        # 4. قسم المؤسسات والتنقلات
+        collect, label, buttons, is_first = add_section("المؤسسات والتنقلات")
+        collect("المؤسسات  🏥", "Ghost", self._open_institutions, "manage_institutions",
+            tooltip="إدارة قائمة المؤسسات")
+        collect("استيراد من مؤسسة  📥", "Blue", self._import_transfer, "import_transfer",
+            tooltip="استيراد بيانات من مؤسسة أخرى")
+        collect("تصدير للمركز  📤", "Blue", self._export_transfer, "export_transfer",
+            tooltip="تصدير بيانات للمركز الرئيسي")
+        collect("سجل الاستيراد  📋", "Ghost", self._open_import_history, "manage_institutions",
+            tooltip="عرض سجل عمليات الاستيراد")
+        if buttons:
+            if section_added[0]:
+                layout.addWidget(W.separator())
+            layout.addWidget(label)
+            for text, style, slot, permission, tooltip in buttons:
+                if style == "Ghost":
+                    btn = W.nav_button(text, slot, tooltip=tooltip)
+                else:
+                    btn = W.button(text, style, slot, tooltip=tooltip)
+                    btn.setMinimumHeight(34)
+                layout.addWidget(btn)
+            section_added[0] = True
+
+        # 5. قسم إدارة النظام
+        collect, label, buttons, is_first = add_section("إدارة النظام")
+        collect("ضوابط الإجازات  📋", "Ghost", self._open_rules, "edit_rules",
+            tooltip="تعديل ضوابط وسياسات الإجازات")
+        collect("العطل الرسمية  🗓", "Ghost", self._open_holidays, "view_holidays",
+            tooltip="عرض وإدارة العطل الرسمية")
+        collect("المستخدمون  👥", "Ghost", self._open_users, "manage_users",
+            tooltip="إدارة مستخدمين النظام")
+        collect("سجل التدقيق  📜", "Ghost", self._open_audit, "view_audit",
+            tooltip="عرض سجل تدقيق العمليات")
+        collect("التنبيهات  🔔", "Ghost", self._open_notifications,
+            tooltip="عرض التنبيهات والإشعارات")
+        if buttons:
+            if section_added[0]:
+                layout.addWidget(W.separator())
+            layout.addWidget(label)
+            for text, style, slot, permission, tooltip in buttons:
+                if style == "Ghost":
+                    btn = W.nav_button(text, slot, tooltip=tooltip)
+                else:
+                    btn = W.button(text, style, slot, tooltip=tooltip)
+                    btn.setMinimumHeight(34)
+                layout.addWidget(btn)
+            section_added[0] = True
+
+        # 6. قسم الأمان والصيانة
+        collect, label, buttons, is_first = add_section("الأمان والصيانة")
+        collect("تشفير قاعدة البيانات  🔒", "Ghost", self._open_encryption, "manage_encryption",
+            tooltip="تشفير وفك تشفير قاعدة البيانات")
+        collect("خزنة كلمات المرور  🔐", "Ghost", self._open_vault, "manage_encryption",
+            tooltip="إدارة خزنة كلمات المرور")
+        collect("عمليات قاعدة البيانات  🗄️", "Ghost", self._open_db_ops, "db_operations",
+            tooltip="عمليات الصيانة على قاعدة البيانات")
+        collect("سلة المحذوفات  🗑", "Warn", self._open_trash, "purge",
+            tooltip="عرض واستعادة العناصر المحذوفة")
+        if buttons:
+            if section_added[0]:
+                layout.addWidget(W.separator())
+            layout.addWidget(label)
+            for text, style, slot, permission, tooltip in buttons:
+                if style == "Ghost":
+                    btn = W.nav_button(text, slot, tooltip=tooltip)
+                else:
+                    btn = W.button(text, style, slot, tooltip=tooltip)
+                    btn.setMinimumHeight(34)
+                layout.addWidget(btn)
+            section_added[0] = True
+
+        # 7. الإعدادات
+        collect, label, buttons, is_first = add_section("عام")
+        collect("الإعدادات  ⚙", "Ghost", self._open_settings,
+            tooltip="إعدادات النظام والتفضيلات")
+        collect("حول  ℹ", "Gold", self._open_about,
+            tooltip="معلومات عن التطبيق والإصدار")
+        if buttons:
+            if section_added[0]:
+                layout.addWidget(W.separator())
+            layout.addWidget(label)
+            for text, style, slot, permission, tooltip in buttons:
+                if style == "Ghost":
+                    btn = W.nav_button(text, slot, tooltip=tooltip)
+                else:
+                    btn = W.button(text, style, slot, tooltip=tooltip)
+                    btn.setMinimumHeight(34)
+                layout.addWidget(btn)
+            section_added[0] = True
+
         layout.addWidget(W.separator())
-        add("📝  تسجيل إجازة", "Blue", self._quick_leave, "edit_leave")
-        add("📅  سجل الإجازات", "Ghost", self._open_register)
-        add("📎  مرفقات الإجازة", "Ghost", self._open_attachments, "manage_attachments")
-        layout.addWidget(W.separator())
-        add("📊  لوحة المؤشرات", "Gold", self._open_dashboard)
-        add("🗓  تقويم الإجازات", "Ghost", self._open_calendar)
-        add("🔔  التنبيهات", "Ghost", self._open_notifications)
-        add("📄  تقرير إجمالي", "Ghost", self._global_report)
-        add("🧾  كشف حساب الموظف", "Ghost", self._open_statement)
-        add("📤  تصفية نهاية الخدمة", "Ghost", self._open_settlement)
-        add("📨  مشاركة التقارير", "Ghost", self._open_share)
-        layout.addWidget(W.separator())
-        add("📋  ضوابط أنواع الإجازات", "Ghost", self._open_rules, "edit_rules")
-        add("🗓  العطل الرسمية", "Ghost", self._open_holidays, "manage_holidays")
-        add("👥  المستخدمون", "Ghost", self._open_users, "manage_users")
-        add("📜  سجل التدقيق", "Ghost", self._open_audit, "view_audit")
-        add("🔒  تشفير قاعدة البيانات", "Ghost", self._open_encryption)
-        add("🗄️  عمليات قاعدة البيانات", "Ghost", self._open_db_ops)
-        layout.addWidget(W.separator())
-        add("🏥  المؤسسات", "Ghost", self._open_institutions, "manage_institutions")
-        add("📥  استيراد من مؤسسة", "Accent", self._import_transfer, "import_transfer")
-        add("📤  تصدير بيانات للمركز", "Blue", self._export_transfer, "export_transfer")
-        add("📋  سجل الاستيراد", "Ghost", self._open_import_history, "manage_institutions")
-        add("🗑  سلة المحذوفات", "Ghost", self._open_trash, "purge")
-        layout.addWidget(W.separator())
-        add("⚙  الإعدادات", "Ghost", self._open_settings)
-        add("ℹ  حول", "Ghost", self._open_about)
-        layout.addWidget(W.button("🚪  خروج", "Warn", self.close))
+        btn_exit = W.button("خروج  🚪", "Warn", self.close, tooltip="خروج من التطبيق")
+        btn_exit.setMinimumHeight(34)
+        layout.addWidget(btn_exit)
+
         layout.addStretch()
         return area
-
     # -- المنطقة الوسطى -------------------------------------------------
     def _center(self) -> QVBoxLayout:
         layout = QVBoxLayout()
@@ -209,6 +385,7 @@ class MainWindow(QMainWindow):
         filters.addWidget(self.cb_institution)
         filters.addWidget(W.button("✖ مسح الفلاتر", "Ghost", self._clear_filters))
         filters.addStretch()
+        filters.addWidget(W.button("🔍 بحث متقدم", "Blue", self._open_advanced_search))
         filters.addWidget(W.button("📊 تصدير المعروض", "Gold", lambda: self._export(False)))
         filters.addWidget(W.button("📊 تصدير الكل", "Gold", lambda: self._export(True)))
         layout.addLayout(filters)
@@ -378,6 +555,33 @@ class MainWindow(QMainWindow):
         if emp_id:
             LeavesRegisterDialog(self, self.ctx, emp_id, on_save=self._after_change).exec()
 
+    def _export_employee_data(self) -> None:
+        """تصدير بيانات الموظفين كاملة (الحقول القابلة للإدخال) إلى Excel."""
+        q, workplace, institution = self._filters()
+        employees = self.ctx.employees(q, workplace, institution)
+        if not employees:
+            W.warn(self, "لا توجد بيانات للتصدير.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "تصدير الموظفين", f"الموظفون_{D.date.today()}.xlsx", "Excel (*.xlsx)")
+        if not path:
+            return
+        try:
+            X.export_employee_master(path, employees)
+        except Exception as exc:                      # noqa: BLE001
+            W.error(self, f"فشل التصدير: {exc}")
+            return
+        W.info(self, f"تم التصدير:\n{path}")
+        if W.confirm(self, "هل تريد فتح الملف الآن؟"):
+            W.open_path(self, path)
+
+    def _import_employee_data(self) -> None:
+        if not self.ctx.can("edit_employee"):
+            W.error(self, "لا تملك صلاحية استيراد الموظفين.")
+            return
+        from .dialogs_db import ImportWizardDialog
+        ImportWizardDialog(self, self.ctx, refresh_callback=self._after_change).exec()
+
     def _open_attachments(self) -> None:
         emp_id = self._require(self._current_id())
         if not emp_id:
@@ -408,23 +612,15 @@ class MainWindow(QMainWindow):
         if emp_id:
             StatementDialog(self, self.ctx, emp_id).exec()
 
-    def _open_share(self) -> None:
-        """مشاركة التقارير بالبريد أو تلغرام."""
-        from .dialogs_share import ShareDialog
-        emp_id = self._current_id()
-        dialog = ShareDialog(self, self.ctx, emp_id, on_settings=self._open_settings_sharing)
-        dialog.exec()
-
-    def _open_settings_sharing(self) -> None:
-        dialog = SettingsDialog(self, self.ctx)
-        dialog.theme_changed.connect(self._on_settings_saved)
-        dialog.exec()
-
     def _open_encryption(self) -> None:
         """إدارة تشفير قاعدة البيانات."""
         from .dialogs_security import EncryptionDialog
         dialog = EncryptionDialog(self, self.ctx)
         dialog.exec()
+
+    def _open_vault(self) -> None:
+        from .dialogs_vault import VaultDialog
+        VaultDialog(self, self.ctx).exec()
 
     def _open_settlement(self) -> None:
         emp_id = self._require(self._current_id())
@@ -469,19 +665,7 @@ class MainWindow(QMainWindow):
         self._after_change()
 
     def _export_transfer(self) -> None:
-        scope = self.ctx.session.scoped_institution
-        institution = scope
-        if not scope:
-            names = [item.name for item in self.ctx.db.list_institutions(active_only=True)]
-            if names:
-                from PyQt6.QtWidgets import QInputDialog
-                names.insert(0, "كل المؤسسات")
-                choice, ok = QInputDialog.getItem(
-                    self, "تصدير ملف نقل", "المؤسسة المطلوب تصدير بياناتها:", names, 0, False)
-                if not ok:
-                    return
-                institution = "" if choice == "كل المؤسسات" else choice
-        export_transfer_file(self, self.ctx, institution)
+        export_transfer_file(self, self.ctx)
 
     def _open_import_history(self) -> None:
         ImportHistoryDialog(self, self.ctx).exec()
@@ -537,8 +721,31 @@ class MainWindow(QMainWindow):
         self._apply_theme()
         self._after_change()
 
+    def _open_advanced_search(self) -> None:
+        from .dialogs_advanced_search import AdvancedSearchDialog
+        AdvancedSearchDialog(self, self.ctx).exec()
+
     def _open_about(self) -> None:
         AboutDialog(self, self.ctx).exec()
+
+    def _open_employee_card(self) -> None:
+        """فتح بطاقة الموظف المحدد."""
+        row = self.table.current_row()
+        if row < 0:
+            W.warn(self, "حدد موظفاً أولاً.")
+            return
+        emp_id = self.table.table.item(row, 0).text()
+        employee = self.ctx.db.get_employee(emp_id)
+        if employee is None:
+            W.error(self, "الموظف غير موجود.")
+            return
+        from .dialogs_employee_card import EmployeeCardDialog
+        EmployeeCardDialog(employee, self.policy, self, self.ctx).exec()
+
+    def _open_custom_report(self) -> None:
+        """فتح نافذة التقرير المخصص."""
+        from .dialogs_custom_report import CustomReportDialog
+        CustomReportDialog(self, self.ctx).exec()
 
     def _after_change(self) -> None:
         self._load_filters()
@@ -619,18 +826,20 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         actions = [
-            ("🖨 طباعة التفاصيل", self._print_employee),
-            ("📄 تصدير PDF", self._export_pdf_employee),
-            ("✏ تعديل الموظف", self._edit_employee),
-            ("📅 سجل الإجازات", self._open_register),
-            ("📝 تسجيل إجازة", self._quick_leave),
-            ("🧾 كشف حساب الرصيد", self._open_statement),
-            ("📤 تصفية نهاية الخدمة", self._open_settlement),
-            ("📎 مرفقات الإجازة", self._open_attachments),
-            ("🔀 نقل الموظف إلى مؤسسة", self._transfer_employee),
-            ("🗑 حذف الموظف", self._delete_employee),
+            ("🖨 طباعة التفاصيل", self._print_employee, ""),
+            ("📄 تصدير PDF", self._export_pdf_employee, ""),
+            ("✏ تعديل الموظف", self._edit_employee, "edit_employee"),
+            ("📅 سجل الإجازات", self._open_register, ""),
+            ("📝 تسجيل إجازة", self._quick_leave, "edit_leave"),
+            ("🧾 كشف حساب الرصيد", self._open_statement, ""),
+            ("📤 تصفية نهاية الخدمة", self._open_settlement, ""),
+            ("📎 مرفقات الإجازة", self._open_attachments, "manage_attachments"),
+            ("🔀 نقل الموظف إلى مؤسسة", self._transfer_employee, "transfer_employee"),
+            ("🗑 حذف الموظف", self._delete_employee, "delete_employee"),
         ]
-        for text, slot in actions:
+        for text, slot, permission in actions:
+            if permission and not self.ctx.can(permission):
+                continue
             action = QAction(text, self)
             action.triggered.connect(slot)
             menu.addAction(action)

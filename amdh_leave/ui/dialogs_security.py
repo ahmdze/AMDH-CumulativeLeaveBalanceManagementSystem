@@ -79,6 +79,10 @@ class EncryptionDialog(BaseDialog):
 
     def __init__(self, parent=None, ctx=None):
         super().__init__(parent, ctx, "تشفير قاعدة البيانات")
+        if ctx is not None and not ctx.can("manage_encryption"):
+            W.error(self, "إدارة التشفير متاحة لمن يملك صلاحية إدارة التشفير.")
+            self.reject()
+            return
         self.changed = False
         self.resize(680, 580)
         self._build()
@@ -133,6 +137,8 @@ class EncryptionDialog(BaseDialog):
             ("حزمة SQLCipher مثبتة",
              "نعم" if summary["sqlcipher_available"] else "لا — راجع أمر التثبيت أدناه"),
             ("التشفير مُفعَّل", "نعم" if summary["encryption_enabled"] else "لا"),
+            ("الوضع", "مفتاح تلقائي (نسخة مؤسسة)" if summary.get("mode") == "keyfile"
+             else ("كلمة مرور" if summary["encryption_enabled"] else "—")),
             ("قاعدة البيانات مشفّرة فعلياً",
              "نعم" if summary["database_encrypted"] else "لا"),
             ("ملف القفل", "موجود" if summary["lock_file"] else "غير موجود"),
@@ -148,11 +154,16 @@ class EncryptionDialog(BaseDialog):
 
         available = summary["sqlcipher_available"]
         enabled = summary["encryption_enabled"]
+        keyfile = summary.get("mode") == "keyfile"
         self.btn_enable.setEnabled(available and not enabled)
-        self.btn_disable.setEnabled(available and enabled)
-        self.btn_change.setEnabled(available and enabled)
+        self.btn_disable.setEnabled(available and enabled and not keyfile)
+        self.btn_change.setEnabled(available and enabled and not keyfile)
         self.btn_copy.setVisible(not available)
         self.hint.setText("" if available else crypto.install_hint())
+        if keyfile:
+            self.lbl_message.setText("هذه نسخة مؤسسة تُفتح تلقائياً بمفتاح data/.amdh_dbkey؛ "
+                                     "لا يمكن تغيير كلمة المرور أو إلغاء التشفير من هنا.")
+            self.lbl_message.setStyleSheet(theme.label_style("gold"))
         if not available:
             self.lbl_message.setText("التشفير غير متاح حالياً لأن حزمة SQLCipher غير مثبتة — "
                 "بقية مزايا البرنامج تعمل بشكل طبيعي.")
@@ -161,7 +172,7 @@ class EncryptionDialog(BaseDialog):
     def _copy_hint(self) -> None:
         clipboard = QApplication.clipboard()
         if clipboard is not None:
-            clipboard.setText("pip install sqlcipher3-binary")
+            clipboard.setText("pip install sqlcipher3")
             W.info(self, "تم نسخ أمر التثبيت إلى الحافظة.")
 
     # ------------------------------------------------------------------
@@ -179,6 +190,14 @@ class EncryptionDialog(BaseDialog):
             return
         password = dialog.password
         self.ctx.backup.create("pre_encrypt")
+        try:
+            self.ctx.db.add_vault_entry(
+                kind="master", label="كلمة مرور قاعدة المركز (نسخة احتياطية مشفّرة)",
+                password=password,
+                note="تُستخدم لفتح قاعدة المركز وجميع نسخها الاحتياطية المشفّرة.",
+                user=self.ctx.user())
+        except Exception:                             # noqa: BLE001
+            pass
         self.ctx.db.close()          # مهم: لا اتصال مفتوح أثناء استبدال الملف
         try:
             crypto.encrypt_database(self.ctx.paths.db_path, password)
@@ -188,7 +207,9 @@ class EncryptionDialog(BaseDialog):
             return
         self.changed = True
         W.info(self, "تم تفعيل التشفير بنجاح." + "\n\n" +
-               "سيُغلق البرنامج الآن. شغّله مرة أخرى وأدخل كلمة المرور.")
+               "سيُغلق البرنامج الآن. شغّله مرة أخرى وأدخل كلمة المرور.\n\n"
+               "مهم: افتح «خزنة كلمات المرور» وصدّر «بطاقة استرداد» واطبعها "
+               "واحفظها خارج الجهاز.")
         QApplication.instance().quit()
 
     def _disable(self) -> None:
@@ -208,6 +229,15 @@ class EncryptionDialog(BaseDialog):
             W.error(self, str(exc))
             self.ctx.db.open()
             return
+        try:
+            from ..db import Database
+            probe = Database(self.ctx.paths.db_path, self.ctx.paths.backups_dir)
+            for entry in probe.list_vault():
+                if entry.get("kind") == "master":
+                    probe.delete_vault_entry(int(entry["id"]))
+            probe.close()
+        except Exception:                             # noqa: BLE001
+            pass
         self.changed = True
         W.info(self, "تم إلغاء التشفير." + "\n\n" +
                "سيُغلق البرنامج الآن. شغّله مرة أخرى للعمل بلا كلمة مرور.")
@@ -231,6 +261,17 @@ class EncryptionDialog(BaseDialog):
             W.error(self, str(exc))
             self.ctx.db.open()
             return
+        try:
+            lock = crypto.read_lock(self.ctx.paths.data_dir) or {}
+            key = crypto.derive_key(new.password, lock["salt"], int(lock["iterations"]))
+            from ..db import Database
+            probe = Database(self.ctx.paths.db_path, self.ctx.paths.backups_dir, key_hex=key)
+            for entry in probe.list_vault():
+                if entry.get("kind") == "master":
+                    probe.update_vault_entry(int(entry["id"]), password=new.password)
+            probe.close()
+        except Exception as exc:                      # noqa: BLE001
+            W.warn(self, f"تم تغيير كلمة المرور، لكن تعذّر تحديث الخزنة: {exc}")
         self.changed = True
         W.info(self, "تم تغيير كلمة المرور." + "\n\n" +
                "سيُغلق البرنامج الآن. استخدم كلمة المرور الجديدة عند التشغيل.")

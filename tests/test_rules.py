@@ -13,7 +13,7 @@ def test_default_rules_cover_all_legacy_types():
     for name in ("اعتيادية", "طويلة", "دراسات", "مرضية", "5 سنوات", "كارت الزمنية",
                  "قبل الوضع", "بعد الوضع", "أمومة"):
         assert name in rules
-    assert rules[config.ADJUSTMENT_TYPE].is_adjustment is True
+    assert config.ADJUSTMENT_TYPE not in rules
 
 
 def test_policy_roundtrip_through_meta(policy):
@@ -43,10 +43,13 @@ def test_types_for_gender_filters_female_only():
     assert "اعتيادية" in male and "اعتيادية" in female
 
 
-def test_types_for_gender_can_hide_adjustment():
-    policy = Policy.from_meta({}, default_rules())
+def test_types_for_gender_hides_legacy_adjustment():
+    rules = default_rules()
+    rules[config.ADJUSTMENT_TYPE] = LeaveRule(type=config.ADJUSTMENT_TYPE,
+                                              is_adjustment=True, active=True)
+    policy = Policy.from_meta({}, rules)
+    assert config.ADJUSTMENT_TYPE not in policy.types_for_gender("ذكر")
     assert config.ADJUSTMENT_TYPE not in policy.types_for_gender("ذكر", include_adjustment=False)
-    assert policy.adjustment_type == config.ADJUSTMENT_TYPE
 
 
 def test_inactive_rules_are_hidden():

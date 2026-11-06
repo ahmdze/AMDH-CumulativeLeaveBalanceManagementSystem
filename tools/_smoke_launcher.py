@@ -14,11 +14,12 @@ faulthandler.dump_traceback_later(60, exit=True)
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("AMDH_SETTINGS_SUFFIX", "-smoke")
-ROOT = Path(r"G:\Download\AMDH-Calculator")
+ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 TMP = Path(tempfile.mkdtemp(prefix="amdh_launch_"))
-shutil.copy2(ROOT / "employees_leave.db", TMP / "employees_leave.db")
+from tests.conftest import create_legacy_db                      # noqa: E402
+create_legacy_db(TMP / "employees_leave.db")
 
 # عزل الفحص: تعطيل تسجيل الدخول والإشعارات داخل نسخة الاختبار فقط
 from amdh_leave.db import Database as _Db                       # noqa: E402

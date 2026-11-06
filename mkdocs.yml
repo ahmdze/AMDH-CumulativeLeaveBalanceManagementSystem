@@ -1,0 +1,59 @@
+site_name: "نظام إدارة الإجازات التراكمية (AMDH-Leave)"
+site_description: "توثيق داخلي لنظام إدارة إجازات الموظفين وأرصدتها التراكمية"
+site_url: ""
+repo_url: https://github.com/your-org/AMDH-Calculator
+edit_uri: ""
+docs_dir: docs
+theme:
+  name: material
+  language: ar
+  direction: rtl
+  palette:
+    - scheme: default
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: وضع الضوء
+    - scheme: slate
+      primary: blue
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: وضع الظلام
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - search.highlight
+    - search.share
+nav:
+  - الرئيسية: index.md
+  - نظرة عامة: overview.md
+  - البنية: architecture.md
+  - API الداخلي:
+    - قاعدة البيانات: api/database.md
+    - الخدمات: api/services.md
+    - التصدير: api/exporters.md
+    - الواجهة: api/ui.md
+  - التثبيت: installation.md
+  - الاختبارات: testing.md
+plugins:
+  - search:
+      lang: ar
+  - mkdocstrings:
+      handlers:
+        python:
+          options:
+            docstring_style: numpy
+            show_source: true
+            show_root_heading: true
+            heading_level: 3
+markdown_extensions:
+  - admonition
+  - codehilite
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - tables
+  - toc:
+      permalink: true

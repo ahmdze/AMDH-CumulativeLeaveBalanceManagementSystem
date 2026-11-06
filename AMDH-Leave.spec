@@ -10,6 +10,8 @@
 import sys
 from pathlib import Path
 
+from PyInstaller.utils.hooks import collect_dynamic_libs
+
 block_cipher = None
 ROOT = Path(SPECPATH)
 
@@ -19,18 +21,19 @@ hidden = [
     "reportlab.platypus", "reportlab.lib",
     "arabic_reshaper", "bidi", "bidi.algorithm",
     "PyQt6.QtNetwork",
+    "PyQt6.QtPrintSupport",
+    "sqlcipher3", "sqlcipher3.dbapi2",
 ]
 
-# الصور (الشعارات) وملفات الترجمة تُضمَّن داخل الحزمة
+# الصور (الشعارات) تُضمَّن داخل الحزمة
 datas = [
     (str(ROOT / "amdh_leave" / "assets"), "amdh_leave/assets"),
-    (str(ROOT / "amdh_leave" / "locales"), "amdh_leave/locales"),
 ]
 
 a = Analysis(
     ["leave_system_deep.py"],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=collect_dynamic_libs("sqlcipher3"),
     datas=datas,
     hiddenimports=hidden,
     hookspath=[],

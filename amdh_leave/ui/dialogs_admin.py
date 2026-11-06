@@ -45,8 +45,6 @@ class RuleEditDialog(BaseDialog):
         self.chk_consumes.setChecked(rule.consumes_balance)
         self.chk_exclusion = QCheckBox("تُستبعد أيامه من أيام الخدمة")
         self.chk_exclusion.setChecked(rule.service_exclusion)
-        self.chk_adjustment = QCheckBox("نوع تسوية (يسمح بقيم سالبة)")
-        self.chk_adjustment.setChecked(rule.is_adjustment)
         self.cb_mode = QComboBox()
         for key in config.COUNT_MODES:
             self.cb_mode.addItem(config.COUNT_MODE_LABELS[key], key)
@@ -79,7 +77,6 @@ class RuleEditDialog(BaseDialog):
         form.addRow("اسم النوع *", self.e_type)
         form.addRow("", self.chk_consumes)
         form.addRow("", self.chk_exclusion)
-        form.addRow("", self.chk_adjustment)
         form.addRow("طريقة العد", self.cb_mode)
         form.addRow("السقف", self.sp_quota)
         form.addRow("فترة السقف", self.cb_period)
@@ -112,7 +109,7 @@ class RuleEditDialog(BaseDialog):
             quota_days=self.sp_quota.value(),
             quota_period=self.cb_period.currentData(),
             requires_order=self.chk_order.isChecked(),
-            is_adjustment=self.chk_adjustment.isChecked(),
+            is_adjustment=self.rule.is_adjustment if self.rule else False,
             gender=self.cb_gender.currentData() or "",
             order_index=self.sp_order.value(),
             active=self.chk_active.isChecked(),
@@ -134,7 +131,7 @@ class RulesEditorDialog(BaseDialog):
         layout.addWidget(W.muted_label(
             "لكل نوع: هل يُخصم من الرصيد؟ هل يُستبعد من أيام الخدمة؟ طريقة العد، وسقف اختياري."))
         self.table = W.TablePanel(["النوع", "يُخصم من الرصيد", "يُستبعد من الخدمة", "طريقة العد",
-                                   "السقف", "يتطلب أمراً", "الجنس", "تسوية", "مُفعَّل", "ملاحظات"])
+                                   "السقف", "يتطلب أمراً", "الجنس", "مُفعَّل", "ملاحظات"])
         layout.addWidget(self.table)
         row = QHBoxLayout()
         row.addWidget(W.button("➕ إضافة نوع", "Accent", self._add))
@@ -146,8 +143,9 @@ class RulesEditorDialog(BaseDialog):
         self._refresh()
 
     def _rules(self) -> list[LeaveRule]:
-        rules = list(self.ctx.db.policy(refresh=True).rules.values())
-        rules.sort(key=lambda r: (r.is_adjustment, r.order_index, r.type))
+        rules = [rule for rule in self.ctx.db.policy(refresh=True).rules.values()
+                 if not rule.is_adjustment]
+        rules.sort(key=lambda r: (r.order_index, r.type))
         return rules
 
     def _refresh(self) -> None:
@@ -157,7 +155,7 @@ class RulesEditorDialog(BaseDialog):
             rows.append([rule.type, "نعم" if rule.consumes_balance else "لا",
                          "نعم" if rule.service_exclusion else "لا", rule.count_mode_label,
                          rule.quota_label, "نعم" if rule.requires_order else "لا",
-                         rule.gender or "الجميع", "نعم" if rule.is_adjustment else "لا",
+                         rule.gender or "الجميع",
                          "نعم" if rule.active else "لا", rule.notes])
         self.table.set_rows(rows, empty_text="لا توجد أنواع معرّفة",
                             footer=f"عدد الأنواع: {len(rows)}")
@@ -205,6 +203,7 @@ class RulesEditorDialog(BaseDialog):
 class HolidaysDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None):
         super().__init__(parent, ctx, "العطل الرسمية")
+        self.can_manage = bool(ctx and ctx.can("manage_holidays"))
         self.resize(620, 520)
         layout = QVBoxLayout(self)
         layout.addWidget(W.title_label("العطل الرسمية", 15))
@@ -215,17 +214,28 @@ class HolidaysDialog(BaseDialog):
         self.e_name = QLineEdit()
         self.e_name.setPlaceholderText("مثال: عيد العمال")
         self.d_day = W.date_edit(date.today())
+        self.chk_recurring = QCheckBox("تكرر سنوياً")
         form.addRow("المناسبة", self.e_name)
         form.addRow("التاريخ", self.d_day)
+        form.addRow("", self.chk_recurring)
         layout.addWidget(card)
-        layout.addLayout(W.button_row(W.button("➕ إضافة", "Accent", self._add), stretch=False))
-        self.table = W.TablePanel(["#", "التاريخ", "المناسبة", "اليوم"])
+        self.btn_add = W.button("➕ إضافة", "Accent", self._add)
+        self.add_row = W.button_row(self.btn_add, stretch=False)
+        layout.addLayout(self.add_row)
+        self.table = W.TablePanel(["#", "التاريخ", "المناسبة", "اليوم", "متكرر"])
         layout.addWidget(self.table)
         row = QHBoxLayout()
-        row.addWidget(W.button("🗑 حذف المحدد", "Warn", self._delete))
+        self.btn_delete = W.button("🗑 حذف المحدد", "Warn", self._delete)
+        row.addWidget(self.btn_delete)
         row.addStretch()
         row.addWidget(self.close_button())
         layout.addLayout(row)
+        if not self.can_manage:
+            card.setVisible(False)
+            self.add_row.setEnabled(False)
+            self.btn_delete.setVisible(False)
+            layout.insertWidget(1, W.muted_label(
+                "عرض فقط — إدارة العطل الرسمية متاحة لمدير النظام."))
         self._refresh()
 
     def _refresh(self) -> None:
@@ -233,19 +243,28 @@ class HolidaysDialog(BaseDialog):
         rows = []
         for i, h in enumerate(self._data, 1):
             weekday = config.WEEKDAY_NAMES[h.day.weekday()] if h.day else ""
-            rows.append([i, D.to_iso(h.day), h.name, weekday])
+            recurring = "نعم" if h.recurring else "لا"
+            rows.append([i, D.to_iso(h.day), h.name, weekday, recurring])
         self.table.set_rows(rows, empty_text="لا توجد عطل مسجلة")
 
     def _add(self) -> None:
+        if not self.can_manage:
+            W.error(self, "لا تملك صلاحية إدارة العطل الرسمية.")
+            return
         day = W.date_of(self.d_day)
         if not day:
             W.error(self, "تاريخ غير صالح.")
             return
-        self.ctx.db.add_holiday(day, self.e_name.text().strip())
-        self.ctx.db.log(self.ctx.user(), "إضافة", "holiday", D.to_iso(day), self.e_name.text())
+        recurring = self.chk_recurring.isChecked()
+        self.ctx.db.add_holiday(day, self.e_name.text().strip(), recurring=recurring)
+        self.ctx.db.log(self.ctx.user(), "إضافة", "holiday", D.to_iso(day),
+                         self.e_name.text() + (" (متكرر)" if recurring else ""))
         self._refresh()
 
     def _delete(self) -> None:
+        if not self.can_manage:
+            W.error(self, "لا تملك صلاحية إدارة العطل الرسمية.")
+            return
         idx = self.table.current_row()
         if idx < 0:
             W.warn(self, "حدد عطلة.")

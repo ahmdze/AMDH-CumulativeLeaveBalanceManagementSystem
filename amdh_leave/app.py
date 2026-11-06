@@ -100,6 +100,28 @@ class SingleInstance:
 def _prepare_paths(data_dir: str | None) -> config.Paths:
     paths = config.Paths(Path(data_dir).expanduser().resolve() if data_dir else None)
     paths.ensure()
+    # ترحيل بيانات النسخة المغلّفة القديمة من _internal إلى data (مرة واحدة)
+    if getattr(sys, "frozen", False) and not paths.db_path.exists():
+        old_dir = Path(getattr(sys, "_MEIPASS", paths.app_root / "_internal"))
+        old_db = old_dir / config.DB_FILENAME
+        if old_db.exists():
+            try:
+                for suffix in ("", "-wal", "-shm"):
+                    source = Path(str(old_db) + suffix)
+                    if source.exists():
+                        shutil.copy2(source, Path(str(paths.db_path) + suffix))
+                for name in ("attachments", "backups", "logs"):
+                    source = old_dir / name
+                    if source.is_dir():
+                        shutil.copytree(source, paths.data_dir / name, dirs_exist_ok=True)
+                for name in (".amdh_lock.json", ".amdh_dbkey"):
+                    source = old_dir / name
+                    if source.exists():
+                        shutil.copy2(source, paths.data_dir / name)
+                get_logger("app").warning("نُقلت بيانات النسخة القديمة من %s إلى %s",
+                                          old_dir, paths.data_dir)
+            except OSError as exc:                    # pragma: no cover
+                get_logger("app").error("تعذّر ترحيل بيانات _internal: %s", exc)
     # ترحيل قاعدة بيانات قديمة موجودة بجانب البرنامج إلى مجلد البيانات الجديد
     if not paths.db_path.exists():
         for candidate in paths.legacy_db_candidates():
@@ -215,7 +237,18 @@ def main(argv: list[str] | None = None) -> int:
 
     key_hex: str | None = None
     from .services import crypto as _crypto
-    if _crypto.is_encryption_enabled(paths.data_dir) or _crypto.is_encrypted_database(paths.db_path):
+    key_file = _crypto.read_key_file(paths.data_dir)
+    encryption_on = _crypto.is_encryption_enabled(paths.data_dir)
+    if key_file and _crypto.is_encrypted_database(paths.db_path):
+        # نسخة مؤسسة: مفتاح تلقائي، بلا سؤال كلمة مرور
+        key_hex = key_file
+    elif encryption_on and not key_file:
+        if (_crypto.read_lock(paths.data_dir) or {}).get("mode") == "keyfile":
+            QMessageBox.critical(None, "تشفير قاعدة البيانات",
+                                 "ملف مفتاح القاعدة مفقود (.amdh_dbkey).\n"
+                                 "استعد المفتاح من مركز الدائرة أو من النسخة الاحتياطية.")
+            logger.warning("ملف المفتاح مفقود مع قفل keyfile")
+            return 3
         key_hex = _open_encrypted_database(paths, logger)
         if key_hex is None:
             logger.warning("أُلغيت عملية فتح قاعدة بيانات مشفّرة")

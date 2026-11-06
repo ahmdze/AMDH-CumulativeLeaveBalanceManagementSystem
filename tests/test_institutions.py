@@ -265,3 +265,10 @@ def test_report_saved_with_institution_history(tmp_path):
     assert db.checksum_seen(records[0].checksum) is not None
     other.close()
     db.close()
+
+
+def test_printable_credentials_html_contains_username_and_password():
+    from amdh_leave.ui.dialogs_credentials import credentials_html
+    content = credentials_html("مستشفى الكرامة", "H1", "h1", "Secret123", "مدخل بيانات")
+    assert "مستشفى الكرامة" in content and "h1" in content and "Secret123" in content
+    assert "تعليمات الاستخدام" in content

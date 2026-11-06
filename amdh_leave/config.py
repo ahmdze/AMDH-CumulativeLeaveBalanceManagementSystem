@@ -9,11 +9,11 @@ from pathlib import Path
 from .colors import (alpha, darken, ensure_contrast, gradient,
                      lighten, mix, readable_on)
 
-APP_NAME = "نظام إدارة الإجازات التراكمية"
-APP_VERSION = "3.0.0"
+APP_NAME = "نظام إدارة الرصيد التراكمي للإجازات"
+APP_VERSION = "1.0.0"
 APP_RELEASE = "2026-10"
 APP_ORGANIZATION = "AMDH"
-APP_DEVELOPER = "تقني طبي - أحمد زياد رحيمه"
+APP_DEVELOPER = "احمد زياد رحيمه"
 APP_PHONE = "07723064622"
 APP_EMAIL = "ahmdze@gmail.com"
 
@@ -61,17 +61,40 @@ ROLE_LABELS = {"admin": "مدير النظام", "editor": "مدخل بيانا�
 # المسارات
 # ----------------------------------------------------------------------------
 def _app_root() -> Path:
-    """مجلد المشروع (المجلد الذي يحتوي حزمة amdh_leave)."""
+    """مجلد البرنامج: مجلد الـ EXE في النسخة المغلّفة، أو جذر المشروع في المصدر."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent.parent
 
 
+def _writable_dir(path: Path) -> bool:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".amdh_write_test"
+        probe.write_bytes(b"1")
+        probe.unlink()
+        return True
+    except OSError:
+        return False
+
+
 def _default_data_dir() -> Path:
-    """مجلد البيانات: بجانب البرنامج، وإن لم يكن قابلاً للكتابة فمجلد بيانات المستخدم."""
+    """مجلد البيانات: ``data`` بجانب الـ EXE، ثم ProgramData، ثم AppData."""
     env = os.environ.get("AMDH_DATA_DIR")
     if env:
         return Path(env).expanduser().resolve()
     root = _app_root()
-    if os.access(root, os.W_OK):
+    if getattr(sys, "frozen", False):
+        # النسخة المغلّفة: بيانات منفصلة عن ملفات البرنامج حتى لا يمسحها التحديث
+        candidate = root / "data"
+        if _writable_dir(candidate):
+            return candidate
+        common = Path(os.environ.get("PROGRAMDATA", r"C:\ProgramData")) / "AMDH" / "LeaveSystem"
+        if _writable_dir(common):
+            return common
+        base = Path(os.environ.get("APPDATA", Path.home())) / "AMDH"
+        return base / "LeaveSystem"
+    if _writable_dir(root):
         return root
     if sys.platform.startswith("win"):
         base = Path(os.environ.get("APPDATA", Path.home())) / "AMDH"
@@ -238,7 +261,7 @@ def build_palette(anchors: dict[str, str]) -> dict[str, str]:
         # أسطح خاصة
         "header_grad": gradient(lighten(surface, 0.04) if dark else surface, bg),
         "sidebar_grad": gradient(surface, mix(surface, bg, 0.75 if dark else 0.30)),
-        "tooltip_bg": lighten(card, 0.06) if dark else "#1F2937",
+        "tooltip_bg": "#1F2937" if dark else lighten(card, 0.06),
         "shadow": alpha("#000000", 0.50) if dark else alpha(text, 0.18),
     }
 
@@ -303,14 +326,12 @@ DEFAULT_RULES: list[dict] = [
     {"type": "بعد الوضع",  "consumes_balance": 1, "service_exclusion": 0, "count_mode": "calendar",
      "quota_days": 0, "quota_period": "none", "requires_order": 1, "is_adjustment": 0,
      "gender": "أنثى", "order_index": 8},
-    {"type": "أمومة",      "consumes_balance": 1, "service_exclusion": 0, "count_mode": "calendar",
+    {"type": "أمومة",      "consumes_balance": 0, "service_exclusion": 1, "count_mode": "calendar",
      "quota_days": 0, "quota_period": "none", "requires_order": 1, "is_adjustment": 0,
      "gender": "أنثى", "order_index": 9},
-    {"type": "تسوية رصيد", "consumes_balance": 1, "service_exclusion": 0, "count_mode": "calendar",
-     "quota_days": 0, "quota_period": "none", "requires_order": 0, "is_adjustment": 1,
-     "gender": "", "order_index": 99},
 ]
 
+# للتوافق مع البيانات القديمة فقط — لم يعد يُنشأ من الواجهة
 ADJUSTMENT_TYPE = "تسوية رصيد"
 
 # ----------------------------------------------------------------------------
@@ -328,7 +349,7 @@ DEFAULT_POLICY: dict[str, object] = {
     "warn_leaving_soon_days": 5,
     "low_balance_days": 5,
     "first_day_of_week": 5,   # السبت
-    "auth_enabled": False,
+    "auth_enabled": True,
     "session_timeout_minutes": 0,
     "backup_on_start": True,
     "backup_on_exit": True,

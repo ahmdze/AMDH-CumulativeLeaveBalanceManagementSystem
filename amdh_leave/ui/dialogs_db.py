@@ -27,9 +27,21 @@ IMPORT_FIELDS: list[tuple[str, str, list[str]]] = [
     ("workplace", "مكان العمل", ["workplace", "مكان العمل", "موقع العمل", "الدائرة"]),
     ("institution", "المؤسسة / القسم", ["institution", "المؤسسة", "القسم", "المديرية"]),
     ("gender", "الجنس", ["gender", "الجنس"]),
+    ("status", "الحالة", ["status", "الحالة", "حالة الموظف"]),
     ("start_date", "تاريخ المباشرة *", ["start_date", "تاريخ المباشرة", "المباشرة", "تاريخ التعيين"]),
     ("end_date", "انتهاء الخدمة", ["end_date", "انتهاء الخدمة", "تاريخ الانتهاء"]),
     ("notes", "ملاحظات", ["notes", "ملاحظات", "الملاحظات"]),
+    ("opening_balance_set", "له رصيد افتتاحي", ["opening_balance_set", "له رصيد افتتاحي",
+                                                 "رصيد افتتاحي", "هل له رصيد"]),
+    ("opening_balance", "الرصيد الافتتاحي (أيام)", ["opening_balance", "الرصيد الافتتاحي",
+                                                     "آخر رصيد", "الرصيد اليدوي"]),
+    ("opening_balance_date", "تاريخ احتساب الرصيد", ["opening_balance_date", "تاريخ احتساب الرصيد",
+                                                      "تاريخ الاحتساب", "تاريخ الرصيد", "تاريخ الحساب",
+                                                      "احتساب الرصيد"]),
+    ("opening_balance_by", "من قام بالحساب", ["opening_balance_by", "من قام بالحساب",
+                                               "المحاسب", "اسم المحاسب"]),
+    ("opening_balance_note", "تفاصيل الرصيد", ["opening_balance_note", "تفاصيل الرصيد",
+                                                "ملاحظات الرصيد", "مرجع الرصيد"]),
 ]
 
 IMPORT_MODES = [
@@ -41,6 +53,10 @@ IMPORT_MODES = [
 class DatabaseOperationsDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, refresh_callback=None):
         super().__init__(parent, ctx, "عمليات قاعدة البيانات")
+        if ctx is not None and not ctx.can("db_operations"):
+            W.error(self, "عمليات قاعدة البيانات متاحة لمن يملك صلاحيتها.")
+            self.reject()
+            return
         self.refresh_callback = refresh_callback
         self.resize(520, 520)
         layout = QVBoxLayout(self)
@@ -49,6 +65,7 @@ class DatabaseOperationsDialog(BaseDialog):
         for text, style, slot in (
             ("💾 نسخة احتياطية الآن", "Accent", self._backup_now),
             ("📀 تصدير قاعدة البيانات", "Blue", self._export_db),
+            ("📤 تصدير الموظفين (كل الحقول)", "Blue", self._export_employees_data),
             ("📂 استيراد/دمج قاعدة بيانات", "Gold", self._import_db),
             ("📄 تصدير قالب Excel للموظفين", "Ghost", self._export_template),
             ("📊 استيراد موظفين من Excel (معالج)", "Ghost", self._import_excel),
@@ -81,6 +98,21 @@ class DatabaseOperationsDialog(BaseDialog):
             self.ctx.db.log(self.ctx.user(), "تصدير", "database", Path(path).name, "")
         except Exception as exc:
             W.error(self, f"فشل التصدير: {exc}")
+
+    def _export_employees_data(self) -> None:
+        employees = self.ctx.employees()
+        if not employees:
+            W.warn(self, "لا يوجد موظفون للتصدير.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "تصدير الموظفين", f"الموظفون_{date.today()}.xlsx", "Excel (*.xlsx)")
+        if not path:
+            return
+        try:
+            X.export_employee_master(path, employees)
+            W.info(self, f"تم التصدير:\n{path}")
+        except Exception as exc:                      # noqa: BLE001
+            W.error(self, f"تعذّر التصدير: {exc}")
 
     def _import_db(self) -> None:
         """يُحوَّل إلى محرّك الدمج الجديد غير المُدمّر (معاينة + تقرير + تراجع).
@@ -125,17 +157,20 @@ class DatabaseOperationsDialog(BaseDialog):
         if not X.HAS_XLSX:
             W.error(self, "مكتبة openpyxl غير مثبتة.")
             return
-        path, _ = QFileDialog.getSaveFileName(self, "حفظ قالب Excel", "template_employees.xlsx",
+        path, _ = QFileDialog.getSaveFileName(self, "حفظ قالب Excel", "قالب_الموظفين.xlsx",
                                               "Excel (*.xlsx)")
         if not path:
             return
         try:
-            X.export_template(path)
+            X.export_employee_template(path)
             W.info(self, f"تم حفظ القالب:\n{path}")
         except Exception as exc:
             W.error(self, f"فشل الحفظ: {exc}")
 
     def _import_excel(self) -> None:
+        if not self.ctx.can("edit_employee"):
+            W.error(self, "لا تملك صلاحية استيراد الموظفين.")
+            return
         ImportWizardDialog(self, self.ctx, refresh_callback=self.refresh_callback).exec()
 
     def _integrity(self) -> None:
@@ -292,8 +327,46 @@ class ImportWizardDialog(BaseDialog):
             for key, combo in self.mapping.items():
                 header = combo.currentData()
                 row[key] = raw.get(header) if header else None
-            out.append(row)
+            out.append(self._normalize_row(row))
         return out
+
+    @staticmethod
+    def _normalize_row(row: dict) -> dict:
+        """توحيد قيم الصف (الحالة، الرصيد الافتتاحي، التواريخ)."""
+        status_text = str(row.get("status") or "").strip().lower()
+        status = {"على الملاك": "active", "active": "active", "بإجازة": "leave",
+                  "leave": "leave", "متقاعد": "retired", "متقاعد/منتهية خدمته": "retired",
+                  "retired": "retired"}.get(status_text, "active")
+        flag_text = str(row.get("opening_balance_set") or "").strip().lower()
+        has_values = any(str(row.get(key) or "").strip() for key in
+                         ("opening_balance", "opening_balance_date", "opening_balance_by"))
+        if flag_text in {"نعم", "yes", "1", "true", "صحيح"}:
+            opening_set = 1
+        elif flag_text in {"لا", "no", "0", "false", "خطأ"}:
+            opening_set = 0
+        else:
+            opening_set = 1 if has_values else 0
+        try:
+            opening_balance = int(float(row.get("opening_balance") or 0))
+        except (TypeError, ValueError):
+            opening_balance = 0
+        return {
+            "emp_id": str(row.get("emp_id") or "").strip(),
+            "name": str(row.get("name") or "").strip(),
+            "job_title": str(row.get("job_title") or "").strip(),
+            "workplace": str(row.get("workplace") or "").strip(),
+            "institution": str(row.get("institution") or "").strip(),
+            "gender": str(row.get("gender") or "").strip(),
+            "status": status,
+            "start_date": D.to_iso(row.get("start_date")),
+            "end_date": D.to_iso(row.get("end_date")),
+            "notes": str(row.get("notes") or "").strip(),
+            "opening_balance_set": opening_set,
+            "opening_balance": opening_balance,
+            "opening_balance_date": D.to_iso(row.get("opening_balance_date")),
+            "opening_balance_by": str(row.get("opening_balance_by") or "").strip(),
+            "opening_balance_note": str(row.get("opening_balance_note") or "").strip(),
+        }
 
     def _validate(self) -> None:
         if not self.raw_rows:
@@ -310,6 +383,12 @@ class ImportWizardDialog(BaseDialog):
         for i, row in enumerate(mapped, 1):
             emp_id = str(row.get("emp_id") or "").strip()
             issues = validation.validate_import_row(row, existing_ids, seen)
+            if (not any(issue.is_error for issue in issues) and row.get("opening_balance_set")
+                    and emp_id in existing_ids):
+                existing_employee = self.ctx.db.get_employee(emp_id)
+                if existing_employee:
+                    issues += validation.validate_opening_against_leaves(
+                        row, existing_employee.leaves, self.ctx.policy)
             seen.add(emp_id)
             level = "ok"
             if any(issue.is_error for issue in issues):
@@ -364,23 +443,49 @@ class ImportWizardDialog(BaseDialog):
                         skipped += 1
                         continue
                     fields = self._fields_for(row["index"] - 1)
+                    opening = (fields["opening_balance_set"], fields["opening_balance"],
+                               fields["opening_balance_date"], fields["opening_balance_by"],
+                               fields["opening_balance_note"])
                     if exists:
+                        old_row = conn.execute(
+                            "SELECT opening_balance_set, opening_balance, opening_balance_date, "
+                            "opening_balance_by, opening_balance_note FROM employees WHERE emp_id=?",
+                            (emp_id,)).fetchone()
+                        old = tuple(old_row) if old_row else (0, 0, "", "", "")
                         conn.execute("""UPDATE employees SET name=?, job_title=?, workplace=?,
-                                     institution=?, gender=?, start_date=?, end_date=?, notes=?,
+                                     institution=?, gender=?, status=?, start_date=?, end_date=?,
+                                     notes=?, opening_balance_set=?, opening_balance=?,
+                                     opening_balance_date=?, opening_balance_by=?,
+                                     opening_balance_note=?,
+                                     opening_updated_at=CASE WHEN ? THEN datetime('now','localtime')
+                                                              ELSE opening_updated_at END,
+                                     opening_updated_by=CASE WHEN ? THEN ? ELSE opening_updated_by END,
                                      updated_at=datetime('now','localtime') WHERE emp_id=?""",
                                      (fields["name"], fields["job_title"], fields["workplace"],
-                                      fields["institution"], fields["gender"], fields["start_date"],
-                                      fields["end_date"], fields["notes"], emp_id))
+                                      fields["institution"], fields["gender"], fields["status"],
+                                      fields["start_date"], fields["end_date"], fields["notes"],
+                                      *opening, int(tuple(opening) != old), int(tuple(opening) != old),
+                                      self.ctx.user(), emp_id))
+                        if tuple(opening) != old:
+                            self.ctx.db._log_opening_change(conn, emp_id, old, opening,
+                                                            self.ctx.user(), "استيراد Excel")
                         updated += 1
                     else:
+                        now_text = conn.execute("SELECT datetime('now','localtime')").fetchone()[0]
                         conn.execute("""INSERT INTO employees(emp_id, name, job_title, workplace,
-                                     institution, gender, start_date, end_date, notes, status,
+                                     institution, gender, status, start_date, end_date, notes,
+                                     opening_balance_set, opening_balance, opening_balance_date,
+                                     opening_balance_by, opening_balance_note,
+                                     opening_updated_at, opening_updated_by,
                                      created_at, updated_at)
-                                     VALUES (?,?,?,?,?,?,?,?,?,'active',
+                                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,
                                      datetime('now','localtime'), datetime('now','localtime'))""",
                                      (emp_id, fields["name"], fields["job_title"], fields["workplace"],
-                                      fields["institution"], fields["gender"], fields["start_date"],
-                                      fields["end_date"], fields["notes"]))
+                                      fields["institution"], fields["gender"], fields["status"],
+                                      fields["start_date"], fields["end_date"], fields["notes"],
+                                      *opening,
+                                      str(now_text) if opening[0] else "",
+                                      self.ctx.user() if opening[0] else ""))
                         added += 1
         except Exception as exc:
             errors.append(str(exc))
@@ -396,14 +501,19 @@ class ImportWizardDialog(BaseDialog):
 
     def _fields_for(self, index: int) -> dict:
         row = self._mapped[index]
-        gender = str(row.get("gender") or "").strip()
         return {
-            "name": str(row.get("name") or "").strip(),
-            "job_title": str(row.get("job_title") or "").strip(),
-            "workplace": str(row.get("workplace") or "").strip(),
-            "institution": str(row.get("institution") or "").strip(),
-            "gender": gender if gender in ("ذكر", "أنثى") else "ذكر",
-            "start_date": D.to_iso(row.get("start_date")),
-            "end_date": D.to_iso(row.get("end_date")),
-            "notes": str(row.get("notes") or "").strip(),
+            "name": row.get("name", ""),
+            "job_title": row.get("job_title", ""),
+            "workplace": row.get("workplace", ""),
+            "institution": row.get("institution", ""),
+            "gender": row.get("gender") if row.get("gender") in ("ذكر", "أنثى") else "ذكر",
+            "status": row.get("status") or "active",
+            "start_date": row.get("start_date", ""),
+            "end_date": row.get("end_date", ""),
+            "notes": row.get("notes", ""),
+            "opening_balance_set": int(row.get("opening_balance_set") or 0),
+            "opening_balance": int(row.get("opening_balance") or 0),
+            "opening_balance_date": row.get("opening_balance_date", ""),
+            "opening_balance_by": row.get("opening_balance_by", ""),
+            "opening_balance_note": row.get("opening_balance_note", ""),
         }
