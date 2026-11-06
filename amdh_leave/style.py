@@ -7,10 +7,25 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from string import Template
 
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+
+_TEMPLATE_ID_RE = re.compile(r"\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})")
+
+
+def _template_identifiers(tpl: Template) -> list[str]:
+    """استخراج أسماء المتغيرات من القالب، متوافق مع كل إصدارات Python."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for m in _TEMPLATE_ID_RE.finditer(tpl.template):
+        name = m.group(1) or m.group(2)
+        if name not in seen:
+            seen.add(name)
+            result.append(name)
+    return result
 
 TEMPLATE = Template(
     """
@@ -520,4 +535,4 @@ def build(palette: dict[str, str]) -> str:
     return TEMPLATE.substitute(values)
 
 
-REQUIRED_KEYS = tuple(sorted(name for name in TEMPLATE.get_identifiers() if name != "assets"))
+REQUIRED_KEYS = tuple(sorted(name for name in _template_identifiers(TEMPLATE) if name != "assets"))
