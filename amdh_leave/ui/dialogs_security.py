@@ -4,21 +4,29 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QApplication, QFormLayout, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QVBoxLayout, QWidget,
+    QApplication,
+    QFormLayout,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QVBoxLayout,
 )
 
 from ..services import crypto
 from ..services import security as sec
-from . import theme, widgets as W
+from . import theme
+from . import widgets as W
 from .dialogs_base import BaseDialog
 
 
 class PasswordDialog(BaseDialog):
     """طلب كلمة مرور (مع تأكيد اختياري). لا يحتاج سياق التطبيق."""
 
-    def __init__(self, parent=None, title: str = "", message: str = "",
-                 confirm: bool = False, minimum: int = 4):
+    def __init__(
+        self, parent=None, title: str = "", message: str = "", confirm: bool = False, minimum: int = 4
+    ):
         super().__init__(parent, None, title or "كلمة المرور")
         self.password: str | None = None
         self.confirm_mode = confirm
@@ -50,8 +58,12 @@ class PasswordDialog(BaseDialog):
         self.lbl_error.setWordWrap(True)
         layout.addWidget(self.lbl_error)
         layout.addStretch()
-        layout.addLayout(self.buttons_row(W.button("إلغاء", "Ghost", self.reject, width=110),
-                                          W.button("تأكيد", "Accent", self._accept, width=130)))
+        layout.addLayout(
+            self.buttons_row(
+                W.button("إلغاء", "Ghost", self.reject, width=110),
+                W.button("تأكيد", "Accent", self._accept, width=130),
+            )
+        )
         self.e_pass.returnPressed.connect(self._accept)
         self.e_pass2.returnPressed.connect(self._accept)
 
@@ -97,8 +109,10 @@ class EncryptionDialog(BaseDialog):
         self.status_layout = QGridLayout(self.status_box)
         layout.addWidget(self.status_box)
 
-        warning = W.muted_label("تنبيه مهم: كلمة المرور لا يمكن استرجاعها. إذا فقدتها لن يمكن فتح قاعدة البيانات، "
-            "لذلك احفظها في مكان آمن واحتفظ بنسخة احتياطية غير مشفّرة في مكان محمي.")
+        warning = W.muted_label(
+            "تنبيه مهم: كلمة المرور لا يمكن استرجاعها. إذا فقدتها لن يمكن فتح قاعدة البيانات، "
+            "لذلك احفظها في مكان آمن واحتفظ بنسخة احتياطية غير مشفّرة في مكان محمي."
+        )
         warning.setWordWrap(True)
         layout.addWidget(warning)
 
@@ -134,13 +148,18 @@ class EncryptionDialog(BaseDialog):
 
         lock = summary.get("lock_data") or {}
         rows = [
-            ("حزمة SQLCipher مثبتة",
-             "نعم" if summary["sqlcipher_available"] else "لا — راجع أمر التثبيت أدناه"),
+            (
+                "حزمة SQLCipher مثبتة",
+                "نعم" if summary["sqlcipher_available"] else "لا — راجع أمر التثبيت أدناه",
+            ),
             ("التشفير مُفعَّل", "نعم" if summary["encryption_enabled"] else "لا"),
-            ("الوضع", "مفتاح تلقائي (نسخة مؤسسة)" if summary.get("mode") == "keyfile"
-             else ("كلمة مرور" if summary["encryption_enabled"] else "—")),
-            ("قاعدة البيانات مشفّرة فعلياً",
-             "نعم" if summary["database_encrypted"] else "لا"),
+            (
+                "الوضع",
+                "مفتاح تلقائي (نسخة مؤسسة)"
+                if summary.get("mode") == "keyfile"
+                else ("كلمة مرور" if summary["encryption_enabled"] else "—"),
+            ),
+            ("قاعدة البيانات مشفّرة فعلياً", "نعم" if summary["database_encrypted"] else "لا"),
             ("ملف القفل", "موجود" if summary["lock_file"] else "غير موجود"),
             ("تاريخ التفعيل", str(lock.get("created_at", "—"))),
             ("عدد تكرارات الاشتقاق", str(lock.get("iterations", crypto.KDF_ITERATIONS))),
@@ -161,12 +180,15 @@ class EncryptionDialog(BaseDialog):
         self.btn_copy.setVisible(not available)
         self.hint.setText("" if available else crypto.install_hint())
         if keyfile:
-            self.lbl_message.setText("هذه نسخة مؤسسة تُفتح تلقائياً بمفتاح data/.amdh_dbkey؛ "
-                                     "لا يمكن تغيير كلمة المرور أو إلغاء التشفير من هنا.")
+            self.lbl_message.setText(
+                "هذه نسخة مؤسسة تُفتح تلقائياً بمفتاح data/.amdh_dbkey؛ "
+                "لا يمكن تغيير كلمة المرور أو إلغاء التشفير من هنا."
+            )
             self.lbl_message.setStyleSheet(theme.label_style("gold"))
         if not available:
-            self.lbl_message.setText("التشفير غير متاح حالياً لأن حزمة SQLCipher غير مثبتة — "
-                "بقية مزايا البرنامج تعمل بشكل طبيعي.")
+            self.lbl_message.setText(
+                "التشفير غير متاح حالياً لأن حزمة SQLCipher غير مثبتة — بقية مزايا البرنامج تعمل بشكل طبيعي."
+            )
             self.lbl_message.setStyleSheet(theme.label_style("gold"))
 
     def _copy_hint(self) -> None:
@@ -180,25 +202,34 @@ class EncryptionDialog(BaseDialog):
         if not self.summary["sqlcipher_available"]:
             W.error(self, crypto.install_hint())
             return
-        if not W.confirm(self, "سيتم إنشاء نسخة احتياطية غير مشفّرة، ثم تشفير قاعدة البيانات.\n"
-                "تذكّر كلمة المرور جيداً — لا يمكن استرجاعها.\n\nهل تريد المتابعة؟"):
+        if not W.confirm(
+            self,
+            "سيتم إنشاء نسخة احتياطية غير مشفّرة، ثم تشفير قاعدة البيانات.\n"
+            "تذكّر كلمة المرور جيداً — لا يمكن استرجاعها.\n\nهل تريد المتابعة؟",
+        ):
             return
-        dialog = PasswordDialog(self, "كلمة مرور التشفير",
-                                "ستُطلب هذه الكلمة في كل مرة يُفتح فيها البرنامج.",
-                                confirm=True, minimum=6)
+        dialog = PasswordDialog(
+            self,
+            "كلمة مرور التشفير",
+            "ستُطلب هذه الكلمة في كل مرة يُفتح فيها البرنامج.",
+            confirm=True,
+            minimum=6,
+        )
         if dialog.exec() != dialog.DialogCode.Accepted or not dialog.password:
             return
         password = dialog.password
         self.ctx.backup.create("pre_encrypt")
         try:
             self.ctx.db.add_vault_entry(
-                kind="master", label="كلمة مرور قاعدة المركز (نسخة احتياطية مشفّرة)",
+                kind="master",
+                label="كلمة مرور قاعدة المركز (نسخة احتياطية مشفّرة)",
                 password=password,
                 note="تُستخدم لفتح قاعدة المركز وجميع نسخها الاحتياطية المشفّرة.",
-                user=self.ctx.user())
-        except Exception:                             # noqa: BLE001
+                user=self.ctx.user(),
+            )
+        except Exception:  # noqa: BLE001
             pass
-        self.ctx.db.close()          # مهم: لا اتصال مفتوح أثناء استبدال الملف
+        self.ctx.db.close()  # مهم: لا اتصال مفتوح أثناء استبدال الملف
         try:
             crypto.encrypt_database(self.ctx.paths.db_path, password)
         except crypto.CryptoError as exc:
@@ -206,15 +237,16 @@ class EncryptionDialog(BaseDialog):
             self.ctx.db.open()
             return
         self.changed = True
-        W.info(self, "تم تفعيل التشفير بنجاح." + "\n\n" +
-               "سيُغلق البرنامج الآن. شغّله مرة أخرى وأدخل كلمة المرور.\n\n"
-               "مهم: افتح «خزنة كلمات المرور» وصدّر «بطاقة استرداد» واطبعها "
-               "واحفظها خارج الجهاز.")
+        W.info(
+            self,
+            "تم تفعيل التشفير بنجاح." + "\n\n" + "سيُغلق البرنامج الآن. شغّله مرة أخرى وأدخل كلمة المرور.\n\n"
+            "مهم: افتح «خزنة كلمات المرور» وصدّر «بطاقة استرداد» واطبعها "
+            "واحفظها خارج الجهاز.",
+        )
         QApplication.instance().quit()
 
     def _disable(self) -> None:
-        dialog = PasswordDialog(self, "كلمة المرور الحالية",
-                                "أدخل كلمة المرور الحالية لإلغاء التشفير.")
+        dialog = PasswordDialog(self, "كلمة المرور الحالية", "أدخل كلمة المرور الحالية لإلغاء التشفير.")
         if dialog.exec() != dialog.DialogCode.Accepted or not dialog.password:
             return
         password = dialog.password
@@ -231,16 +263,16 @@ class EncryptionDialog(BaseDialog):
             return
         try:
             from ..db import Database
+
             probe = Database(self.ctx.paths.db_path, self.ctx.paths.backups_dir)
             for entry in probe.list_vault():
                 if entry.get("kind") == "master":
                     probe.delete_vault_entry(int(entry["id"]))
             probe.close()
-        except Exception:                             # noqa: BLE001
+        except Exception:  # noqa: BLE001
             pass
         self.changed = True
-        W.info(self, "تم إلغاء التشفير." + "\n\n" +
-               "سيُغلق البرنامج الآن. شغّله مرة أخرى للعمل بلا كلمة مرور.")
+        W.info(self, "تم إلغاء التشفير." + "\n\n" + "سيُغلق البرنامج الآن. شغّله مرة أخرى للعمل بلا كلمة مرور.")
         QApplication.instance().quit()
 
     def _change(self) -> None:
@@ -265,16 +297,19 @@ class EncryptionDialog(BaseDialog):
             lock = crypto.read_lock(self.ctx.paths.data_dir) or {}
             key = crypto.derive_key(new.password, lock["salt"], int(lock["iterations"]))
             from ..db import Database
+
             probe = Database(self.ctx.paths.db_path, self.ctx.paths.backups_dir, key_hex=key)
             for entry in probe.list_vault():
                 if entry.get("kind") == "master":
                     probe.update_vault_entry(int(entry["id"]), password=new.password)
             probe.close()
-        except Exception as exc:                      # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             W.warn(self, f"تم تغيير كلمة المرور، لكن تعذّر تحديث الخزنة: {exc}")
         self.changed = True
-        W.info(self, "تم تغيير كلمة المرور." + "\n\n" +
-               "سيُغلق البرنامج الآن. استخدم كلمة المرور الجديدة عند التشغيل.")
+        W.info(
+            self,
+            "تم تغيير كلمة المرور." + "\n\n" + "سيُغلق البرنامج الآن. استخدم كلمة المرور الجديدة عند التشغيل.",
+        )
         QApplication.instance().quit()
 
     # ------------------------------------------------------------------
@@ -289,8 +324,9 @@ def prompt_database_password(data_dir, db_path, parent=None) -> str | None:
     message = "قاعدة البيانات مشفّرة. أدخل كلمة المرور لفتحها."
     for attempt in range(3):
         remaining = 3 - attempt
-        dialog = PasswordDialog(parent, "فتح قاعدة بيانات مشفّرة",
-                                f"{message}\n" + f"المحاولات المتبقية: {remaining}")
+        dialog = PasswordDialog(
+            parent, "فتح قاعدة بيانات مشفّرة", f"{message}\n" + f"المحاولات المتبقية: {remaining}"
+        )
         if dialog.exec() != dialog.DialogCode.Accepted:
             return None
         if dialog.password:

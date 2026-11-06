@@ -43,6 +43,7 @@ class CryptoError(Exception):
 def sqlcipher_module():
     """يعيد وحدة SQLCipher إن كانت مثبتة وإلا None."""
     import importlib
+
     for name in SQLCIPHER_MODULES:
         try:
             return importlib.import_module(name)
@@ -56,10 +57,12 @@ def sqlcipher_available() -> bool:
 
 
 def install_hint() -> str:
-    return ("لتشفير قاعدة البيانات يجب تثبيت حزمة SQLCipher:\n\n"
-            "    pip install sqlcipher3==0.6.4\n\n"
-            "ثم أعد تشغيل البرنامج. (على لينكس قد تحتاج:\n"
-            "    pip install sqlcipher3  أو  apt install libsqlcipher-dev)")
+    return (
+        "لتشفير قاعدة البيانات يجب تثبيت حزمة SQLCipher:\n\n"
+        "    pip install sqlcipher3==0.6.4\n\n"
+        "ثم أعد تشغيل البرنامج. (على لينكس قد تحتاج:\n"
+        "    pip install sqlcipher3  أو  apt install libsqlcipher-dev)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -69,8 +72,9 @@ def new_salt() -> str:
     return os.urandom(16).hex()
 
 
-def derive_key(password: str, salt_hex: str, iterations: int = KDF_ITERATIONS,
-               length: int = KEY_BYTES) -> str:
+def derive_key(
+    password: str, salt_hex: str, iterations: int = KDF_ITERATIONS, length: int = KEY_BYTES
+) -> str:
     """يشتق مفتاحاً خاماً (hex) من كلمة المرور — يُمرَّر إلى SQLCipher بلا KDF داخلي."""
     if not password:
         raise CryptoError("كلمة المرور فارغة.")
@@ -78,8 +82,7 @@ def derive_key(password: str, salt_hex: str, iterations: int = KDF_ITERATIONS,
         salt = bytes.fromhex(salt_hex)
     except ValueError as exc:
         raise CryptoError("ملح غير صالح في ملف القفل.") from exc
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, int(iterations),
-                                 dklen=length)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, int(iterations), dklen=length)
     return digest.hex()
 
 
@@ -178,8 +181,13 @@ def is_encryption_enabled(data_dir: Path) -> bool:
     return bool(data and data.get("enabled"))
 
 
-def write_lock(data_dir: Path, password: str, iterations: int = KDF_ITERATIONS,
-               enabled: bool = True, salt: str | None = None) -> Path:
+def write_lock(
+    data_dir: Path,
+    password: str,
+    iterations: int = KDF_ITERATIONS,
+    enabled: bool = True,
+    salt: str | None = None,
+) -> Path:
     """يكتب ملف القفل (ملح + بصمة تحقق) بعد تشفير ناجح.
 
     ``salt`` يجب أن يكون **نفس الملح** المستخدم في اشتقاق مفتاح التشفير، وإلا
@@ -256,7 +264,7 @@ def open_connection(path: str | Path, key_hex: str | None = None) -> sqlite3.Con
         connection.execute(f"PRAGMA key = {key_pragma(key_hex)}")
         connection.execute("PRAGMA cipher_page_size = 4096")
         connection.execute("PRAGMA kdf_iter = 256000")
-        try:      # اختبار المفتاح فوراً
+        try:  # اختبار المفتاح فوراً
             connection.execute("SELECT count(*) FROM sqlite_master").fetchone()
         except Exception as exc:  # noqa: BLE001 - أي فشل هنا يعني مفتاحاً/ملفاً خاطئاً
             connection.close()
@@ -277,8 +285,7 @@ def _require_sqlcipher() -> object:
 
 
 def _table_names(connection) -> set[str]:
-    return {row[0] for row in connection.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'")}
+    return {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
 
 
 def _encrypt_to(source: str | Path, key_hex: str, *, keep_backup: bool = True) -> tuple[Path, Path | None]:
@@ -316,8 +323,9 @@ def _encrypt_to(source: str | Path, key_hex: str, *, keep_backup: bool = True) -
     return source, backup
 
 
-def encrypt_database(source: str | Path, password: str, *, keep_backup: bool = True,
-                     iterations: int = KDF_ITERATIONS) -> Path:
+def encrypt_database(
+    source: str | Path, password: str, *, keep_backup: bool = True, iterations: int = KDF_ITERATIONS
+) -> Path:
     """يحوّل قاعدة عادية إلى قاعدة مشفّرة بكلمة مرور (نمط المركز)."""
     source = Path(source)
     salt = new_salt()
@@ -325,8 +333,9 @@ def encrypt_database(source: str | Path, password: str, *, keep_backup: bool = T
     output, backup = _encrypt_to(source, key_hex, keep_backup=keep_backup)
     remove_key_file(output.parent)
     write_lock(output.parent, password, iterations, salt=salt)
-    LOG.warning("تم تشفير قاعدة البيانات (%s) — نسخة غير مشفّرة: %s",
-                output.name, backup.name if backup else "—")
+    LOG.warning(
+        "تم تشفير قاعدة البيانات (%s) — نسخة غير مشفّرة: %s", output.name, backup.name if backup else "—"
+    )
     return output
 
 
@@ -340,16 +349,23 @@ def encrypt_with_key(source: str | Path, key_hex: str, *, keep_backup: bool = Fa
     return output
 
 
-def decrypt_database(source: str | Path, password: str, *, destination: str | Path | None = None,
-                     iterations: int | None = None, keep_backup: bool = True) -> Path:
+def decrypt_database(
+    source: str | Path,
+    password: str,
+    *,
+    destination: str | Path | None = None,
+    iterations: int | None = None,
+    keep_backup: bool = True,
+) -> Path:
     """يفك التشفير إلى قاعدة عادية (لاستعادة الوصول أو النسخ الاحتياطي)."""
     module = _require_sqlcipher()
     source = Path(source)
     data_dir = source.parent
     lock = read_lock(data_dir)
     if lock and lock.get("mode") == "keyfile":
-        raise CryptoError("هذه نسخة مؤسسة تعمل بمفتاح تلقائي؛ لا تُفك بكلمة مرور. "
-                          "استخدم أداة المفتاح في مركز الدائرة.")
+        raise CryptoError(
+            "هذه نسخة مؤسسة تعمل بمفتاح تلقائي؛ لا تُفك بكلمة مرور. استخدم أداة المفتاح في مركز الدائرة."
+        )
     if not lock and iterations is None:
         raise CryptoError("ملف القفل غير موجود — لا يمكن اشتقاق المفتاح.")
     salt = lock["salt"] if lock else new_salt()
@@ -379,8 +395,7 @@ def change_password(source: str | Path, old_password: str, new_password: str) ->
     source = Path(source)
     if not check_password(source.parent, old_password):
         raise CryptoError("كلمة المرور الحالية غير صحيحة.")
-    plain = decrypt_database(source, old_password,
-                             destination=source.with_name(source.name + ".rekey"))
+    plain = decrypt_database(source, old_password, destination=source.with_name(source.name + ".rekey"))
     try:
         encrypt_database(plain, new_password, keep_backup=False)
         shutil.copy2(plain, source)
@@ -399,8 +414,7 @@ def disable_encryption(data_dir: Path, db_path: str | Path, password: str) -> Pa
         raise CryptoError("كلمة المرور غير صحيحة.")
     if sqlcipher_module() is None:
         raise CryptoError(install_hint())
-    plain = decrypt_database(db_path, password,
-                             destination=db_path.with_name(db_path.name + ".plain"))
+    plain = decrypt_database(db_path, password, destination=db_path.with_name(db_path.name + ".plain"))
     try:
         for suffix in ("-wal", "-shm"):
             side = Path(str(db_path) + suffix)

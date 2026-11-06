@@ -16,7 +16,6 @@ from datetime import datetime
 from .. import config
 from ..rules import LeaveRule, default_rules
 
-
 SCHEMA_VERSION = 7
 
 # أعمدة تُضاف للجداول القديمة (الاسم، التعريف)
@@ -304,10 +303,17 @@ def add_missing_columns(c: sqlite3.Cursor, table_columns_fn) -> dict[str, set[st
     dict[str, set[str]]
         قاموس يحتوي على الأعمدة المضافة لكل جدول.
     """
-    added: dict[str, set[str]] = {"employees": set(), "leaves": set(), "attachments": set(), "holidays": set()}
-    for table, columns in (("employees", _EMPLOYEE_COLUMNS),
-                           ("leaves", _LEAVE_COLUMNS),
-                           ("attachments", _ATTACHMENT_COLUMNS)):
+    added: dict[str, set[str]] = {
+        "employees": set(),
+        "leaves": set(),
+        "attachments": set(),
+        "holidays": set(),
+    }
+    for table, columns in (
+        ("employees", _EMPLOYEE_COLUMNS),
+        ("leaves", _LEAVE_COLUMNS),
+        ("attachments", _ATTACHMENT_COLUMNS),
+    ):
         existing = table_columns_fn(table)
         for name, ddl in columns:
             if name not in existing:
@@ -323,13 +329,26 @@ def add_missing_columns(c: sqlite3.Cursor, table_columns_fn) -> dict[str, set[st
 
 def _insert_rule(c: sqlite3.Cursor, rule: LeaveRule) -> None:
     m = rule.to_mapping()
-    c.execute("""INSERT OR REPLACE INTO leave_rules
+    c.execute(
+        """INSERT OR REPLACE INTO leave_rules
                  (type, consumes_balance, service_exclusion, count_mode, quota_days,
                   quota_period, requires_order, is_adjustment, gender, order_index, active, notes)
                  VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-              (m["type"], m["consumes_balance"], m["service_exclusion"], m["count_mode"],
-               m["quota_days"], m["quota_period"], m["requires_order"], m["is_adjustment"],
-               m["gender"], m["order_index"], m["active"], m["notes"]))
+        (
+            m["type"],
+            m["consumes_balance"],
+            m["service_exclusion"],
+            m["count_mode"],
+            m["quota_days"],
+            m["quota_period"],
+            m["requires_order"],
+            m["is_adjustment"],
+            m["gender"],
+            m["order_index"],
+            m["active"],
+            m["notes"],
+        ),
+    )
 
 
 def seed_defaults(c: sqlite3.Cursor) -> None:
@@ -344,14 +363,27 @@ def seed_defaults(c: sqlite3.Cursor) -> None:
                  WHERE type='أمومة' AND consumes_balance=1 AND service_exclusion=0""")
     if not c.execute("SELECT 1 FROM app_meta WHERE key='days_per_leave'").fetchone():
         for key, value in config.DEFAULT_POLICY.items():
-            c.execute("INSERT OR IGNORE INTO app_meta(key, value) VALUES (?,?)",
-                      (key, "1" if value is True else "0" if value is False else str(value)))
+            c.execute(
+                "INSERT OR IGNORE INTO app_meta(key, value) VALUES (?,?)",
+                (key, "1" if value is True else "0" if value is False else str(value)),
+            )
     if c.execute("SELECT COUNT(*) FROM app_users").fetchone()[0] == 0:
         from ..services.security import hash_password
+
         pw_hash, salt, iterations = hash_password("admin")
-        c.execute("""INSERT INTO app_users
+        c.execute(
+            """INSERT INTO app_users
                      (username, display_name, role, institution, password_hash, salt,
                       iterations, active, created_at)
                      VALUES (?,?,?,?,?,?,?,1,?)""",
-                  ("admin", "مدير النظام", "admin", "", pw_hash, salt, iterations,
-                   datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+            (
+                "admin",
+                "مدير النظام",
+                "admin",
+                "",
+                pw_hash,
+                salt,
+                iterations,
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ),
+        )

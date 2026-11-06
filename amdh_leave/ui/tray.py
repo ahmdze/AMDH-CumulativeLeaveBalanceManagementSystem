@@ -47,8 +47,9 @@ class TrayController(QObject):
         if self.tray is not None:
             return True
         self.tray = QSystemTrayIcon(assets.app_icon(), self.window)
-        self.tray.setToolTip(f"{self.ctx.ui_get('app_name', '') or ''}".strip() or
-                             "نظام إدارة الرصيد التراكمي للإجازات")
+        self.tray.setToolTip(
+            f"{self.ctx.ui_get('app_name', '') or ''}".strip() or "نظام إدارة الرصيد التراكمي للإجازات"
+        )
         self._build_menu()
         self.tray.activated.connect(self._on_activated)
         self.tray.show()
@@ -121,8 +122,7 @@ class TrayController(QObject):
 
     # ------------------------------------------------------------------
     def _on_activated(self, reason) -> None:
-        if reason in (QSystemTrayIcon.ActivationReason.Trigger,
-                      QSystemTrayIcon.ActivationReason.DoubleClick):
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
             self.toggle_window()
 
     def toggle_window(self) -> None:
@@ -134,7 +134,7 @@ class TrayController(QObject):
             self.window.raise_()
 
     def quit_application(self) -> None:
-        self.window._force_quit = True          # يتجاوز الإخفاء إلى الصندوق
+        self.window._force_quit = True  # يتجاوز الإخفاء إلى الصندوق
         QApplication.instance().quit()
 
     def backup_now(self) -> None:
@@ -142,8 +142,7 @@ class TrayController(QObject):
         if path:
             self.notify("نسخة احتياطية", f"تم إنشاء نسخة احتياطية: {path.name}")
         else:
-            self.notify("نسخة احتياطية", "تعذّر إنشاء النسخة الاحتياطية (راجع ملف السجل).",
-                        warning=True)
+            self.notify("نسخة احتياطية", "تعذّر إنشاء النسخة الاحتياطية (راجع ملف السجل).", warning=True)
 
     # ------------------------------------------------------------------
     @staticmethod
@@ -157,25 +156,23 @@ class TrayController(QObject):
         important = [a for a in alerts if a.severity in ("high", "medium")]
         if self.act_alerts is not None:
             count = len(important)
-            self.act_alerts.setText(f"التنبيهات ({count})" if count
-                                    else "التنبيهات")
+            self.act_alerts.setText(f"التنبيهات ({count})" if count else "التنبيهات")
         current = self._signature(important)
-        new_items = [a for a in important if f"{a.kind}|{a.emp_id}|{a.leave_id}|{a.message}"
-                     not in self._seen]
+        new_items = [
+            a for a in important if f"{a.kind}|{a.emp_id}|{a.leave_id}|{a.message}" not in self._seen
+        ]
         self._seen |= current
         if notify and new_items and self.popups_enabled:
             first = new_items[0]
             extra = len(new_items) - 1
             body = first.message if not extra else f"{first.message} (+{extra})"
-            self.notify(f"تنبيهات جديدة ({len(new_items)})", body,
-                        warning=first.severity == "high")
+            self.notify(f"تنبيهات جديدة ({len(new_items)})", body, warning=first.severity == "high")
         return len(important)
 
     def notify(self, title: str, message: str, warning: bool = False) -> None:
         if self.tray is None or not self.popups_enabled:
             return
-        icon = (QSystemTrayIcon.MessageIcon.Warning if warning
-                else QSystemTrayIcon.MessageIcon.Information)
+        icon = QSystemTrayIcon.MessageIcon.Warning if warning else QSystemTrayIcon.MessageIcon.Information
         try:
             self.tray.showMessage(title, message, icon, 8000)
         except Exception:  # pragma: no cover - بعض البيئات لا تدعم الإشعار

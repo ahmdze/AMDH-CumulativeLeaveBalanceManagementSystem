@@ -4,18 +4,36 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QComboBox, QFileDialog, QGridLayout, QHBoxLayout, QScrollArea,
-    QVBoxLayout, QWidget,
+    QComboBox,
+    QFileDialog,
+    QGridLayout,
+    QHBoxLayout,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..exporters import excel as X
 from ..exporters import html as H
 from ..services import reports
-from . import theme, widgets as W
+from . import theme
+from . import widgets as W
 from .dialogs_base import BaseDialog
 
-MONTHS = ("كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران", "تموز",
-          "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول")
+MONTHS = (
+    "كانون الثاني",
+    "شباط",
+    "آذار",
+    "نيسان",
+    "أيار",
+    "حزيران",
+    "تموز",
+    "آب",
+    "أيلول",
+    "تشرين الأول",
+    "تشرين الثاني",
+    "كانون الأول",
+)
 
 
 class DashboardDialog(BaseDialog):
@@ -64,12 +82,18 @@ class DashboardDialog(BaseDialog):
         self.kpi_grid = QGridLayout()
         self.kpis: dict[str, W.KPICard] = {}
         cards = [
-            ("employees", "عدد الموظفين"), ("balance", "إجمالي الأرصدة"),
-            ("earned", "إجمالي المستحقة"), ("taken", "إجمالي المأخوذة"),
-            ("negative", "أرصدة سالبة (مسموح)"), ("on_leave_today", "على إجازة اليوم"),
-            ("pending", "إجازات قيد الانتظار"), ("institutions", "عدد المؤسسات"),
-            ("avg_balance", "متوسط الرصيد"), ("most_used_type", "أكثر نوع استخداماُ"),
-            ("consumption_rate", "نسبة الاستهلاك"), ("low_balance", "أرصدة منخفضة"),
+            ("employees", "عدد الموظفين"),
+            ("balance", "إجمالي الأرصدة"),
+            ("earned", "إجمالي المستحقة"),
+            ("taken", "إجمالي المأخوذة"),
+            ("negative", "أرصدة سالبة (مسموح)"),
+            ("on_leave_today", "على إجازة اليوم"),
+            ("pending", "إجازات قيد الانتظار"),
+            ("institutions", "عدد المؤسسات"),
+            ("avg_balance", "متوسط الرصيد"),
+            ("most_used_type", "أكثر نوع استخداماُ"),
+            ("consumption_rate", "نسبة الاستهلاك"),
+            ("low_balance", "أرصدة منخفضة"),
         ]
         for i, (key, title) in enumerate(cards):
             card = W.KPICard(title)
@@ -129,26 +153,34 @@ class DashboardDialog(BaseDialog):
         # KPIs جديدة
         self.kpis["avg_balance"].set_value(f"{stats['avg_balance']:.1f}", "accent", " يوم")
         self.kpis["most_used_type"].set_value(stats["most_used_type"] or "—")
-        self.kpis["consumption_rate"].set_value(f"{stats['consumption_rate']:.1f}%", 
-                                                "gold" if stats["consumption_rate"] > 80 else "pos")
-        self.kpis["low_balance"].set_value(kpis.get("low_balance", 0), 
-                                           "neg" if kpis.get("low_balance") else "muted")
+        self.kpis["consumption_rate"].set_value(
+            f"{stats['consumption_rate']:.1f}%", "gold" if stats["consumption_rate"] > 80 else "pos"
+        )
+        self.kpis["low_balance"].set_value(
+            kpis.get("low_balance", 0), "neg" if kpis.get("low_balance") else "muted"
+        )
 
-        self.chart_top.set_data([(r["name"] or r["emp_id"], r["balance"]) for r in data["top"]],
-                                "أعلى 10 أرصدة (يوم)")
-        self.chart_inst.set_data([(k, v["balance"]) for k, v in data["by_institution"].items()],
-                                 "إجمالي الرصيد حسب المؤسسة")
+        self.chart_top.set_data(
+            [(r["name"] or r["emp_id"], r["balance"]) for r in data["top"]], "أعلى 10 أرصدة (يوم)"
+        )
+        self.chart_inst.set_data(
+            [(k, v["balance"]) for k, v in data["by_institution"].items()], "إجمالي الرصيد حسب المؤسسة"
+        )
         # رسم دائري للإجازات حسب النوع
-        self.chart_pie.set_data([(k, v["days"]) for k, v in data["by_type"].items()],
-                                "توزيع الإجازات حسب النوع")
+        self.chart_pie.set_data(
+            [(k, v["days"]) for k, v in data["by_type"].items()], "توزيع الإجازات حسب النوع"
+        )
         # رسم خطي شهري
-        self.chart_month.set_data([(MONTHS[i], days) for i, days in enumerate(data["monthly"])],
-                                  f"أيام الإجازات شهرياً لعام {data['year']}")
+        self.chart_month.set_data(
+            [(MONTHS[i], days) for i, days in enumerate(data["monthly"])],
+            f"أيام الإجازات شهرياً لعام {data['year']}",
+        )
 
-        rows = [[item["name"], item["emp_id"], item["institution"], item["type"],
-                 item["start"], item["end"]] for item in data["on_leave"]]
-        self.on_leave.set_rows(rows, empty_text="لا يوجد موظفون في إجازة اليوم",
-                               footer=f"العدد: {len(rows)}")
+        rows = [
+            [item["name"], item["emp_id"], item["institution"], item["type"], item["start"], item["end"]]
+            for item in data["on_leave"]
+        ]
+        self.on_leave.set_rows(rows, empty_text="لا يوجد موظفون في إجازة اليوم", footer=f"العدد: {len(rows)}")
 
     # ------------------------------------------------------------------
     def _export_excel(self) -> None:

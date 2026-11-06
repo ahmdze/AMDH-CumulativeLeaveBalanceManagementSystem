@@ -9,13 +9,21 @@ import sys
 from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices, QFont
 from PyQt6.QtWidgets import (
-    QApplication, QFrame, QGridLayout, QHBoxLayout, QLabel, QTabWidget, QTextEdit,
-    QVBoxLayout, QWidget,
+    QApplication,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .. import config
 from ..logging_setup import log_path
-from . import assets, theme, widgets as W
+from . import assets, theme
+from . import widgets as W
 from .dialogs_base import BaseDialog
 
 FEATURES = [
@@ -90,8 +98,10 @@ class AboutDialog(BaseDialog):
     def _tab_program(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        description = QLabel("نظام مكتبي لإدارة الإجازات التراكمية لموظفي الدوائر والمؤسسات، يعمل محلياً "
-            "بقاعدة بيانات SQLite بلا حاجة إلى إنترنت، مع تقارير جاهزة للطباعة والتصدير.")
+        description = QLabel(
+            "نظام مكتبي لإدارة الإجازات التراكمية لموظفي الدوائر والمؤسسات، يعمل محلياً "
+            "بقاعدة بيانات SQLite بلا حاجة إلى إنترنت، مع تقارير جاهزة للطباعة والتصدير."
+        )
         description.setWordWrap(True)
         layout.addWidget(description)
         layout.addWidget(W.separator())
@@ -105,8 +115,10 @@ class AboutDialog(BaseDialog):
         features.setHtml("<ul>" + "".join(f"<li>{f}</li>" for f in FEATURES) + "</ul>")
         layout.addWidget(features, 1)
 
-        note = W.muted_label("ملاحظة ضوابطية: الرصيد السالب مشروع حسب الضوابط الإدارية المعتمدة، "
-            "ولا يمنعه النظام ولا يعتبره خطأً.")
+        note = W.muted_label(
+            "ملاحظة ضوابطية: الرصيد السالب مشروع حسب الضوابط الإدارية المعتمدة، "
+            "ولا يمنعه النظام ولا يعتبره خطأً."
+        )
         note.setWordWrap(True)
         layout.addWidget(note)
         return page
@@ -195,7 +207,8 @@ class AboutDialog(BaseDialog):
     # ------------------------------------------------------------------
     @staticmethod
     def _qt_version() -> str:
-        from PyQt6.QtCore import QT_VERSION_STR, PYQT_VERSION_STR
+        from PyQt6.QtCore import PYQT_VERSION_STR, QT_VERSION_STR
+
         return f"Qt {QT_VERSION_STR} / PyQt {PYQT_VERSION_STR}"
 
     def _system_summary(self) -> str:
@@ -203,12 +216,10 @@ class AboutDialog(BaseDialog):
         lines = [
             f"{config.APP_NAME} — {'الإصدار'} {config.APP_VERSION} ({config.APP_RELEASE})",
             f"{'المطوّر'}: {config.APP_DEVELOPER} | {config.APP_PHONE} | {config.APP_EMAIL}",
-            f"{'بايثون'}: {sys.version.split()[0]} | {self._qt_version()} | "
-            f"SQLite {sqlite3.sqlite_version}",
+            f"{'بايثون'}: {sys.version.split()[0]} | {self._qt_version()} | SQLite {sqlite3.sqlite_version}",
             f"{'نظام التشغيل'}: {platform.system()} {platform.release()}",
             f"{'مجلد البيانات'}: {self.ctx.paths.data_dir if self.ctx else '—'}",
-            f"{'الموظفون'}: {stats.get('employees', '—')} | "
-            f"{'الإجازات'}: {stats.get('leaves', '—')}",
+            f"{'الموظفون'}: {stats.get('employees', '—')} | {'الإجازات'}: {stats.get('leaves', '—')}",
         ]
         return "\n".join(lines)
 

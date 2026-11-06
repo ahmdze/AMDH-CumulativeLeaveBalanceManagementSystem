@@ -7,19 +7,37 @@ from datetime import date
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (
-    QComboBox, QFileDialog, QHBoxLayout, QHeaderView, QLabel, QTableWidget,
-    QTableWidgetItem, QVBoxLayout,
+    QComboBox,
+    QFileDialog,
+    QHBoxLayout,
+    QHeaderView,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
 )
 
 from ..exporters import excel as X
 from ..exporters import html as H
 from ..services import dates as D
 from ..services import reports
-from . import theme, widgets as W
+from . import theme
+from . import widgets as W
 from .dialogs_base import BaseDialog
 
-MONTHS = ("كانون الثاني", "شباط", "آذار", "نيسان", "أيار", "حزيران", "تموز",
-          "آب", "أيلول", "تشرين الأول", "تشرين الثاني", "كانون الأول")
+MONTHS = (
+    "كانون الثاني",
+    "شباط",
+    "آذار",
+    "نيسان",
+    "أيار",
+    "حزيران",
+    "تموز",
+    "آب",
+    "أيلول",
+    "تشرين الأول",
+    "تشرين الثاني",
+    "كانون الأول",
+)
 
 
 class CalendarDialog(BaseDialog):
@@ -67,8 +85,9 @@ class CalendarDialog(BaseDialog):
 
         self.detail_label = W.muted_label("اختر يوماً لعرض تفاصيله")
         layout.addWidget(self.detail_label)
-        self.detail = W.TablePanel(["الاسم", "الرقم الوظيفي", "المؤسسة", "النوع", "من", "إلى"],
-                                   sortable=False)
+        self.detail = W.TablePanel(
+            ["الاسم", "الرقم الوظيفي", "المؤسسة", "النوع", "من", "إلى"], sortable=False
+        )
         layout.addWidget(self.detail, 2)
         self._fill_headers()
 
@@ -151,7 +170,8 @@ class CalendarDialog(BaseDialog):
         count = sum(len(v) for v in per_day.values())
         self.detail_label.setText(
             f"{MONTHS[self.month - 1]} {self.year} — عدد أيام الإجازات المسجلة: {count}"
-            + ("  (الخلايا الذهبية عطل رسمية، والداكنة عطلة أسبوعية)" if count else ""))
+            + ("  (الخلايا الذهبية عطل رسمية، والداكنة عطلة أسبوعية)" if count else "")
+        )
 
     # ------------------------------------------------------------------
     def _on_day_selected(self) -> None:
@@ -163,16 +183,21 @@ class CalendarDialog(BaseDialog):
             self.detail.set_rows([], empty_text="اختر يوماً فيه إجازات")
             return
         entries = self.data["per_day"].get(day, [])
-        rows = [[emp.name, emp.emp_id, emp.institution, lv.type,
-                 D.to_iso(lv.start_date), D.to_iso(lv.end_date)] for emp, lv in entries]
-        self.detail.set_rows(rows, empty_text=f"لا توجد إجازات في {D.to_iso(day)}",
-                             footer=f"تاريخ مختار: {D.to_iso(day)} — العدد: {len(rows)}")
+        rows = [
+            [emp.name, emp.emp_id, emp.institution, lv.type, D.to_iso(lv.start_date), D.to_iso(lv.end_date)]
+            for emp, lv in entries
+        ]
+        self.detail.set_rows(
+            rows,
+            empty_text=f"لا توجد إجازات في {D.to_iso(day)}",
+            footer=f"تاريخ مختار: {D.to_iso(day)} — العدد: {len(rows)}",
+        )
 
     # ------------------------------------------------------------------
     def _export_excel(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "حفظ التقويم",
-                                              f"calendar_{self.year}_{self.month:02d}.xlsx",
-                                              "Excel (*.xlsx)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "حفظ التقويم", f"calendar_{self.year}_{self.month:02d}.xlsx", "Excel (*.xlsx)"
+        )
         if not path:
             return
         try:
@@ -180,6 +205,7 @@ class CalendarDialog(BaseDialog):
                 raise RuntimeError("مكتبة openpyxl غير مثبتة.")
             import openpyxl
             from openpyxl.styles import Alignment, Font, PatternFill
+
             wb = openpyxl.Workbook()
             ws = wb.active
             ws.title = "التقويم"
@@ -211,8 +237,8 @@ class CalendarDialog(BaseDialog):
             W.error(self, f"فشل التصدير: {exc}")
 
     def _export_html(self) -> None:
-        content = H.calendar_html(self.data, self.policy,
-                                  self.ctx.session.scoped_institution)
-        path = H.save_and_open(content, self.ctx.paths.reports_dir,
-                               f"calendar_{self.year}_{self.month:02d}.html")
+        content = H.calendar_html(self.data, self.policy, self.ctx.session.scoped_institution)
+        path = H.save_and_open(
+            content, self.ctx.paths.reports_dir, f"calendar_{self.year}_{self.month:02d}.html"
+        )
         W.info(self, f"تم فتح التقويم في المتصفح:\n{path.name}")

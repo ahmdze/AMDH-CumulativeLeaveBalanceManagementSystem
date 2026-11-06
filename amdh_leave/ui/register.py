@@ -10,7 +10,8 @@ from ..exporters import html as H
 from ..exporters import pdf as P
 from ..services import balance as B
 from ..services import dates as D
-from . import theme, widgets as W
+from . import theme
+from . import widgets as W
 from .dialogs_base import BaseDialog
 from .dialogs_leave import AttachmentsDialog, LeaveDialog
 
@@ -35,9 +36,15 @@ class LeavesRegisterDialog(BaseDialog):
         summary = W.card()
         summary_layout = QHBoxLayout(summary)
         self.lbls: dict[str, W.LabeledValue] = {}
-        for key, title in (("raw_days", "أيام الخدمة"), ("outside", "خارج الرصيد"),
-                           ("net_days", "الدوام المحسوبة"), ("opening", "الرصيد الافتتاحي"),
-                           ("earned", "المستحقة"), ("taken", "المأخوذة"), ("balance", "الرصيد")):
+        for key, title in (
+            ("raw_days", "أيام الخدمة"),
+            ("outside", "خارج الرصيد"),
+            ("net_days", "الدوام المحسوبة"),
+            ("opening", "الرصيد الافتتاحي"),
+            ("earned", "المستحقة"),
+            ("taken", "المأخوذة"),
+            ("balance", "الرصيد"),
+        ):
             widget = W.LabeledValue(title)
             self.lbls[key] = widget
             summary_layout.addWidget(widget)
@@ -48,9 +55,12 @@ class LeavesRegisterDialog(BaseDialog):
         btn_edit = W.button("✏ تعديل المحددة", "Blue", self._edit)
         btn_delete = W.button("🗑 حذف المحددة", "Warn", self._delete)
         btn_attach = W.button("📎 مرفقات", "Ghost", self._attachments)
-        for button, permission in ((btn_add, "edit_leave"), (btn_edit, "edit_leave"),
-                                   (btn_delete, "delete_leave"),
-                                   (btn_attach, "manage_attachments")):
+        for button, permission in (
+            (btn_add, "edit_leave"),
+            (btn_edit, "edit_leave"),
+            (btn_delete, "delete_leave"),
+            (btn_attach, "manage_attachments"),
+        ):
             button.setVisible(self.ctx.can(permission))
             row.addWidget(button)
         row.addWidget(W.button("📄 كشف الحساب", "Gold", self._statement))
@@ -60,9 +70,24 @@ class LeavesRegisterDialog(BaseDialog):
         row.addWidget(W.button("🖨 طباعة", "Blue", self._print))
         layout.addLayout(row)
 
-        self.table = W.TablePanel(["#", "النوع", "من", "إلى", "العدد", "الأيام المؤثرة",
-                                   "أيام العمل", "خارج الرصيد", "الحالة", "الأمر", "تاريخ الأمر",
-                                   "السبب", "أُضيفت في", "بواسطة"])
+        self.table = W.TablePanel(
+            [
+                "#",
+                "النوع",
+                "من",
+                "إلى",
+                "العدد",
+                "الأيام المؤثرة",
+                "أيام العمل",
+                "خارج الرصيد",
+                "الحالة",
+                "الأمر",
+                "تاريخ الأمر",
+                "السبب",
+                "أُضيفت في",
+                "بواسطة",
+            ]
+        )
         layout.addWidget(self.table)
         layout.addLayout(self.buttons_row(self.close_button()))
 
@@ -86,8 +111,11 @@ class LeavesRegisterDialog(BaseDialog):
                 key_color = "blue"
             else:
                 value = getattr(balance, key)
-                key_color = theme.balance_color(balance.balance, self.policy.low_balance_days) \
-                    if key == "balance" else "text"
+                key_color = (
+                    theme.balance_color(balance.balance, self.policy.low_balance_days)
+                    if key == "balance"
+                    else "text"
+                )
                 if key == "earned":
                     key_color = "pos"
                 if key == "taken":
@@ -97,13 +125,24 @@ class LeavesRegisterDialog(BaseDialog):
         rows = []
         for i, lv in enumerate(self.leaves, 1):
             start, end = B.leave_span(lv)
-            rows.append([
-                i, lv.type, D.to_iso(start), D.to_iso(end), f"{lv.amount} {lv.unit}",
-                lv.days_actual, lv.working_days,
-                "نعم" if B.is_service_exclusion(self.policy, lv) else "لا",
-                config.LEAVE_STATUS_LABELS.get(lv.status, lv.status),
-                lv.order, D.to_iso(lv.order_date), lv.reason, lv.added_date, lv.created_by,
-            ])
+            rows.append(
+                [
+                    i,
+                    lv.type,
+                    D.to_iso(start),
+                    D.to_iso(end),
+                    f"{lv.amount} {lv.unit}",
+                    lv.days_actual,
+                    lv.working_days,
+                    "نعم" if B.is_service_exclusion(self.policy, lv) else "لا",
+                    config.LEAVE_STATUS_LABELS.get(lv.status, lv.status),
+                    lv.order,
+                    D.to_iso(lv.order_date),
+                    lv.reason,
+                    lv.added_date,
+                    lv.created_by,
+                ]
+            )
         colors = {}
         for i, lv in enumerate(self.leaves):
             if lv.status == "pending":
@@ -112,9 +151,13 @@ class LeavesRegisterDialog(BaseDialog):
                 colors[(i, 8)] = theme.color("neg")
             if lv.is_adjustment:
                 colors[(i, 1)] = theme.color("gold")
-        self.table.set_rows(rows, numeric_columns={4, 5, 6}, colors=colors,
-                            empty_text="لا توجد إجازات مسجلة لهذا الموظف",
-                            footer=f"عدد الإجازات: {len(rows)}")
+        self.table.set_rows(
+            rows,
+            numeric_columns={4, 5, 6},
+            colors=colors,
+            empty_text="لا توجد إجازات مسجلة لهذا الموظف",
+            footer=f"عدد الإجازات: {len(rows)}",
+        )
 
     def _selected_leave(self):
         row = self.table.current_row()
@@ -146,8 +189,11 @@ class LeavesRegisterDialog(BaseDialog):
         if not self.ctx.can("delete_leave"):
             W.error(self, "لا تملك صلاحية حذف الإجازات.")
             return
-        if not W.confirm(self, f"حذف إجازة «{leave.type}» بتاريخ {D.to_iso(leave.start_date)}؟\n"
-                               "يمكن استعادتها لاحقاً من سلة المحذوفات."):
+        if not W.confirm(
+            self,
+            f"حذف إجازة «{leave.type}» بتاريخ {D.to_iso(leave.start_date)}؟\n"
+            "يمكن استعادتها لاحقاً من سلة المحذوفات.",
+        ):
             return
         self.ctx.db.soft_delete_leave(leave.id, self.ctx.user())
         self._saved()
@@ -160,6 +206,7 @@ class LeavesRegisterDialog(BaseDialog):
 
     def _statement(self) -> None:
         from .dialogs_leave import StatementDialog
+
         StatementDialog(self, self.ctx, self.emp_id).exec()
 
     def _saved(self) -> None:
@@ -169,8 +216,9 @@ class LeavesRegisterDialog(BaseDialog):
 
     # ------------------------------------------------------------------
     def _export_excel(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "حفظ Excel", f"leaves_{self.emp_id}.xlsx",
-                                              "Excel (*.xlsx)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "حفظ Excel", f"leaves_{self.emp_id}.xlsx", "Excel (*.xlsx)"
+        )
         if not path:
             return
         try:

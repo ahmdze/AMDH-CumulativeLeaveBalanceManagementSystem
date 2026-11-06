@@ -51,8 +51,7 @@ def _table_columns(conn: sqlite3.Connection, table: str) -> set[str]:
 
 
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
-    row = conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
+    row = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
     return row is not None
 
 
@@ -122,8 +121,10 @@ def _backfill(c: sqlite3.Cursor, added: dict[str, set[str]] | None = None) -> No
     if "status" in emp_cols:
         c.execute("UPDATE employees SET status = 'active' WHERE status IS NULL OR status = ''")
     if "created_at" in emp_cols:
-        c.execute("UPDATE employees SET created_at = ? WHERE created_at IS NULL OR created_at = ''",
-                  (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),))
+        c.execute(
+            "UPDATE employees SET created_at = ? WHERE created_at IS NULL OR created_at = ''",
+            (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),),
+        )
 
     # --- الإصدار 5: الهوية الثابتة (uid) والمؤسسات -------------------
     if "uid" in emp_cols:
@@ -151,13 +152,17 @@ def _backfill(c: sqlite3.Cursor, added: dict[str, set[str]] | None = None) -> No
                         (SELECT l.institution FROM leaves l WHERE l.id = attachments.leave_id), '')
                      WHERE institution IS NULL OR institution = ''""")
     # تسجيل المؤسسات الموجودة فعلاُ في البيانات
-    c.execute("""INSERT OR IGNORE INTO institutions(name, kind, created_at, updated_at)
+    c.execute(
+        """INSERT OR IGNORE INTO institutions(name, kind, created_at, updated_at)
                  SELECT DISTINCT TRIM(institution), 'مؤسسة', ?, ?
                  FROM employees
                  WHERE institution IS NOT NULL AND TRIM(institution) <> ''""",
-              (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),) * 2)
-    c.execute("""INSERT OR IGNORE INTO institutions(name, kind, created_at, updated_at)
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),) * 2,
+    )
+    c.execute(
+        """INSERT OR IGNORE INTO institutions(name, kind, created_at, updated_at)
                  SELECT DISTINCT TRIM(institution), 'مؤسسة', ?, ?
                  FROM leaves
                  WHERE institution IS NOT NULL AND TRIM(institution) <> ''""",
-              (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),) * 2)
+        (datetime.now().strftime("%Y-%m-%d %H:%M:%S"),) * 2,
+    )

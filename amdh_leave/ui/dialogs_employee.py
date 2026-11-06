@@ -6,8 +6,15 @@ from datetime import date
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QLineEdit, QSpinBox, QTabWidget, QTextEdit,
-    QVBoxLayout, QWidget,
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QLineEdit,
+    QSpinBox,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..services import dates as D
@@ -32,8 +39,7 @@ class EmployeeDialog(BaseDialog):
     # ------------------------------------------------------------------
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label("تعديل بيانات الموظف" if self.edit_mode
-                                       else "إضافة موظف جديد", 15))
+        layout.addWidget(W.title_label("تعديل بيانات الموظف" if self.edit_mode else "إضافة موظف جديد", 15))
         tabs = QTabWidget()
         tabs.addTab(self._tab_basic(), "البيانات الأساسية")
         tabs.addTab(self._tab_opening(), "الرصيد الافتتاحي")
@@ -44,8 +50,12 @@ class EmployeeDialog(BaseDialog):
         if self.edit_mode:
             self.e_id.setEnabled(False)
             layout.addWidget(W.muted_label("الرقم الوظيفي غير قابل للتعديل بعد الإنشاء."))
-        layout.addLayout(self.buttons_row(W.button("إلغاء", "Ghost", self.reject, width=110),
-                                          W.button("💾 حفظ", "Accent", self._save, width=140)))
+        layout.addLayout(
+            self.buttons_row(
+                W.button("إلغاء", "Ghost", self.reject, width=110),
+                W.button("💾 حفظ", "Accent", self._save, width=140),
+            )
+        )
 
     def _tab_basic(self) -> QWidget:
         page = QWidget()
@@ -66,8 +76,7 @@ class EmployeeDialog(BaseDialog):
         for institution in self.ctx.db.list_institutions(active_only=True):
             label = institution.name + (f" ({institution.code})" if institution.code else "")
             self.e_institution.addItem(label, institution.name)
-        self.e_institution.setToolTip(
-            "المؤسسة الحالية للموظف — تُختار من قائمة المؤسسات المسجّلة")
+        self.e_institution.setToolTip("المؤسسة الحالية للموظف — تُختار من قائمة المؤسسات المسجّلة")
         self.e_notes = QTextEdit()
         self.e_notes.setFixedHeight(70)
 
@@ -93,8 +102,7 @@ class EmployeeDialog(BaseDialog):
         outer.addWidget(frame)
         if self.ctx.session.scoped_institution:
             self.e_institution.setEnabled(False)
-            self.e_institution.setToolTip(
-                f"مقيَّد بمؤسستك: {self.ctx.session.scoped_institution}")
+            self.e_institution.setToolTip(f"مقيَّد بمؤسستك: {self.ctx.session.scoped_institution}")
         outer.addStretch()
         return page
 
@@ -105,7 +113,8 @@ class EmployeeDialog(BaseDialog):
             "الرصيد الافتتاحي هو **آخر رصيد متبقٍ** حسب الحساب اليدوي قبل تشغيل النظام. "
             "يُحسب من اليوم التالي لتاريخ الاحتساب، وتُضاف إليه الإجازات المستحقة بعد "
             "التاريخ وتُخصم الإجازات المسجّلة بعده. لا تُسجَّل إجازات تخصم من الرصيد "
-            "قبل أو عند تاريخ الاحتساب.")
+            "قبل أو عند تاريخ الاحتساب."
+        )
         note.setWordWrap(True)
         outer.addWidget(note)
 
@@ -138,7 +147,8 @@ class EmployeeDialog(BaseDialog):
         outer.addWidget(self.lbl_opening_warning)
         if self.edit_mode:
             self.lbl_opening_warning.setText(
-                "تنبيه: تعديل الرصيد الافتتاحي يعيد ضبط أساس الحساب ويُسجَّل في سجل التدقيق.")
+                "تنبيه: تعديل الرصيد الافتتاحي يعيد ضبط أساس الحساب ويُسجَّل في سجل التدقيق."
+            )
         outer.addStretch()
         self.chk_opening.toggled.connect(self._toggle_opening)
         self._toggle_opening(False)
@@ -221,13 +231,20 @@ class EmployeeDialog(BaseDialog):
         previous = getattr(self, "employee", None)
         if previous is None:
             return False
-        old = (int(bool(previous.opening_balance_set)), int(previous.opening_balance or 0),
-               D.to_iso(previous.opening_balance_date) if previous.opening_balance_date else "",
-               previous.opening_balance_by, previous.opening_balance_note)
-        new = (int(fields.get("opening_balance_set") or 0), int(fields.get("opening_balance") or 0),
-               fields.get("opening_balance_date") or "",
-               fields.get("opening_balance_by") or "",
-               fields.get("opening_balance_note") or "")
+        old = (
+            int(bool(previous.opening_balance_set)),
+            int(previous.opening_balance or 0),
+            D.to_iso(previous.opening_balance_date) if previous.opening_balance_date else "",
+            previous.opening_balance_by,
+            previous.opening_balance_note,
+        )
+        new = (
+            int(fields.get("opening_balance_set") or 0),
+            int(fields.get("opening_balance") or 0),
+            fields.get("opening_balance_date") or "",
+            fields.get("opening_balance_by") or "",
+            fields.get("opening_balance_note") or "",
+        )
         return old != new
 
     def _save(self) -> None:
@@ -236,32 +253,42 @@ class EmployeeDialog(BaseDialog):
             W.error(self, "لا تملك صلاحية تعديل الموظفين.")
             return
         fields = self._fields()
-        issues = validation.validate_employee(fields, emp_id, edit_mode=self.edit_mode,
-                                              exists=self.ctx.db.employee_exists)
+        issues = validation.validate_employee(
+            fields, emp_id, edit_mode=self.edit_mode, exists=self.ctx.db.employee_exists
+        )
         if self.edit_mode and fields.get("opening_balance_set"):
             issues += validation.validate_opening_against_leaves(
-                fields, self.ctx.db.list_leaves(emp_id), self.ctx.policy)
+                fields, self.ctx.db.list_leaves(emp_id), self.ctx.policy
+            )
         self.issues.set_issues(issues)
         if any(i.is_error for i in issues):
             W.error(self, "\n".join(i.message for i in issues if i.is_error), "تعذّر الحفظ")
             return
         if self.edit_mode and self._opening_changed(fields):
             if not W.confirm(
-                    self,
-                    "تعديل الرصيد الافتتاحي يعيد ضبط أساس الحساب.\n"
-                    "سيُسجَّل التغيير في سجل التدقيق وسجل تاريخ الرصيد الافتتاحي.\n\n"
-                    "هل تريد المتابعة؟", "تأكيد تعديل الرصيد الافتتاحي"):
+                self,
+                "تعديل الرصيد الافتتاحي يعيد ضبط أساس الحساب.\n"
+                "سيُسجَّل التغيير في سجل التدقيق وسجل تاريخ الرصيد الافتتاحي.\n\n"
+                "هل تريد المتابعة؟",
+                "تأكيد تعديل الرصيد الافتتاحي",
+            ):
                 return
         if self.edit_mode:
             previous = self.ctx.db.get_employee(emp_id)
             self.ctx.db.update_employee(emp_id, fields, self.ctx.user())
             if previous and previous.institution != fields["institution"]:
-                self.ctx.db.add_move(emp_id, previous.institution, fields["institution"],
-                                     moved_on=D.date.today(), source_file="—",
-                                     note="نقل يدوي من نافذة الموظف", user=self.ctx.user())
-                self.ctx.db.set_employee_institution(emp_id, fields["institution"],
-                                                     moved_on=D.date.today(),
-                                                     user=self.ctx.user())
+                self.ctx.db.add_move(
+                    emp_id,
+                    previous.institution,
+                    fields["institution"],
+                    moved_on=D.date.today(),
+                    source_file="—",
+                    note="نقل يدوي من نافذة الموظف",
+                    user=self.ctx.user(),
+                )
+                self.ctx.db.set_employee_institution(
+                    emp_id, fields["institution"], moved_on=D.date.today(), user=self.ctx.user()
+                )
         else:
             self.ctx.db.add_employee(emp_id, fields, self.ctx.user())
         if self.on_save:

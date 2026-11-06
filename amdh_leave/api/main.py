@@ -8,8 +8,8 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .. import config
 from ..db import Database
@@ -60,14 +60,15 @@ async def lifespan(_app: FastAPI):
 def _register_routers(app: FastAPI) -> None:
     """تسجيل جميع routers مع التطبيق."""
     try:
-        from . import employees as _emp
-        from . import leaves as _lv
         from . import balance as _bal
-        from . import reports as _rpt
         from . import dashboard as _dash
+        from . import employees as _emp
+        from . import export_ as _exp
         from . import holidays as _hol
         from . import institutions as _inst
-        from . import export_ as _exp
+        from . import leaves as _lv
+        from . import reports as _rpt
+
         app.include_router(_emp.router, prefix="/api", tags=["الموظفين"])
         app.include_router(_lv.router, prefix="/api", tags=["الإجازات"])
         app.include_router(_bal.router, prefix="/api", tags=["الأرصدة"])
@@ -121,4 +122,5 @@ async def login(username: str, password: str):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run("amdh_leave.api.main:app", host="127.0.0.1", port=8000, reload=True)

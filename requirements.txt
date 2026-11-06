@@ -3,7 +3,7 @@ PyQt6>=6.12.0,<7
 openpyxl>=3.1.5
 reportlab>=5.1.0
 arabic-reshaper>=3.1.0
-python-bidi>=0.6.12.2
+python-bidi>=0.6.12
 
 # تشفير قاعدة البيانات (SQLCipher) — مطلوب لنسخ المؤسسات المشفّرة
 # على ويندوز تُثبَّت من wheel جاهز: sqlcipher3-0.6.4-cp314-win_amd64

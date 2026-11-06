@@ -41,18 +41,21 @@ class SingleInstance:
 
     def acquire(self) -> bool:
         import datetime as _dt
+
         try:
             self.path.parent.mkdir(parents=True, exist_ok=True)
             self.handle = open(self.path, "a+b")
         except OSError:
-            return True                      # لا نمنع التشغيل إن تعذّر القفل
+            return True  # لا نمنع التشغيل إن تعذّر القفل
         try:
             self.handle.seek(0)
             if os.name == "nt":
                 import msvcrt
+
                 msvcrt.locking(self.handle.fileno(), msvcrt.LK_NBLCK, 1)
             else:
                 import fcntl
+
                 fcntl.flock(self.handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
         except OSError:
             self.handle.close()
@@ -62,7 +65,7 @@ class SingleInstance:
         try:
             self.handle.seek(0)
             self.handle.truncate()
-            self.handle.write(f"{os.getpid()} {_dt.datetime.now():%Y-%m-%d %H:%M:%S}".encode("utf-8"))
+            self.handle.write(f"{os.getpid()} {_dt.datetime.now():%Y-%m-%d %H:%M:%S}".encode())
             self.handle.flush()
         except OSError:
             pass
@@ -83,9 +86,11 @@ class SingleInstance:
             self.handle.seek(0)
             if os.name == "nt":
                 import msvcrt
+
                 msvcrt.locking(self.handle.fileno(), msvcrt.LK_UNLCK, 1)
             else:
                 import fcntl
+
                 fcntl.flock(self.handle.fileno(), fcntl.LOCK_UN)
         except OSError:
             pass
@@ -118,9 +123,8 @@ def _prepare_paths(data_dir: str | None) -> config.Paths:
                     source = old_dir / name
                     if source.exists():
                         shutil.copy2(source, paths.data_dir / name)
-                get_logger("app").warning("نُقلت بيانات النسخة القديمة من %s إلى %s",
-                                          old_dir, paths.data_dir)
-            except OSError as exc:                    # pragma: no cover
+                get_logger("app").warning("نُقلت بيانات النسخة القديمة من %s إلى %s", old_dir, paths.data_dir)
+            except OSError as exc:  # pragma: no cover
                 get_logger("app").error("تعذّر ترحيل بيانات _internal: %s", exc)
     # ترحيل قاعدة بيانات قديمة موجودة بجانب البرنامج إلى مجلد البيانات الجديد
     if not paths.db_path.exists():
@@ -150,20 +154,26 @@ def _open_encrypted_database(paths: config.Paths, logger) -> str | None:
     from .ui.dialogs_security import PasswordDialog
 
     if not crypto.sqlcipher_available():
-        QMessageBox.critical(None, "تشفير قاعدة البيانات",
-                             "قاعدة البيانات مشفّرة، لكن حزمة SQLCipher غير مثبتة." +
-                             "\n\n" + crypto.install_hint())
+        QMessageBox.critical(
+            None,
+            "تشفير قاعدة البيانات",
+            "قاعدة البيانات مشفّرة، لكن حزمة SQLCipher غير مثبتة." + "\n\n" + crypto.install_hint(),
+        )
         return None
     lock = crypto.read_lock(paths.data_dir) or {}
     if not lock.get("salt"):
-        QMessageBox.critical(None, "تشفير قاعدة البيانات",
-                             "ملف القفل مفقود — لا يمكن اشتقاق المفتاح. "
-                                "استعد نسخة احتياطية غير مشفّرة.")
+        QMessageBox.critical(
+            None,
+            "تشفير قاعدة البيانات",
+            "ملف القفل مفقود — لا يمكن اشتقاق المفتاح. استعد نسخة احتياطية غير مشفّرة.",
+        )
         return None
     for attempt in range(3):
-        dialog = PasswordDialog(None, "فتح قاعدة بيانات مشفّرة",
-                                "قاعدة البيانات مشفّرة. أدخل كلمة المرور." + "\n" +
-                                f"المحاولات المتبقية: {3 - attempt}")
+        dialog = PasswordDialog(
+            None,
+            "فتح قاعدة بيانات مشفّرة",
+            "قاعدة البيانات مشفّرة. أدخل كلمة المرور." + "\n" + f"المحاولات المتبقية: {3 - attempt}",
+        )
         if dialog.exec() != dialog.DialogCode.Accepted:
             return None
         password = dialog.password or ""
@@ -208,17 +218,17 @@ def main(argv: list[str] | None = None) -> int:
 
     # الشعارات: يُقدَّم مجلد المستخدم على مجلد الحزمة، وأيقونة التطبيق لشريط المهام
     from .ui import assets as ui_assets
+
     ui_assets.set_user_assets_dir(paths.data_dir / "assets")
     ui_assets.apply_app_icon(app)
 
     # الواجهة عربية فقط باتجاه من اليمين إلى اليسار
-    settings = QSettings(config.SETTINGS_ORG, config.settings_app_name())
+    QSettings(config.SETTINGS_ORG, config.settings_app_name())
     app.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
     logger.info("بدء التشغيل — البيانات: %s", paths.data_dir)
 
     def show_error(text: str) -> None:
-        QMessageBox.critical(None, "خطأ غير متوقع",
-                             text[-1500:] + (f"\n\n{log_file}" if log_file else ""))
+        QMessageBox.critical(None, "خطأ غير متوقع", text[-1500:] + (f"\n\n{log_file}" if log_file else ""))
 
     install_excepthook(show_error)
 
@@ -230,13 +240,19 @@ def main(argv: list[str] | None = None) -> int:
         if headless:
             logger.warning("هناك نسخة أخرى تعمل على نفس البيانات%s", detail)
             return 1
-        QMessageBox.information(None, "البرنامج يعمل",
-                                "هناك نسخة أخرى من البرنامج تعمل على نفس البيانات." + detail +
-                                "\n\n" + "أُغلق النسخة الحالية لتجنّب تعارض الكتابة.")
+        QMessageBox.information(
+            None,
+            "البرنامج يعمل",
+            "هناك نسخة أخرى من البرنامج تعمل على نفس البيانات."
+            + detail
+            + "\n\n"
+            + "أُغلق النسخة الحالية لتجنّب تعارض الكتابة.",
+        )
         return 1
 
     key_hex: str | None = None
     from .services import crypto as _crypto
+
     key_file = _crypto.read_key_file(paths.data_dir)
     encryption_on = _crypto.is_encryption_enabled(paths.data_dir)
     if key_file and _crypto.is_encrypted_database(paths.db_path):
@@ -244,9 +260,12 @@ def main(argv: list[str] | None = None) -> int:
         key_hex = key_file
     elif encryption_on and not key_file:
         if (_crypto.read_lock(paths.data_dir) or {}).get("mode") == "keyfile":
-            QMessageBox.critical(None, "تشفير قاعدة البيانات",
-                                 "ملف مفتاح القاعدة مفقود (.amdh_dbkey).\n"
-                                 "استعد المفتاح من مركز الدائرة أو من النسخة الاحتياطية.")
+            QMessageBox.critical(
+                None,
+                "تشفير قاعدة البيانات",
+                "ملف مفتاح القاعدة مفقود (.amdh_dbkey).\n"
+                "استعد المفتاح من مركز الدائرة أو من النسخة الاحتياطية.",
+            )
             logger.warning("ملف المفتاح مفقود مع قفل keyfile")
             return 3
         key_hex = _open_encrypted_database(paths, logger)

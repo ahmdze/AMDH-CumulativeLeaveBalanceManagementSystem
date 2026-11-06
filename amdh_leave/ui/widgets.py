@@ -4,12 +4,24 @@ from __future__ import annotations
 
 import math
 
-from PyQt6.QtCore import Qt, QRectF, QDate
+from PyQt6.QtCore import QDate, QRectF, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QDateEdit, QFrame, QHBoxLayout, QHeaderView, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QSizePolicy, QTableWidget, QTableWidgetItem,
-    QVBoxLayout, QWidget,
+    QAbstractItemView,
+    QCheckBox,
+    QDateEdit,
+    QFrame,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..services import dates as D
@@ -55,13 +67,14 @@ def enable_hover(widget, property_name: str = "hovered"):
         set_state(False)
         original_leave(event)
 
-    widget.enterEvent = enter          # type: ignore[method-assign]
-    widget.leaveEvent = leave          # type: ignore[method-assign]
+    widget.enterEvent = enter  # type: ignore[method-assign]
+    widget.leaveEvent = leave  # type: ignore[method-assign]
 
 
 def apply_shadow(widget, blur: int = 12, offset: int = 2, spread: int = 0):
     """ظل ناعم حول البطاقات الصغيرة (يعطي عمقاً بصرياً بلا تلطّخ)."""
     from PyQt6.QtWidgets import QGraphicsDropShadowEffect
+
     effect = QGraphicsDropShadowEffect(widget)
     effect.setBlurRadius(blur)
     effect.setOffset(0, offset)
@@ -120,10 +133,16 @@ def error(parent, text: str, title: str = "خطأ") -> None:
 
 
 def confirm(parent, text: str, title: str = "تأكيد") -> bool:
-    return QMessageBox.question(
-        parent, title, text,
-        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes
+    return (
+        QMessageBox.question(
+            parent,
+            title,
+            text,
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        == QMessageBox.StandardButton.Yes
+    )
 
 
 def open_path(parent, path, title: str = "فتح الملف") -> bool:
@@ -132,6 +151,7 @@ def open_path(parent, path, title: str = "فتح الملف") -> bool:
 
     from PyQt6.QtCore import QUrl
     from PyQt6.QtGui import QDesktopServices
+
     target = _Path(path)
     if not target.exists():
         warn(parent, f"الملف غير موجود:\n{target}", title)
@@ -147,8 +167,9 @@ def search_line(placeholder: str = "") -> QLineEdit:
     return line
 
 
-def button(text: str, style: str = "Ghost", slot=None, width: int | None = None,
-           parent=None, tooltip: str = "") -> QPushButton:
+def button(
+    text: str, style: str = "Ghost", slot=None, width: int | None = None, parent=None, tooltip: str = ""
+) -> QPushButton:
     btn = QPushButton(text, parent)
     btn.setObjectName(style)
     if slot:
@@ -262,13 +283,16 @@ class NumericItem(QTableWidgetItem):
 
 def setup_table(table: QTableWidget, sortable: bool = True, multi: bool = False) -> QTableWidget:
     table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-    table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection if multi
-                           else QAbstractItemView.SelectionMode.SingleSelection)
+    table.setSelectionMode(
+        QAbstractItemView.SelectionMode.ExtendedSelection
+        if multi
+        else QAbstractItemView.SelectionMode.SingleSelection
+    )
     table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
     table.setAlternatingRowColors(True)
     table.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
     table.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
-    table.setMouseTracking(True)          # لتفعيل تفاعل المرور على الصفوف
+    table.setMouseTracking(True)  # لتفعيل تفاعل المرور على الصفوف
     table.setShowGrid(False)
     header = table.horizontalHeader()
     header.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
@@ -302,10 +326,15 @@ class TablePanel(QWidget):
         self.footer = muted_label("")
         layout.addWidget(self.footer)
 
-    def set_rows(self, rows: list[list], numeric_columns: set[int] | None = None,
-                 colors: dict[tuple[int, int], str] | None = None,
-                 empty_text: str = "لا توجد بيانات للعرض",
-                 footer: str = "", headers: list[str] | None = None) -> None:
+    def set_rows(
+        self,
+        rows: list[list],
+        numeric_columns: set[int] | None = None,
+        colors: dict[tuple[int, int], str] | None = None,
+        empty_text: str = "لا توجد بيانات للعرض",
+        footer: str = "",
+        headers: list[str] | None = None,
+    ) -> None:
         numeric_columns = numeric_columns or set()
         colors = colors or {}
         # تحديث الـ headers ديناميكياً إذا وُفرت
@@ -373,8 +402,7 @@ class KPICard(QFrame):
 class BarChart(QWidget):
     """رسم أعمدة أفقي بسيط (بلا اعتماد على مكتبات خارجية) مع دعم RTL."""
 
-    def __init__(self, parent=None, label_width: float = 0.38, max_rows: int = 12,
-                 value_suffix: str = ""):
+    def __init__(self, parent=None, label_width: float = 0.38, max_rows: int = 12, value_suffix: str = ""):
         super().__init__(parent)
         self._items: list[tuple[str, float]] = []
         self._title = ""
@@ -400,8 +428,11 @@ class BarChart(QWidget):
             painter.setPen(QPen(QColor(theme.color("accent"))))
             font = QFont("Segoe UI", 10, QFont.Weight.Bold)
             painter.setFont(font)
-            painter.drawText(QRectF(8, 2, self.width() - 16, 20),
-                             int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), self._title)
+            painter.drawText(
+                QRectF(8, 2, self.width() - 16, 20),
+                int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                self._title,
+            )
             top = 28
 
         if not rows:
@@ -426,9 +457,11 @@ class BarChart(QWidget):
             bar_y = y + (row_h - bar_h) / 2
             text_rect = QRectF(plot_right + 6, y, label_w - 6, row_h)
             painter.setPen(QPen(QColor(theme.color("text"))))
-            painter.drawText(text_rect,
-                             int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
-                             label if len(label) <= 34 else label[:32] + "…")
+            painter.drawText(
+                text_rect,
+                int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                label if len(label) <= 34 else label[:32] + "…",
+            )
             width = plot_width * abs(value) / max_abs
             color = theme.color("pos") if value >= 0 else theme.color("neg")
             rect = QRectF(plot_right - width, bar_y, width, bar_h)
@@ -437,9 +470,11 @@ class BarChart(QWidget):
             painter.drawRoundedRect(rect, 3, 3)
             painter.setPen(QPen(QColor(theme.color("muted"))))
             value_rect = QRectF(plot_left, y, plot_width, row_h)
-            painter.drawText(value_rect,
-                             int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
-                             f"{value:,.0f}{self._suffix}")
+            painter.drawText(
+                value_rect,
+                int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                f"{value:,.0f}{self._suffix}",
+            )
         painter.end()
 
 
@@ -470,8 +505,11 @@ class PieChart(QWidget):
             painter.setPen(QPen(QColor(theme.color("accent"))))
             font = QFont("Segoe UI", 10, QFont.Weight.Bold)
             painter.setFont(font)
-            painter.drawText(QRectF(8, 2, self.width() - 16, 20),
-                             int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), self._title)
+            painter.drawText(
+                QRectF(8, 2, self.width() - 16, 20),
+                int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                self._title,
+            )
             top = 28
 
         if not rows:
@@ -483,8 +521,16 @@ class PieChart(QWidget):
 
         total = sum(v for _, v in rows) or 1.0
         colors = [
-            "#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6",
-            "#ec4899", "#06b6d4", "#f97316", "#6366f1", "#14b8a6",
+            "#3b82f6",
+            "#ef4444",
+            "#10b981",
+            "#f59e0b",
+            "#8b5cf6",
+            "#ec4899",
+            "#06b6d4",
+            "#f97316",
+            "#6366f1",
+            "#14b8a6",
         ]
 
         # منطقة الرسم الدائري
@@ -495,13 +541,13 @@ class PieChart(QWidget):
         radius = chart_size / 2
 
         start_angle = 0
-        for i, (label, value) in enumerate(rows):
+        for i, (_label, value) in enumerate(rows):
             slice_angle = int(360 * value / total * 16)
             painter.setBrush(QColor(colors[i % len(colors)]))
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.drawPie(int(cx - radius), int(cy - radius),
-                            int(radius * 2), int(radius * 2),
-                            start_angle, slice_angle)
+            painter.drawPie(
+                int(cx - radius), int(cy - radius), int(radius * 2), int(radius * 2), start_angle, slice_angle
+            )
             start_angle += slice_angle
 
             # التسمية
@@ -514,22 +560,20 @@ class PieChart(QWidget):
             if value / total > 0.05:
                 painter.setPen(QPen(QColor("#ffffff")))
                 painter.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-                painter.drawText(int(lx - 20), int(ly + 4), 40, 16,
-                                 int(Qt.AlignmentFlag.AlignCenter), pct)
+                painter.drawText(int(lx - 20), int(ly + 4), 40, 16, int(Qt.AlignmentFlag.AlignCenter), pct)
 
         # المفتاح
         legend_x = self.width() - 110
         legend_y = top + 4
         painter.setFont(QFont("Segoe UI", 9))
-        for i, (label, value) in enumerate(rows):
+        for i, (label, _value) in enumerate(rows):
             y = legend_y + i * 20
             painter.setBrush(QColor(colors[i % len(colors)]))
             painter.setPen(Qt.PenStyle.NoPen)
             painter.drawRoundedRect(legend_x, y, 12, 12, 2, 2)
             painter.setPen(QPen(QColor(theme.color("text"))))
             short = label if len(label) <= 20 else label[:18] + "…"
-            painter.drawText(legend_x + 16, y - 2, 90, 16,
-                             int(Qt.AlignmentFlag.AlignRight), short)
+            painter.drawText(legend_x + 16, y - 2, 90, 16, int(Qt.AlignmentFlag.AlignRight), short)
         painter.end()
 
 
@@ -560,8 +604,11 @@ class LineChart(QWidget):
             painter.setPen(QPen(QColor(theme.color("accent"))))
             font = QFont("Segoe UI", 10, QFont.Weight.Bold)
             painter.setFont(font)
-            painter.drawText(QRectF(8, 2, self.width() - 16, 20),
-                             int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), self._title)
+            painter.drawText(
+                QRectF(8, 2, self.width() - 16, 20),
+                int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                self._title,
+            )
             top = 28
 
         if not rows:
@@ -588,8 +635,7 @@ class LineChart(QWidget):
             y = plot_top + plot_height * i / 4
             val = max_val * (1 - i / 4)
             painter.drawLine(int(plot_left), int(y), int(plot_right), int(y))
-            painter.drawText(2, int(y) + 4, 36, 14,
-                             int(Qt.AlignmentFlag.AlignRight), f"{val:,.0f}")
+            painter.drawText(2, int(y) + 4, 36, 14, int(Qt.AlignmentFlag.AlignRight), f"{val:,.0f}")
 
         # الخط
         points = []

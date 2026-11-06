@@ -12,17 +12,46 @@ ITERATIONS = 200_000
 # الصلاحيات
 PERMISSIONS: dict[str, set[str]] = {
     "admin": {
-        "edit_employee", "delete_employee", "purge", "edit_leave", "delete_leave",
-        "manage_users", "edit_policy", "edit_rules", "backup_restore", "import_db",
-        "export", "view_audit", "view_holidays", "manage_holidays", "manage_attachments",
-        "approve", "manage_institutions", "import_transfer", "export_transfer",
-        "transfer_employee", "manage_encryption", "db_operations",
+        "edit_employee",
+        "delete_employee",
+        "purge",
+        "edit_leave",
+        "delete_leave",
+        "manage_users",
+        "edit_policy",
+        "edit_rules",
+        "backup_restore",
+        "import_db",
+        "export",
+        "view_audit",
+        "view_holidays",
+        "manage_holidays",
+        "manage_attachments",
+        "approve",
+        "manage_institutions",
+        "import_transfer",
+        "export_transfer",
+        "transfer_employee",
+        "manage_encryption",
+        "db_operations",
     },
     "editor": {
-        "edit_employee", "delete_employee", "edit_leave", "delete_leave", "purge",
-        "export", "manage_attachments", "approve", "export_transfer", "view_holidays",
-        "manage_holidays", "transfer_employee", "edit_policy", "backup_restore",
-        "manage_encryption", "db_operations",
+        "edit_employee",
+        "delete_employee",
+        "edit_leave",
+        "delete_leave",
+        "purge",
+        "export",
+        "manage_attachments",
+        "approve",
+        "export_transfer",
+        "view_holidays",
+        "manage_holidays",
+        "transfer_employee",
+        "edit_policy",
+        "backup_restore",
+        "manage_encryption",
+        "db_operations",
     },
     "viewer": {"export", "view_holidays"},
 }
@@ -30,11 +59,11 @@ PERMISSIONS: dict[str, set[str]] = {
 ROLE_ORDER = ("admin", "editor", "viewer")
 
 
-def hash_password(password: str, salt: str | None = None,
-                  iterations: int = ITERATIONS) -> tuple[str, str, int]:
+def hash_password(
+    password: str, salt: str | None = None, iterations: int = ITERATIONS
+) -> tuple[str, str, int]:
     salt = salt or os.urandom(16).hex()
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"),
-                                 bytes.fromhex(salt), iterations)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), bytes.fromhex(salt), iterations)
     return digest.hex(), salt, iterations
 
 
@@ -59,6 +88,7 @@ def password_strength(password: str) -> tuple[bool, str]:
 @dataclass
 class Session:
     """هوية المستخدم الحالي وصلاحياته."""
+
     username: str = "—"
     display_name: str = ""
     role: str = "admin"
@@ -85,10 +115,18 @@ class Session:
 
 def make_session(user=None, auth_enabled: bool = False) -> Session:
     if user is None:
-        return Session(username="—", display_name="مستخدم محلي", role="admin",
-                       auth_enabled=auth_enabled,
-                       permissions=set(PERMISSIONS["admin"]))
-    return Session(username=user.username, display_name=user.display_name or user.username,
-                   role=user.role if user.role in PERMISSIONS else "viewer",
-                   institution=user.institution or "", auth_enabled=auth_enabled,
-                   permissions=set(PERMISSIONS.get(user.role, PERMISSIONS["viewer"])))
+        return Session(
+            username="—",
+            display_name="مستخدم محلي",
+            role="admin",
+            auth_enabled=auth_enabled,
+            permissions=set(PERMISSIONS["admin"]),
+        )
+    return Session(
+        username=user.username,
+        display_name=user.display_name or user.username,
+        role=user.role if user.role in PERMISSIONS else "viewer",
+        institution=user.institution or "",
+        auth_enabled=auth_enabled,
+        permissions=set(PERMISSIONS.get(user.role, PERMISSIONS["viewer"])),
+    )

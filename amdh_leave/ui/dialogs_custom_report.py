@@ -17,18 +17,23 @@ from pathlib import Path
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFormLayout, QGroupBox, QHBoxLayout,
-    QLabel, QListWidget, QListWidgetItem, QPushButton, QSplitter, QVBoxLayout,
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QListWidgetItem,
+    QSplitter,
+    QVBoxLayout,
     QWidget,
 )
 
 from .. import config
-from ..models import Employee, Leave
 from ..services import dates as D
-from ..services import reports as R
-from . import theme, widgets as W
+from . import widgets as W
 from .dialogs_base import BaseDialog
-
 
 # الحقول المتاحة للتقارير
 EMPLOYEE_FIELDS = [
@@ -301,7 +306,11 @@ class CustomReportDialog(BaseDialog):
                 row = []
                 for key, _ in fields:
                     if key in ("raw_days", "net_days", "earned", "taken", "balance"):
-                        bal = self.ctx.db.policy().compute_balance_for(emp) if hasattr(self.ctx.db.policy(), 'compute_balance_for') else None
+                        bal = (
+                            self.ctx.db.policy().compute_balance_for(emp)
+                            if hasattr(self.ctx.db.policy(), "compute_balance_for")
+                            else None
+                        )
                         val = getattr(bal, key, "—") if bal else "—"
                     else:
                         val = getattr(emp, key, "")
@@ -336,6 +345,7 @@ class CustomReportDialog(BaseDialog):
             policy = self.ctx.db.policy()
             for emp in employees:
                 from ..services import balance as B
+
                 bal = B.compute_balance(emp, emp.leaves, policy)
                 row = []
                 for key, _ in fields:
@@ -355,17 +365,19 @@ class CustomReportDialog(BaseDialog):
         headers, rows = self._build_data()
         if not headers:
             return
-        self.preview.set_rows(rows, headers=headers,
-                              empty_text="لا توجد بيانات مطابقة للفلاتر",
-                              footer=f"عدد الصفوف: {len(rows)}")
+        self.preview.set_rows(
+            rows,
+            headers=headers,
+            empty_text="لا توجد بيانات مطابقة للفلاتر",
+            footer=f"عدد الصفوف: {len(rows)}",
+        )
 
     def _export_excel(self) -> None:
         """تصدير إلى Excel."""
         from PyQt6.QtWidgets import QFileDialog
+
         path, _ = QFileDialog.getSaveFileName(
-            self, "تصدير Excel",
-            f"تقرير_{D.to_iso(date.today())}.xlsx",
-            "Excel Files (*.xlsx)"
+            self, "تصدير Excel", f"تقرير_{D.to_iso(date.today())}.xlsx", "Excel Files (*.xlsx)"
         )
         if not path:
             return
@@ -374,6 +386,7 @@ class CustomReportDialog(BaseDialog):
             return
         try:
             from ..exporters.excel import _build_custom
+
             _build_custom(path, headers, rows, "تقرير مخصص")
             W.info(self, f"تم التصدير إلى:\n{path}")
         except Exception as exc:
@@ -382,10 +395,9 @@ class CustomReportDialog(BaseDialog):
     def _export_pdf(self) -> None:
         """تصدير إلى PDF."""
         from PyQt6.QtWidgets import QFileDialog
+
         path, _ = QFileDialog.getSaveFileName(
-            self, "تصدير PDF",
-            f"تقرير_{D.to_iso(date.today())}.pdf",
-            "PDF Files (*.pdf)"
+            self, "تصدير PDF", f"تقرير_{D.to_iso(date.today())}.pdf", "PDF Files (*.pdf)"
         )
         if not path:
             return
@@ -394,6 +406,7 @@ class CustomReportDialog(BaseDialog):
             return
         try:
             from ..exporters.pdf import _build
+
             _build(Path(path), "تقرير مخصص", f"عدد الصفوف: {len(rows)}", headers, rows)
             W.info(self, f"تم التصدير إلى:\n{path}")
         except Exception as exc:
@@ -418,10 +431,12 @@ class CustomReportDialog(BaseDialog):
         fields = []
         for i in range(self.fields_list.count()):
             item = self.fields_list.item(i)
-            fields.append({
-                "key": item.data(Qt.ItemDataRole.UserRole),
-                "checked": item.checkState() == Qt.CheckState.Checked
-            })
+            fields.append(
+                {
+                    "key": item.data(Qt.ItemDataRole.UserRole),
+                    "checked": item.checkState() == Qt.CheckState.Checked,
+                }
+            )
         return {
             "report_type": self.report_type.currentIndex(),
             "fields": fields,
@@ -434,6 +449,7 @@ class CustomReportDialog(BaseDialog):
     def _save_template(self) -> None:
         """حفظ القالب الحالي."""
         from PyQt6.QtWidgets import QInputDialog
+
         name, ok = QInputDialog.getText(self, "حفظ القالب", "اسم القالب:")
         if not ok or not name.strip():
             return
@@ -473,7 +489,8 @@ class CustomReportDialog(BaseDialog):
                 for fc in fields_cfg:
                     if fc["key"] == key:
                         item.setCheckState(
-                            Qt.CheckState.Checked if fc["checked"] else Qt.CheckState.Unchecked)
+                            Qt.CheckState.Checked if fc["checked"] else Qt.CheckState.Unchecked
+                        )
                         break
             self.group_by.setCurrentIndex(cfg.get("group_by", 0))
         except (json.JSONDecodeError, KeyError, TypeError):

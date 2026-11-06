@@ -7,7 +7,8 @@ from PyQt6.QtWidgets import QComboBox, QFileDialog, QHBoxLayout, QLabel, QVBoxLa
 from ..exporters import excel as X
 from ..exporters import html as H
 from ..services import reports
-from . import theme, widgets as W
+from . import theme
+from . import widgets as W
 from .dialogs_base import BaseDialog
 
 KIND_LABELS = {
@@ -54,8 +55,9 @@ class NotificationsDialog(BaseDialog):
 
         self.note = W.muted_label("الرصيد السالب مسموح حسب الضوابط الإدارية ويُعرض كمعلومة لا كخطأ.")
         layout.addWidget(self.note)
-        self.table = W.TablePanel(["الأهمية", "النوع", "الموظف", "الرقم الوظيفي", "المؤسسة",
-                                   "التاريخ", "التنبيه"])
+        self.table = W.TablePanel(
+            ["الأهمية", "النوع", "الموظف", "الرقم الوظيفي", "المؤسسة", "التاريخ", "التنبيه"]
+        )
         layout.addWidget(self.table)
         self.footer = QLabel("")
         self.footer.setStyleSheet(theme.label_style("muted"))
@@ -71,25 +73,34 @@ class NotificationsDialog(BaseDialog):
     def _apply_filter(self) -> None:
         severity = self.cb_severity.currentData() or ""
         kind = self.cb_kind.currentData() or ""
-        items = [a for a in self.alerts
-                 if (not severity or a.severity == severity) and (not kind or a.kind == kind)]
+        items = [
+            a
+            for a in self.alerts
+            if (not severity or a.severity == severity) and (not kind or a.kind == kind)
+        ]
         self.filtered = items
-        colors = {"high": theme.color("neg"), "medium": theme.color("gold"),
-                  "info": theme.color("muted")}
+        colors = {"high": theme.color("neg"), "medium": theme.color("gold"), "info": theme.color("muted")}
         rows = []
         row_colors = {}
         for i, alert in enumerate(items):
-            rows.append([reports.SEVERITY_LABELS.get(alert.severity, alert.severity),
-                         KIND_LABELS.get(alert.kind, alert.kind), alert.name, alert.emp_id,
-                         alert.institution, alert.day.strftime("%Y-%m-%d") if alert.day else "",
-                         alert.message])
+            rows.append(
+                [
+                    reports.SEVERITY_LABELS.get(alert.severity, alert.severity),
+                    KIND_LABELS.get(alert.kind, alert.kind),
+                    alert.name,
+                    alert.emp_id,
+                    alert.institution,
+                    alert.day.strftime("%Y-%m-%d") if alert.day else "",
+                    alert.message,
+                ]
+            )
             row_colors[(i, 0)] = colors.get(alert.severity, theme.color("text"))
         self.table.set_rows(rows, colors=row_colors, empty_text="لا توجد تنبيهات مطابقة")
-        counts = {key: len([a for a in self.alerts if a.severity == key])
-                  for key in reports.SEVERITY_LABELS}
+        counts = {key: len([a for a in self.alerts if a.severity == key]) for key in reports.SEVERITY_LABELS}
         self.footer.setText(
             f"الإجمالي: {len(self.alerts)} | مهم: {counts['high']} | متوسط: {counts['medium']} | "
-            f"معلومة: {counts['info']} | المعروض: {len(items)}")
+            f"معلومة: {counts['info']} | المعروض: {len(items)}"
+        )
 
     # ------------------------------------------------------------------
     def _export_excel(self) -> None:

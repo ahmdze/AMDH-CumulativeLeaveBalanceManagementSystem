@@ -58,6 +58,7 @@ def log_exception(context: str = "") -> str:
 
 def install_excepthook(on_error=None) -> None:
     """يعرض حوار خطأ ودّي بدل إغلاق البرنامج بصمت."""
+
     def _hook(exc_type, exc_value, exc_tb):
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_tb)
@@ -69,4 +70,5 @@ def install_excepthook(on_error=None) -> None:
                 on_error(text)
             except Exception:  # pragma: no cover - دفاع فقط
                 pass
+
     sys.excepthook = _hook

@@ -18,8 +18,7 @@ from . import dates as D
 # ---------------------------------------------------------------------------
 # الموظف
 # ---------------------------------------------------------------------------
-def validate_employee(fields: dict, emp_id: str, *, edit_mode: bool = False,
-                      exists=None) -> list[Issue]:
+def validate_employee(fields: dict, emp_id: str, *, edit_mode: bool = False, exists=None) -> list[Issue]:
     issues: list[Issue] = []
     if not emp_id or not str(emp_id).strip():
         issues.append(Issue("error", "الرقم الوظيفي إلزامي."))
@@ -59,8 +58,7 @@ def validate_employee(fields: dict, emp_id: str, *, edit_mode: bool = False,
     return issues
 
 
-def validate_opening_against_leaves(fields: dict, leaves: list[Leave],
-                                    policy: Policy) -> list[Issue]:
+def validate_opening_against_leaves(fields: dict, leaves: list[Leave], policy: Policy) -> list[Issue]:
     """يمنع تعارض الرصيد الافتتاحي مع إجازات موجودة قبل/عند تاريخه."""
     issues: list[Issue] = []
     if not fields.get("opening_balance_set"):
@@ -76,18 +74,22 @@ def validate_opening_against_leaves(fields: dict, leaves: list[Leave],
             continue
         if B.consumes_balance(policy, lv):
             if start <= cutoff:
-                issues.append(Issue(
-                    "error",
-                    f"الإجازة «{lv.type}» بتاريخ {D.to_iso(start)} تخصم من الرصيد "
-                    f"ولا يمكن أن تكون قبل/عند تاريخ الرصيد الافتتاحي ({D.to_iso(cutoff)})."))
+                issues.append(
+                    Issue(
+                        "error",
+                        f"الإجازة «{lv.type}» بتاريخ {D.to_iso(start)} تخصم من الرصيد "
+                        f"ولا يمكن أن تكون قبل/عند تاريخ الرصيد الافتتاحي ({D.to_iso(cutoff)}).",
+                    )
+                )
     return issues
 
 
 # ---------------------------------------------------------------------------
 # الإجازة
 # ---------------------------------------------------------------------------
-def validate_leave(leave: Leave, employee: Employee, existing: list[Leave], policy: Policy,
-                   leave_id: int | None = None) -> list[Issue]:
+def validate_leave(
+    leave: Leave, employee: Employee, existing: list[Leave], policy: Policy, leave_id: int | None = None
+) -> list[Issue]:
     issues: list[Issue] = []
     rule = policy.rule(leave.type)
 
@@ -112,8 +114,9 @@ def validate_leave(leave: Leave, employee: Employee, existing: list[Leave], poli
         issues.append(Issue("error", "تاريخ بدء الإجازة إلزامي."))
     else:
         if employee.start_date and leave.start_date < employee.start_date:
-            issues.append(Issue("warning",
-                                f"تاريخ البدء قبل تاريخ المباشرة ({D.to_iso(employee.start_date)})."))
+            issues.append(
+                Issue("warning", f"تاريخ البدء قبل تاريخ المباشرة ({D.to_iso(employee.start_date)}).")
+            )
         if employee.end_date and leave.start_date > employee.end_date:
             issues.append(Issue("warning", "تاريخ البدء بعد تاريخ انتهاء الخدمة."))
 
@@ -125,10 +128,13 @@ def validate_leave(leave: Leave, employee: Employee, existing: list[Leave], poli
         cutoff = employee.opening_balance_date
         if cutoff and B.consumes_balance(policy, leave):
             if leave.start_date <= cutoff:
-                issues.append(Issue(
-                    "error",
-                    "لا يمكن تسجيل إجازة تخصم من الرصيد قبل أو عند تاريخ "
-                    f"الرصيد الافتتاحي ({D.to_iso(cutoff)})."))
+                issues.append(
+                    Issue(
+                        "error",
+                        "لا يمكن تسجيل إجازة تخصم من الرصيد قبل أو عند تاريخ "
+                        f"الرصيد الافتتاحي ({D.to_iso(cutoff)}).",
+                    )
+                )
 
     if rule.requires_order and not (leave.order or "").strip():
         issues.append(Issue("error", f"نوع «{leave.type}» يتطلب رقم الأمر."))
@@ -143,8 +149,12 @@ def validate_leave(leave: Leave, employee: Employee, existing: list[Leave], poli
             if other.is_deleted or _same_record(other, leave_id):
                 continue
             if (other.order or "").strip() == order:
-                issues.append(Issue("warning",
-                                    f"رقم الأمر «{order}» مستخدم مسبقاً في إجازة ({D.to_iso(other.start_date)})."))
+                issues.append(
+                    Issue(
+                        "warning",
+                        f"رقم الأمر «{order}» مستخدم مسبقاً في إجازة ({D.to_iso(other.start_date)}).",
+                    )
+                )
                 break
 
     # تقاطع المدى مع إجازات أخرى
@@ -158,17 +168,24 @@ def validate_leave(leave: Leave, employee: Employee, existing: list[Leave], poli
                 continue
             o_start, o_end = B.leave_span(other)
             if D.overlaps(start, end, o_start, o_end):
-                issues.append(Issue("warning",
-                                    f"تتقاطع مع إجازة «{other.type}» من {D.to_iso(o_start)} إلى {D.to_iso(o_end)}."))
+                issues.append(
+                    Issue(
+                        "warning",
+                        f"تتقاطع مع إجازة «{other.type}» من {D.to_iso(o_start)} إلى {D.to_iso(o_end)}.",
+                    )
+                )
                 break
 
     # السقف الخاص بالنوع
     if rule.quota_days and not leave.is_adjustment:
         used = quota_used(leave.type, leave, existing, rule.quota_period, leave_id)
         if used + max(0, leave.days_actual) > rule.quota_days:
-            issues.append(Issue("warning",
-                                f"تجاوز السقف المحدد للنوع «{leave.type}» ({rule.quota_days} يوم): "
-                                f"المستخدم {used} يوم."))
+            issues.append(
+                Issue(
+                    "warning",
+                    f"تجاوز السقف المحدد للنوع «{leave.type}» ({rule.quota_days} يوم): المستخدم {used} يوم.",
+                )
+            )
     return issues
 
 
@@ -177,8 +194,9 @@ def _same_record(leave: Leave, leave_id: int | None) -> bool:
     return leave_id is not None and leave.id == leave_id
 
 
-def quota_used(leave_type: str, candidate: Leave, existing: list[Leave],
-               period: str, leave_id: int | None = None) -> int:
+def quota_used(
+    leave_type: str, candidate: Leave, existing: list[Leave], period: str, leave_id: int | None = None
+) -> int:
     total = 0
     ref = candidate.start_date
     for lv in existing:
@@ -195,17 +213,24 @@ def quota_used(leave_type: str, candidate: Leave, existing: list[Leave],
 # ---------------------------------------------------------------------------
 # معاينة الرصيد بعد التسجيل (بلا حوارات ولا مخاطر)
 # ---------------------------------------------------------------------------
-def preview_balance(employee: Employee, existing: list[Leave], policy: Policy,
-                    candidate: Leave | None, today: date | None = None,
-                    include_pending: bool = True, exclude_id: int | None = None) -> Balance:
+def preview_balance(
+    employee: Employee,
+    existing: list[Leave],
+    policy: Policy,
+    candidate: Leave | None,
+    today: date | None = None,
+    include_pending: bool = True,
+    exclude_id: int | None = None,
+) -> Balance:
     items = []
     for lv in existing:
         if lv.is_deleted:
             continue
         if exclude_id is not None and lv.id == exclude_id:
             continue
-        if candidate is not None and (lv is candidate or
-                                      (candidate.id is not None and lv.id == candidate.id)):
+        if candidate is not None and (
+            lv is candidate or (candidate.id is not None and lv.id == candidate.id)
+        ):
             continue
         items.append(lv)
     if candidate is not None:

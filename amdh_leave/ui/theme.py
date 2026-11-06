@@ -97,8 +97,9 @@ def _accent_derivatives(accent: str, dark: bool) -> dict[str, str]:
         "accent_pressed": pressed,
         "accent_soft": colors.alpha(accent, 0.16 if dark else 0.11),
         "accent_line": colors.alpha(accent, 0.45),
-        "accent_grad": colors.gradient(colors.lighten(accent, 0.05 if dark else 0.10),
-                                       colors.darken(accent, 0.12 if dark else 0.06)),
+        "accent_grad": colors.gradient(
+            colors.lighten(accent, 0.05 if dark else 0.10), colors.darken(accent, 0.12 if dark else 0.06)
+        ),
         "on_accent": on_accent,
         "sel_bg": accent,
         "sel_text": on_accent,
@@ -143,8 +144,7 @@ def balance_color(balance: int, low: int = 0) -> str:
     return color("pos")
 
 
-def label_style(key: str = "text", size: int | None = None, bold: bool = False,
-                italic: bool = False) -> str:
+def label_style(key: str = "text", size: int | None = None, bold: bool = False, italic: bool = False) -> str:
     parts = [f"color: {resolve(key)}"]
     if size:
         parts.append(f"font-size: {size}px")

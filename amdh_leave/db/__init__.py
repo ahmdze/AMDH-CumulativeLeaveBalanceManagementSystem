@@ -20,13 +20,22 @@ from contextlib import contextmanager
 from datetime import date
 from pathlib import Path
 
+from ..models import (
+    AppUser,
+    Attachment,
+    AuditEntry,
+    Employee,
+    EmployeeMove,
+    Holiday,
+    ImportRecord,
+    Institution,
+    Leave,
+)
+from ..rules import LeaveRule, Policy
+from ..services import crypto
 from . import migrations as _migrations
 from . import queries as _queries
 from . import schema as _schema
-from ..models import (AppUser, Attachment, AuditEntry, Employee, EmployeeMove, Holiday,
-                     ImportRecord, Institution, Leave)
-from ..rules import LeaveRule, Policy, default_rules
-from ..services import crypto
 
 # إعادة تصدير كل شيء للحفاظ على التوافق مع الاستيرادات الحالية
 SCHEMA_VERSION = _schema.SCHEMA_VERSION
@@ -37,8 +46,9 @@ LOG = logging.getLogger("amdh.db")
 class Database:
     """واجهة قاعدة البيانات الوحيدة المستخدمة من الواجهة والخدمات."""
 
-    def __init__(self, path: str | Path, backup_dir: str | Path | None = None,
-                 key_hex: str | None = None) -> None:
+    def __init__(
+        self, path: str | Path, backup_dir: str | Path | None = None, key_hex: str | None = None
+    ) -> None:
         self.path = Path(path)
         self.backup_dir = Path(backup_dir) if backup_dir else self.path.parent / "backups"
         self.key_hex = key_hex
@@ -53,8 +63,7 @@ class Database:
     def open(self) -> None:
         existed = self.path.exists() and self.path.stat().st_size > 0
         if existed and self.key_hex is None and crypto.is_encrypted_database(self.path):
-            raise crypto.CryptoError(
-                "قاعدة البيانات مشفّرة — يلزم إدخال كلمة المرور لفتحها.")
+            raise crypto.CryptoError("قاعدة البيانات مشفّرة — يلزم إدخال كلمة المرور لفتحها.")
         if existed and self._needs_migration():
             if self._safe_pre_migration_backup():
                 LOG.info("تم إنشاء نسخة احتياطية قبل الترحيل")
@@ -63,8 +72,9 @@ class Database:
         self._conn = crypto.open_connection(self.path, self.key_hex)
         if not self.key_hex:
             self._conn.isolation_level = None
-        self._conn.row_factory = (sqlite3.Row if not self.key_hex
-                                  else getattr(crypto.sqlcipher_module(), "Row", sqlite3.Row))
+        self._conn.row_factory = (
+            sqlite3.Row if not self.key_hex else getattr(crypto.sqlcipher_module(), "Row", sqlite3.Row)
+        )
         cur = self._conn.cursor()
         cur.execute("PRAGMA foreign_keys = ON")
         cur.execute("PRAGMA busy_timeout = 5000")
@@ -124,9 +134,11 @@ class Database:
         try:
             self.backup_dir.mkdir(parents=True, exist_ok=True)
             from datetime import datetime
+
             stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
             dest = self.backup_dir / f"pre_migration_{stamp}.db"
             import shutil
+
             shutil.copy2(self.path, dest)
             return True
         except OSError as exc:  # pragma: no cover
@@ -152,8 +164,7 @@ class Database:
 
     def policy(self, refresh: bool = False) -> Policy:
         if self._policy_cache is None or refresh:
-            self._policy_cache = Policy.from_meta(
-                self.get_meta(), self.list_rules(), self.holiday_set())
+            self._policy_cache = Policy.from_meta(self.get_meta(), self.list_rules(), self.holiday_set())
         return self._policy_cache
 
     def save_policy(self, policy: Policy) -> None:
@@ -196,8 +207,14 @@ class Database:
     # ==================================================================
     # الموظفون
     # ==================================================================
-    def list_employees(self, q: str = "", workplace: str = "", institution: str = "",
-                       include_deleted: bool = False, with_leaves: bool = True) -> list[Employee]:
+    def list_employees(
+        self,
+        q: str = "",
+        workplace: str = "",
+        institution: str = "",
+        include_deleted: bool = False,
+        with_leaves: bool = True,
+    ) -> list[Employee]:
         return _queries.list_employees(self.conn, q, workplace, institution, include_deleted, with_leaves)
 
     def get_employee(self, emp_id: str, include_deleted: bool = True) -> Employee | None:
@@ -266,12 +283,29 @@ class Database:
     def list_attachments(self, leave_id: int) -> list[Attachment]:
         return _queries.list_attachments(self.conn, leave_id)
 
-    def add_attachment(self, leave_id: int, emp_id: str, filename: str, stored_name: str,
-                       user: str = "", *, attachments_dir: str | Path | None = None,
-                       sha256: str = "", institution: str = "") -> int:
-        return _queries.add_attachment(self.conn, leave_id, emp_id, filename, stored_name,
-                                       user, attachments_dir=attachments_dir,
-                                       sha256=sha256, institution=institution)
+    def add_attachment(
+        self,
+        leave_id: int,
+        emp_id: str,
+        filename: str,
+        stored_name: str,
+        user: str = "",
+        *,
+        attachments_dir: str | Path | None = None,
+        sha256: str = "",
+        institution: str = "",
+    ) -> int:
+        return _queries.add_attachment(
+            self.conn,
+            leave_id,
+            emp_id,
+            filename,
+            stored_name,
+            user,
+            attachments_dir=attachments_dir,
+            sha256=sha256,
+            institution=institution,
+        )
 
     def delete_attachment(self, attachment_id: int, user: str = "") -> None:
         _queries.delete_attachment(self.conn, attachment_id, user)
@@ -300,12 +334,29 @@ class Database:
     def list_vault(self) -> list[dict]:
         return _queries.list_vault(self.conn)
 
-    def add_vault_entry(self, *, kind: str = "other", label: str = "", institution: str = "",
-                        file_name: str = "", file_path: str = "", password: str = "",
-                        note: str = "", user: str = "") -> int:
-        return _queries.add_vault_entry(self.conn, kind=kind, label=label, institution=institution,
-                                        file_name=file_name, file_path=file_path, password=password,
-                                        note=note, user=user)
+    def add_vault_entry(
+        self,
+        *,
+        kind: str = "other",
+        label: str = "",
+        institution: str = "",
+        file_name: str = "",
+        file_path: str = "",
+        password: str = "",
+        note: str = "",
+        user: str = "",
+    ) -> int:
+        return _queries.add_vault_entry(
+            self.conn,
+            kind=kind,
+            label=label,
+            institution=institution,
+            file_name=file_name,
+            file_path=file_path,
+            password=password,
+            note=note,
+            user=user,
+        )
 
     def update_vault_entry(self, entry_id: int, **fields) -> None:
         _queries.update_vault_entry(self.conn, entry_id, **fields)
@@ -319,8 +370,15 @@ class Database:
     def log(self, username: str, action: str, entity: str, entity_id: str = "", details: str = "") -> None:
         _queries.log_action(self.conn, username, action, entity, entity_id, details)
 
-    def list_audit(self, username: str = "", action: str = "", entity: str = "",
-                   date_from: str = "", date_to: str = "", limit: int = 1000) -> list[AuditEntry]:
+    def list_audit(
+        self,
+        username: str = "",
+        action: str = "",
+        entity: str = "",
+        date_from: str = "",
+        date_to: str = "",
+        limit: int = 1000,
+    ) -> list[AuditEntry]:
         return _queries.list_audit(self.conn, username, action, entity, date_from, date_to, limit)
 
     def audit_values(self, column: str) -> list[str]:
@@ -344,7 +402,7 @@ class Database:
     def stats(self) -> dict:
         return _queries.stats(self.conn, self.path)
 
-    def __enter__(self) -> "Database":
+    def __enter__(self) -> Database:
         return self
 
     def __exit__(self, *exc) -> None:
@@ -368,10 +426,12 @@ class Database:
     def delete_institution(self, name: str, user: str = "") -> tuple[bool, str]:
         return _queries.delete_institution(self.conn, name, user)
 
-    def set_institution_import(self, name: str, *, when: str, user: str = "",
-                               filename: str = "", counts: str = "") -> None:
-        _queries.set_institution_import(self.conn, name, when=when, user=user,
-                                        filename=filename, counts=counts)
+    def set_institution_import(
+        self, name: str, *, when: str, user: str = "", filename: str = "", counts: str = ""
+    ) -> None:
+        _queries.set_institution_import(
+            self.conn, name, when=when, user=user, filename=filename, counts=counts
+        )
 
     def set_institution_export(self, name: str, when: str) -> None:
         _queries.set_institution_export(self.conn, name, when)
@@ -391,8 +451,7 @@ class Database:
     def add_import(self, record: dict, user: str = "") -> int:
         return _queries.add_import(self.conn, record, user)
 
-    def list_imports(self, limit: int = 50, institution: str = "",
-                     direction: str = "") -> list[ImportRecord]:
+    def list_imports(self, limit: int = 50, institution: str = "", direction: str = "") -> list[ImportRecord]:
         return _queries.list_imports(self.conn, limit, institution, direction)
 
     def get_import(self, import_id: int) -> ImportRecord | None:
@@ -407,16 +466,24 @@ class Database:
     # ==================================================================
     # انتقال الموظفين بين المؤسسات
     # ==================================================================
-    def add_move(self, emp_id: str, from_institution: str, to_institution: str,
-                 moved_on=None, source_file: str = "", note: str = "", user: str = "") -> int:
-        return _queries.add_move(self.conn, emp_id, from_institution, to_institution,
-                                 moved_on, source_file, note, user)
+    def add_move(
+        self,
+        emp_id: str,
+        from_institution: str,
+        to_institution: str,
+        moved_on=None,
+        source_file: str = "",
+        note: str = "",
+        user: str = "",
+    ) -> int:
+        return _queries.add_move(
+            self.conn, emp_id, from_institution, to_institution, moved_on, source_file, note, user
+        )
 
     def list_moves(self, emp_id: str = "", limit: int = 200) -> list[EmployeeMove]:
         return _queries.list_moves(self.conn, emp_id, limit)
 
-    def set_employee_institution(self, emp_id: str, institution: str, moved_on=None,
-                                 user: str = "") -> None:
+    def set_employee_institution(self, emp_id: str, institution: str, moved_on=None, user: str = "") -> None:
         _queries.set_employee_institution(self.conn, emp_id, institution, moved_on, user)
 
     # ==================================================================
@@ -437,14 +504,32 @@ class Database:
     def attachment_hashes(self) -> dict[str, dict]:
         return _queries.attachment_hashes(self.conn)
 
-    def add_attachment_row(self, c: sqlite3.Cursor, *, leave_id=None, emp_id: str = "",
-                           filename: str = "", stored_name: str = "", sha256: str = "",
-                           leave_uid: str = "", institution: str = "", uid: str = "",
-                           user: str = "") -> int:
-        return _queries.add_attachment_row(self.conn, leave_id=leave_id, emp_id=emp_id,
-                                           filename=filename, stored_name=stored_name,
-                                           sha256=sha256, leave_uid=leave_uid,
-                                           institution=institution, uid=uid, user=user)
+    def add_attachment_row(
+        self,
+        c: sqlite3.Cursor,
+        *,
+        leave_id=None,
+        emp_id: str = "",
+        filename: str = "",
+        stored_name: str = "",
+        sha256: str = "",
+        leave_uid: str = "",
+        institution: str = "",
+        uid: str = "",
+        user: str = "",
+    ) -> int:
+        return _queries.add_attachment_row(
+            self.conn,
+            leave_id=leave_id,
+            emp_id=emp_id,
+            filename=filename,
+            stored_name=stored_name,
+            sha256=sha256,
+            leave_uid=leave_uid,
+            institution=institution,
+            uid=uid,
+            user=user,
+        )
 
     def set_transfer_manifest(self, values: dict) -> None:
         _queries.set_transfer_manifest(self.conn, values)

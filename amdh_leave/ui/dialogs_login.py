@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, QTimer, QRectF
-from PyQt6.QtGui import QFont, QPainter, QColor, QLinearGradient, QPainterPath
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QVBoxLayout, QWidget,
+    QCheckBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
-from .. import config, colors
+from .. import colors, config
 from ..services import security
-from . import assets, theme, widgets as W
+from . import assets, theme
+from . import widgets as W
 from .dialogs_base import BaseDialog
 
 MAX_ATTEMPTS = 5
@@ -30,14 +36,15 @@ class _HeaderBanner(QWidget):
         self._logo_pixmap = None
         logo = assets.logo(120)
         if logo is not None:
-            self._logo_pixmap = logo.scaled(100, 100, Qt.AspectRatioMode.KeepAspectRatio,
-                                             Qt.TransformationMode.SmoothTransformation)
+            self._logo_pixmap = logo.scaled(
+                100, 100, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation
+            )
 
     def paintEvent(self, event):
         super().paintEvent(event)
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        
+
         # التدرج الخلفي
         grad = QLinearGradient(0, 0, 0, self.height())
         accent = theme.color("accent")
@@ -45,7 +52,7 @@ class _HeaderBanner(QWidget):
         grad.setColorAt(1, QColor(colors.darken(accent, 0.2)))
         painter.setBrush(grad)
         painter.setPen(Qt.PenStyle.NoPen)
-        
+
         # رسم خلفية منحنية
         path = QPainterPath()
         path.moveTo(0, 0)
@@ -54,16 +61,14 @@ class _HeaderBanner(QWidget):
         path.quadTo(self.width() * 0.5, self.height() * 1.1, 0, self.height() * 0.6)
         path.closeSubpath()
         painter.fillPath(path, grad)
-        
+
         # الشعار في المنتصف
         if self._logo_pixmap is not None:
             lx = (self.width() - self._logo_pixmap.width()) // 2
             ly = 20
             painter.drawPixmap(lx, ly, self._logo_pixmap)
-        
+
         painter.end()
-
-
 
 
 class LoginDialog(BaseDialog):
@@ -122,19 +127,21 @@ class LoginDialog(BaseDialog):
         self.e_user = QLineEdit()
         self.e_user.setPlaceholderText("أدخل اسم المستخدم")
         self.e_user.setFixedHeight(48)
-        self.e_user.setStyleSheet("""
-            QLineEdit {
-                background: %s;
-                border: 2px solid %s;
+        self.e_user.setStyleSheet(
+            """
+            QLineEdit {{
+                background: {};
+                border: 2px solid {};
                 border-radius: 8px;
                 padding: 8px 14px;
                 font-size: 13px;
-                color: %s;
-            }
-            QLineEdit:focus {
-                border-color: %s;
-            }
-        """ % (theme.color("card"), theme.color("muted_bg"), theme.color("text"), theme.color("accent")))
+                color: {};
+            }}
+            QLineEdit:focus {{
+                border-color: {};
+            }}
+        """.format(theme.color("card"), theme.color("muted_bg"), theme.color("text"), theme.color("accent"))
+        )
         form_layout.addWidget(self.e_user)
 
         # حقل كلمة المرور
@@ -163,17 +170,19 @@ class LoginDialog(BaseDialog):
         self.btn_eye.setCheckable(True)
         self.btn_eye.setToolTip("إظهار كلمة المرور")
         self.btn_eye.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_eye.setStyleSheet("""
-            QPushButton {
-                background: %s;
-                border: 2px solid %s;
+        self.btn_eye.setStyleSheet(
+            """
+            QPushButton {{
+                background: {};
+                border: 2px solid {};
                 border-radius: 8px;
                 font-size: 16px;
-            }
-            QPushButton:hover {
-                background: %s;
-            }
-        """ % (theme.color("card"), theme.color("muted_bg"), theme.color("hover_bg")))
+            }}
+            QPushButton:hover {{
+                background: {};
+            }}
+        """.format(theme.color("card"), theme.color("muted_bg"), theme.color("hover_bg"))
+        )
         self.btn_eye.toggled.connect(self._toggle_password)
         pass_layout.addWidget(self.btn_eye)
 
@@ -208,43 +217,50 @@ class LoginDialog(BaseDialog):
         self.btn_login = QPushButton("دخول  🔓")
         self.btn_login.setFixedHeight(48)
         self.btn_login.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_login.setStyleSheet("""
-            QPushButton {
-                background: %s;
+        self.btn_login.setStyleSheet(
+            """
+            QPushButton {{
+                background: {};
                 border: none;
                 border-radius: 8px;
-                color: %s;
+                color: {};
                 font-size: 15px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background: %s;
-            }
-            QPushButton:pressed {
-                background: %s;
-            }
-        """ % (theme.color("accent"), theme.color("on_accent"),
-               colors.darken(theme.color("accent"), 0.1),
-               colors.darken(theme.color("accent"), 0.2)))
+            }}
+            QPushButton:hover {{
+                background: {};
+            }}
+            QPushButton:pressed {{
+                background: {};
+            }}
+        """.format(
+                theme.color("accent"),
+                theme.color("on_accent"),
+                colors.darken(theme.color("accent"), 0.1),
+                colors.darken(theme.color("accent"), 0.2),
+            )
+        )
         self.btn_login.clicked.connect(self._login)
         btn_layout.addWidget(self.btn_login, 1)
 
         self.btn_exit = QPushButton("خروج")
         self.btn_exit.setFixedHeight(48)
         self.btn_exit.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_exit.setStyleSheet("""
-            QPushButton {
+        self.btn_exit.setStyleSheet(
+            """
+            QPushButton {{
                 background: transparent;
-                border: 2px solid %s;
+                border: 2px solid {};
                 border-radius: 8px;
-                color: %s;
+                color: {};
                 font-size: 14px;
                 font-weight: bold;
-            }
-            QPushButton:hover {
-                background: %s;
-            }
-        """ % (theme.color("muted_bg"), theme.color("muted"), theme.color("hover_bg")))
+            }}
+            QPushButton:hover {{
+                background: {};
+            }}
+        """.format(theme.color("muted_bg"), theme.color("muted"), theme.color("hover_bg"))
+        )
         self.btn_exit.clicked.connect(self.reject)
         btn_layout.addWidget(self.btn_exit)
 
@@ -269,7 +285,8 @@ class LoginDialog(BaseDialog):
         stats = self.ctx.db.stats()
         self.lbl_footer.setText(
             f"قاعدة البيانات: {self.ctx.paths.db_path.name} | "
-            f"الموظفون: {stats['employees']} | الإجازات: {stats['leaves']}")
+            f"الموظفون: {stats['employees']} | الإجازات: {stats['leaves']}"
+        )
 
     # ------------------------------------------------------------------
     def _login(self) -> None:
@@ -331,14 +348,12 @@ class LoginDialog(BaseDialog):
                 remaining = MAX_ATTEMPTS - self.attempts
                 self.lbl_error.setText(f"{message}\nالمحاولات المتبقية: {remaining}")
             else:
-                self.lbl_error.setText(
-                    f"{message}\nانتظر {seconds} ثانية قبل المحاولة التالية...")
+                self.lbl_error.setText(f"{message}\nانتظر {seconds} ثانية قبل المحاولة التالية...")
 
         timer = QTimer(self)
         timer.timeout.connect(tick)
         timer.start(1000)
-        self.lbl_error.setText(
-            f"{message}\nانتظر {delay_sec} ثانية قبل المحاولة التالية...")
+        self.lbl_error.setText(f"{message}\nانتظر {delay_sec} ثانية قبل المحاولة التالية...")
 
     def _lock(self) -> None:
         """إيقاف المحاولات دقيقة واحدة بعد استنفاد المحاولات (حماية بسيطة)."""
@@ -362,8 +377,7 @@ class LoginDialog(BaseDialog):
                 self.lbl_error.setText("")
                 self.e_pass.setFocus()
             else:
-                self.lbl_error.setText(
-                    f"تم إيقاف المحاولات مؤقتاً. أعد المحاولة بعد {seconds} ثانية")
+                self.lbl_error.setText(f"تم إيقاف المحاولات مؤقتاً. أعد المحاولة بعد {seconds} ثانية")
 
         timer = QTimer(self)
         timer.timeout.connect(tick)
@@ -373,7 +387,10 @@ class LoginDialog(BaseDialog):
 def default_password_warning(db) -> str:
     """تحذير إن كانت كلمة مرور المدير لا تزال الافتراضية (admin)."""
     admin = db.get_user("admin")
-    if admin and admin.password_hash and security.verify_password(
-            "admin", admin.password_hash, admin.salt, admin.iterations):
+    if (
+        admin
+        and admin.password_hash
+        and security.verify_password("admin", admin.password_hash, admin.salt, admin.iterations)
+    ):
         return "كلمة مرور المدير الافتراضية (admin) لم تُغيَّر بعد — يُنصح بتغييرها فوراً."
     return ""

@@ -26,7 +26,7 @@ class BackupService:
         stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S_%f")
         dest = self.dir / f"backup_{stamp}_{kind}.db"
         counter = 1
-        while dest.exists():   # ضمان عدم الكتابة فوق نسخة سابقة
+        while dest.exists():  # ضمان عدم الكتابة فوق نسخة سابقة
             dest = self.dir / f"backup_{stamp}_{kind}_{counter}.db"
             counter += 1
         try:
@@ -73,14 +73,16 @@ class BackupService:
                 if token in name:
                     kind = token
                     break
-            items.append({
-                "path": str(path),
-                "name": path.name,
-                "size": stat.st_size,
-                "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
-                "kind": kind,
-                "valid": self._is_valid(path),
-            })
+            items.append(
+                {
+                    "path": str(path),
+                    "name": path.name,
+                    "size": stat.st_size,
+                    "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                    "kind": kind,
+                    "valid": self._is_valid(path),
+                }
+            )
         return items
 
     def _is_valid(self, path: Path) -> bool:
@@ -88,17 +90,20 @@ class BackupService:
         try:
             if getattr(self.db, "key_hex", None):
                 from . import crypto
+
                 probe = crypto.open_connection(path, self.db.key_hex)
             else:
                 probe = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
             try:
-                row = probe.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='employees'").fetchone()
+                row = probe.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='employees'"
+                ).fetchone()
                 if not row:
                     return False
                 return str(probe.execute("PRAGMA integrity_check").fetchone()[0]).lower() == "ok"
             finally:
                 probe.close()
-        except Exception:                             # noqa: BLE001
+        except Exception:  # noqa: BLE001
             return False
 
     def rotate(self, keep: int | None = None) -> int:
@@ -160,15 +165,27 @@ class BackupService:
             return result
         from . import merge as M
         from . import transfer as T
+
         try:
-            report = T.apply_transfer(self.db, source, M.MergeOptions(), user=user,
-                                      attachments_dir=self.db.path.parent / "attachments")
-        except Exception as exc:                          # noqa: BLE001
+            report = T.apply_transfer(
+                self.db,
+                source,
+                M.MergeOptions(),
+                user=user,
+                attachments_dir=self.db.path.parent / "attachments",
+            )
+        except Exception as exc:  # noqa: BLE001
             result["errors"].append(str(exc))
             return result
-        result.update({"added": report.employees_added, "updated": report.employees_updated,
-                       "skipped": report.employees_skipped, "leaves": report.leaves_added,
-                       "errors": list(report.warnings)})
+        result.update(
+            {
+                "added": report.employees_added,
+                "updated": report.employees_updated,
+                "skipped": report.employees_skipped,
+                "leaves": report.leaves_added,
+                "errors": list(report.warnings),
+            }
+        )
         result["report"] = report
         return result
         try:
@@ -183,7 +200,7 @@ class BackupService:
                 result["errors"].append("الملف لا يحتوي جدول الموظفين")
                 return result
             employees = [dict(r) for r in src.execute("SELECT * FROM employees")]
-            leaves = ([dict(r) for r in src.execute("SELECT * FROM leaves")] if "leaves" in tables else [])
+            leaves = [dict(r) for r in src.execute("SELECT * FROM leaves")] if "leaves" in tables else []
             by_emp: dict[str, list[dict]] = {}
             for lv in leaves:
                 by_emp.setdefault(str(lv.get("emp_id")), []).append(lv)
@@ -199,8 +216,13 @@ class BackupService:
                         result["skipped"] += 1
                         continue
                     self._merge_employee(c, emp, by_emp.get(emp_id, []), result, bool(exists))
-            self.db.log(user, "استيراد", "database", source.name,
-                        f"إضافة {result['added']} - تحديث {result['updated']}")
+            self.db.log(
+                user,
+                "استيراد",
+                "database",
+                source.name,
+                f"إضافة {result['added']} - تحديث {result['updated']}",
+            )
         except Exception as exc:
             result["errors"].append(str(exc))
             LOG.error("فشل الدمج: %s", exc)
@@ -212,44 +234,86 @@ class BackupService:
         """دمج موظف واحد وإجازاته داخل المعاملة الحالية (نقطة فصل قابلة للاختبار)."""
         emp_id = str(emp.get("emp_id") or "")
         fields = {
-            "name": emp.get("name") or "", "job_title": emp.get("job_title") or "",
-            "workplace": emp.get("workplace") or "", "institution": emp.get("institution") or "",
-            "gender": emp.get("gender") or "ذكر", "start_date": emp.get("start_date") or "",
-            "end_date": emp.get("end_date") or "", "notes": emp.get("notes") or "",
+            "name": emp.get("name") or "",
+            "job_title": emp.get("job_title") or "",
+            "workplace": emp.get("workplace") or "",
+            "institution": emp.get("institution") or "",
+            "gender": emp.get("gender") or "ذكر",
+            "start_date": emp.get("start_date") or "",
+            "end_date": emp.get("end_date") or "",
+            "notes": emp.get("notes") or "",
             "status": emp.get("status") or "active",
         }
         if exists:
-            c.execute("""UPDATE employees SET name=?, job_title=?, workplace=?, gender=?,
+            c.execute(
+                """UPDATE employees SET name=?, job_title=?, workplace=?, gender=?,
                          start_date=?, end_date=?, notes=?, institution=?, status=?,
                          updated_at=? WHERE emp_id=?""",
-                      (fields["name"], fields["job_title"], fields["workplace"], fields["gender"],
-                       fields["start_date"], fields["end_date"], fields["notes"],
-                       fields["institution"], fields["status"], _now(), emp_id))
+                (
+                    fields["name"],
+                    fields["job_title"],
+                    fields["workplace"],
+                    fields["gender"],
+                    fields["start_date"],
+                    fields["end_date"],
+                    fields["notes"],
+                    fields["institution"],
+                    fields["status"],
+                    _now(),
+                    emp_id,
+                ),
+            )
             c.execute("DELETE FROM leaves WHERE emp_id=?", (emp_id,))
             result["updated"] += 1
         else:
-            c.execute("""INSERT INTO employees(emp_id, name, job_title, workplace, gender,
+            c.execute(
+                """INSERT INTO employees(emp_id, name, job_title, workplace, gender,
                          start_date, end_date, notes, institution, status, created_at, updated_at)
                          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
-                      (emp_id, fields["name"], fields["job_title"], fields["workplace"],
-                       fields["gender"], fields["start_date"], fields["end_date"],
-                       fields["notes"], fields["institution"], fields["status"], _now(), _now()))
+                (
+                    emp_id,
+                    fields["name"],
+                    fields["job_title"],
+                    fields["workplace"],
+                    fields["gender"],
+                    fields["start_date"],
+                    fields["end_date"],
+                    fields["notes"],
+                    fields["institution"],
+                    fields["status"],
+                    _now(),
+                    _now(),
+                ),
+            )
             result["added"] += 1
         for lv in leaves:
-            c.execute("""INSERT INTO leaves(emp_id, type, start_date, end_date, from_date,
+            c.execute(
+                """INSERT INTO leaves(emp_id, type, start_date, end_date, from_date,
                          amount, unit, days_actual, working_days, count_mode, order_num,
                          order_date, outside_balance, reason, added_date, status,
                          is_adjustment, manual_days)
                          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
-                      (emp_id, lv.get("type") or "", lv.get("start_date") or "",
-                       lv.get("end_date") or lv.get("start_date") or "",
-                       lv.get("from_date") or lv.get("start_date") or "",
-                       lv.get("amount") or 0, lv.get("unit") or "يوم",
-                       lv.get("days_actual") or 0, lv.get("working_days") or 0,
-                       lv.get("count_mode") or "calendar", lv.get("order_num") or "",
-                       lv.get("order_date") or "", int(lv.get("outside_balance") or 0),
-                       lv.get("reason") or "", lv.get("added_date") or _now(),
-                       lv.get("status") or "approved", int(lv.get("is_adjustment") or 0), 0))
+                (
+                    emp_id,
+                    lv.get("type") or "",
+                    lv.get("start_date") or "",
+                    lv.get("end_date") or lv.get("start_date") or "",
+                    lv.get("from_date") or lv.get("start_date") or "",
+                    lv.get("amount") or 0,
+                    lv.get("unit") or "يوم",
+                    lv.get("days_actual") or 0,
+                    lv.get("working_days") or 0,
+                    lv.get("count_mode") or "calendar",
+                    lv.get("order_num") or "",
+                    lv.get("order_date") or "",
+                    int(lv.get("outside_balance") or 0),
+                    lv.get("reason") or "",
+                    lv.get("added_date") or _now(),
+                    lv.get("status") or "approved",
+                    int(lv.get("is_adjustment") or 0),
+                    0,
+                ),
+            )
             result["leaves"] += 1
 
 

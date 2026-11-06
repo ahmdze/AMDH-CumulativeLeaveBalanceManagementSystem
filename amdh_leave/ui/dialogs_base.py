@@ -2,24 +2,34 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import replace
-from datetime import date
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QColor, QDesktopServices
-from PyQt6.QtCore import QUrl
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QFormLayout, QFrame, QGridLayout,
-    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QSpinBox, QTabWidget,
-    QTextEdit, QVBoxLayout, QWidget,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSpinBox,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .. import config
 from ..models import Issue
 from ..services import dates as D
-from . import theme, widgets as W
+from . import theme
+from . import widgets as W
 
 
 class BaseDialog(QDialog):
@@ -80,13 +90,14 @@ class IssuesBox(QTextEdit):
             self.setVisible(False)
             self.clear()
             return
-        colors = {"error": theme.color("neg"), "warning": theme.color("gold"),
-                  "info": theme.color("muted")}
+        colors = {"error": theme.color("neg"), "warning": theme.color("gold"), "info": theme.color("muted")}
         icons = {"error": "⛔", "warning": "⚠️", "info": "ℹ️"}
         html = []
         for issue in issues:
-            html.append(f"<div style='color:{colors.get(issue.level, theme.color('text'))}'>"
-                        f"{icons.get(issue.level, '•')} {issue.message}</div>")
+            html.append(
+                f"<div style='color:{colors.get(issue.level, theme.color('text'))}'>"
+                f"{icons.get(issue.level, '•')} {issue.message}</div>"
+            )
         self.setHtml("".join(html))
         self.setVisible(True)
 
@@ -112,8 +123,12 @@ class SettingsDialog(BaseDialog):
         tabs.addTab(self._tab_backup(), "💾 النسخ الاحتياطي")
         tabs.addTab(self._tab_security(), "🔒 الأمان والتشفير")
         tabs.addTab(self._tab_data(), "🗄 البيانات والصيانة")
-        for index, permission in ((0, "edit_policy"), (2, "backup_restore"),
-                                  (3, "manage_encryption"), (4, "db_operations")):
+        for index, permission in (
+            (0, "edit_policy"),
+            (2, "backup_restore"),
+            (3, "manage_encryption"),
+            (4, "db_operations"),
+        ):
             if not self.ctx.can(permission):
                 tabs.setTabVisible(index, False)
         layout.addWidget(tabs)
@@ -122,40 +137,51 @@ class SettingsDialog(BaseDialog):
     # -- تبويب الأمان والتشفير -------------------------------------------
     def _tab_security(self) -> QWidget:
         from ..services import crypto
+
         page = QWidget()
         outer = QVBoxLayout(page)
         summary = crypto.security_summary(self.ctx.paths.data_dir, self.ctx.paths.db_path)
         self.chk_auth_page = QCheckBox("تفعيل تسجيل الدخول (أدوار وصلاحيات)")
         self.chk_auth_page.setChecked(self._policy.auth_enabled)
         outer.addWidget(self.chk_auth_page)
-        outer.addWidget(W.muted_label("مطلوب في النسخ الجديدة. المستخدم الافتراضي admin — "
-                                      "غيّر كلمة المرور فوراً من «إدارة المستخدمين»."))
+        outer.addWidget(
+            W.muted_label(
+                "مطلوب في النسخ الجديدة. المستخدم الافتراضي admin — "
+                "غيّر كلمة المرور فوراً من «إدارة المستخدمين»."
+            )
+        )
 
         box = QGroupBox("تشفير قاعدة البيانات (SQLCipher)")
         box_layout = QVBoxLayout(box)
-        state = ("مُفعَّل" if summary["encryption_enabled"] else "غير مُفعَّل")
+        state = "مُفعَّل" if summary["encryption_enabled"] else "غير مُفعَّل"
         available = "مثبتة" if summary["sqlcipher_available"] else "غير مثبتة"
         mode = summary.get("mode") or ""
-        mode_label = {"keyfile": "مفتاح تلقائي (نسخة مؤسسة)",
-                      "password": "كلمة مرور"}.get(mode, "—")
-        box_layout.addWidget(QLabel(f"{'الحالة'}: {state} | {'حزمة SQLCipher'}: {available} | "
-                                   f"{'الوضع'}: {mode_label}"))
+        mode_label = {"keyfile": "مفتاح تلقائي (نسخة مؤسسة)", "password": "كلمة مرور"}.get(mode, "—")
+        box_layout.addWidget(
+            QLabel(f"{'الحالة'}: {state} | {'حزمة SQLCipher'}: {available} | {'الوضع'}: {mode_label}")
+        )
         if summary.get("key_file"):
-            box_layout.addWidget(W.muted_label(
-                "هذه النسخة تُفتح بمفتاح تلقائي في data/.amdh_dbkey؛ لا تحذفه."))
+            box_layout.addWidget(
+                W.muted_label("هذه النسخة تُفتح بمفتاح تلقائي في data/.amdh_dbkey؛ لا تحذفه.")
+            )
         if not summary["sqlcipher_available"]:
             hint = W.muted_label(crypto.install_hint())
             hint.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
             box_layout.addWidget(hint)
-        box_layout.addLayout(W.button_row(
-            W.button("🔒 إدارة التشفير", "Accent", self._open_encryption),
-            W.button("🔐 خزنة كلمات المرور", "Ghost", self._open_vault), stretch=False))
+        box_layout.addLayout(
+            W.button_row(
+                W.button("🔒 إدارة التشفير", "Accent", self._open_encryption),
+                W.button("🔐 خزنة كلمات المرور", "Ghost", self._open_vault),
+                stretch=False,
+            )
+        )
         outer.addWidget(box)
         outer.addStretch()
         return page
 
     def _open_encryption(self) -> None:
         from .dialogs_security import EncryptionDialog
+
         dialog = EncryptionDialog(self, self.ctx)
         dialog.exec()
         if dialog.changed:
@@ -163,6 +189,7 @@ class SettingsDialog(BaseDialog):
 
     def _open_vault(self) -> None:
         from .dialogs_vault import VaultDialog
+
         VaultDialog(self, self.ctx).exec()
 
     # -- تبويب عام -----------------------------------------------------
@@ -220,7 +247,9 @@ class SettingsDialog(BaseDialog):
         self.chk_warn_negative.setChecked(self._policy.warn_negative_balance)
         warn_row = QHBoxLayout()
         warn_row.addWidget(self.chk_warn_negative)
-        warn_row.addWidget(W.muted_label("الرصيد السالب مشروع حسب الضوابط الإدارية — التنبيه اختياري ومعلومي."))
+        warn_row.addWidget(
+            W.muted_label("الرصيد السالب مشروع حسب الضوابط الإدارية — التنبيه اختياري ومعلومي.")
+        )
         warn_row.addStretch()
         form.addRow("", self._wrap(warn_row))
 
@@ -258,7 +287,9 @@ class SettingsDialog(BaseDialog):
 
         outer.addLayout(form)
         outer.addWidget(W.separator())
-        outer.addWidget(W.muted_label("تسجيل الدخول والصلاحيات وأمان قاعدة البيانات في تبويب «الأمان والتشفير»."))
+        outer.addWidget(
+            W.muted_label("تسجيل الدخول والصلاحيات وأمان قاعدة البيانات في تبويب «الأمان والتشفير».")
+        )
         outer.addStretch()
         return page
 
@@ -275,8 +306,8 @@ class SettingsDialog(BaseDialog):
 
     def _pick_accent(self) -> None:
         from PyQt6.QtWidgets import QColorDialog
-        chosen = QColorDialog.getColor(QColor(theme.color("accent")), self,
-                                       "اختر اللون المميز")
+
+        chosen = QColorDialog.getColor(QColor(theme.color("accent")), self, "اختر اللون المميز")
         if not chosen.isValid():
             return
         theme.set_accent(chosen.name())
@@ -314,7 +345,9 @@ class SettingsDialog(BaseDialog):
         row.addWidget(self.sp_soon)
         row.addStretch()
         layout.addLayout(row)
-        layout.addWidget(W.muted_label("تُصنَّف التنبيهات إلى: مهم / متوسط / معلومة، ويمكن تصديرها إلى Excel أو HTML."))
+        layout.addWidget(
+            W.muted_label("تُصنَّف التنبيهات إلى: مهم / متوسط / معلومة، ويمكن تصديرها إلى Excel أو HTML.")
+        )
         layout.addWidget(W.separator())
 
         layout.addWidget(W.title_label("إشعارات سطح المكتب (Tray)", 12))
@@ -368,8 +401,13 @@ class SettingsDialog(BaseDialog):
         row.addWidget(W.button("💾 نسخة الآن", "Accent", self._backup_now))
         row.addWidget(W.button("♻ استعادة المحددة", "Gold", self._restore_selected))
         row.addWidget(W.button("🗑 حذف المحددة", "Warn", self._delete_backup))
-        row.addWidget(W.button("📂 فتح المجلد", "Ghost",
-                               lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.ctx.paths.backups_dir)))))
+        row.addWidget(
+            W.button(
+                "📂 فتح المجلد",
+                "Ghost",
+                lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.ctx.paths.backups_dir))),
+            )
+        )
         row.addStretch()
         layout.addLayout(row)
         self._refresh_backups()
@@ -378,10 +416,18 @@ class SettingsDialog(BaseDialog):
     def _refresh_backups(self) -> None:
         rows = []
         for item in self.ctx.backup.list_backups():
-            rows.append([item["name"], item["kind"], item["mtime"],
-                         f"{item['size'] / 1024:,.0f} KB", "نعم" if item["valid"] else "لا"])
-        self.backup_table.set_rows(rows, empty_text="لا توجد نسخ احتياطية بعد",
-                                   footer=f"عدد النسخ: {len(rows)}")
+            rows.append(
+                [
+                    item["name"],
+                    item["kind"],
+                    item["mtime"],
+                    f"{item['size'] / 1024:,.0f} KB",
+                    "نعم" if item["valid"] else "لا",
+                ]
+            )
+        self.backup_table.set_rows(
+            rows, empty_text="لا توجد نسخ احتياطية بعد", footer=f"عدد النسخ: {len(rows)}"
+        )
 
     def _backup_now(self) -> None:
         path = self.ctx.backup.create("manual")
@@ -402,8 +448,11 @@ class SettingsDialog(BaseDialog):
         name = self._selected_backup_path()
         if not name:
             return
-        if not W.confirm(self, f"استعادة قاعدة البيانات من:\n{name}\n\n"
-                               "سيتم أخذ نسخة أمان من الوضع الحالي قبل الاستعادة.\nهل تريد المتابعة؟"):
+        if not W.confirm(
+            self,
+            f"استعادة قاعدة البيانات من:\n{name}\n\n"
+            "سيتم أخذ نسخة أمان من الوضع الحالي قبل الاستعادة.\nهل تريد المتابعة؟",
+        ):
             return
         ok, message = self.ctx.backup.restore(self.ctx.paths.backups_dir / name)
         (W.info if ok else W.error)(self, message)
@@ -473,6 +522,7 @@ class SettingsDialog(BaseDialog):
 
     def _open_log(self) -> None:
         from ..logging_setup import log_path
+
         path = log_path()
         if path and path.exists():
             self._open(path)
@@ -494,18 +544,22 @@ class SettingsDialog(BaseDialog):
 
     def _open_audit(self) -> None:
         from .dialogs_admin import AuditDialog
+
         AuditDialog(self, self.ctx).exec()
 
     def _open_users(self) -> None:
         from .dialogs_admin import UsersDialog
+
         UsersDialog(self, self.ctx).exec()
 
     def _open_rules(self) -> None:
         from .dialogs_admin import RulesEditorDialog
+
         RulesEditorDialog(self, self.ctx).exec()
 
     def _open_holidays(self) -> None:
         from .dialogs_admin import HolidaysDialog
+
         HolidaysDialog(self, self.ctx).exec()
 
     # -- الحفظ ---------------------------------------------------------
@@ -591,14 +645,25 @@ class TrashDialog(BaseDialog):
         self.emp_table.set_rows(emp_rows, empty_text="لا يوجد موظفون محذوفون")
 
         all_leaves = self.ctx.db.all_leaves(include_deleted=True)
-        names = {e.emp_id: e.name for e in self.ctx.db.list_employees(include_deleted=True, with_leaves=False)}
+        names = {
+            e.emp_id: e.name for e in self.ctx.db.list_employees(include_deleted=True, with_leaves=False)
+        }
         deleted = [lv for lv in all_leaves if lv.is_deleted]
         rows = []
         self._deleted_leaves = deleted
         for i, lv in enumerate(deleted, 1):
             start, _end = (lv.start_date, lv.end_date)
-            rows.append([i, names.get(lv.emp_id, lv.emp_id), lv.type, D.to_iso(start),
-                         lv.days_actual, lv.deleted_at, lv.deleted_by])
+            rows.append(
+                [
+                    i,
+                    names.get(lv.emp_id, lv.emp_id),
+                    lv.type,
+                    D.to_iso(start),
+                    lv.days_actual,
+                    lv.deleted_at,
+                    lv.deleted_by,
+                ]
+            )
         self.leave_table.set_rows(rows, numeric_columns={4}, empty_text="لا توجد إجازات محذوفة")
 
     def _restore_employee(self) -> None:

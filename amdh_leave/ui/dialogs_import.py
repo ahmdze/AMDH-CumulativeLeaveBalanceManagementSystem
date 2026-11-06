@@ -14,18 +14,29 @@ from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QHBoxLayout, QLabel,
-                             QLineEdit, QPlainTextEdit, QTabWidget, QTextEdit, QVBoxLayout,
-                             QWidget)
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
 
-from ..services import institutions as INST
 from ..services import merge as M
 from ..services import transfer as T
 from . import theme
 from . import widgets as W
 
-TRANSFER_FILTER = ("ملفات النقل (*.amdhz *.db *.zip);;أرشيف نقل (*.amdhz *.zip);;"
-                   "قاعدة بيانات (*.db);;كل الملفات (*)")
+TRANSFER_FILTER = (
+    "ملفات النقل (*.amdhz *.db *.zip);;أرشيف نقل (*.amdhz *.zip);;قاعدة بيانات (*.db);;كل الملفات (*)"
+)
 
 
 # ---------------------------------------------------------------------------
@@ -34,8 +45,9 @@ TRANSFER_FILTER = ("ملفات النقل (*.amdhz *.db *.zip);;أرشيف نق�
 class ReportDialog(QDialog):
     """تقرير استيراد تفصيلي (ملخص + تعارضات + انتقالات + تقاطعات + متجاهلون)."""
 
-    def __init__(self, parent, ctx, report: M.MergeReport, record=None,
-                 backup_path: Path | None = None) -> None:
+    def __init__(
+        self, parent, ctx, report: M.MergeReport, record=None, backup_path: Path | None = None
+    ) -> None:
         super().__init__(parent)
         self.ctx = ctx
         self.report = report
@@ -69,15 +81,18 @@ class ReportDialog(QDialog):
         summary.setPlainText("\n".join(self.report.summary_lines()))
         self.tabs.addTab(summary, "الملخص")
 
-        self.tabs.addTab(self._table_tab(M.conflict_rows(self.report),
-                                         "لا توجد تعارضات."), "التعارضات")
-        self.tabs.addTab(self._table_tab(M.move_rows(self.report),
-                                         "لا توجد انتقالات بين المؤسسات."), "الانتقالات")
-        self.tabs.addTab(self._table_tab(M.overlap_rows(self.report),
-                                         "لا توجد تقاطعات زمنية."), "التقاطعات")
-        skipped = ([["الرقم الوظيفي", "الاسم", "السبب"],
-                    [[item.get("emp_id", ""), item.get("name", ""), item.get("reason", "")]
-                     for item in self.report.skipped_list]])
+        self.tabs.addTab(self._table_tab(M.conflict_rows(self.report), "لا توجد تعارضات."), "التعارضات")
+        self.tabs.addTab(
+            self._table_tab(M.move_rows(self.report), "لا توجد انتقالات بين المؤسسات."), "الانتقالات"
+        )
+        self.tabs.addTab(self._table_tab(M.overlap_rows(self.report), "لا توجد تقاطعات زمنية."), "التقاطعات")
+        skipped = [
+            ["الرقم الوظيفي", "الاسم", "السبب"],
+            [
+                [item.get("emp_id", ""), item.get("name", ""), item.get("reason", "")]
+                for item in self.report.skipped_list
+            ],
+        ]
         self.tabs.addTab(self._table_tab(skipped, "لا توجد سجلات متجاهلة."), "المتجاهلون")
         layout.addWidget(self.tabs, 1)
 
@@ -117,16 +132,19 @@ class ReportDialog(QDialog):
             return
         try:
             output = M.export_report_excel(path, self.report)
-        except Exception as exc:                      # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             W.error(self, f"تعذّر التصدير: {exc}")
             return
         if W.confirm(self, f"تم التصدير إلى:\n{output}\n\nهل تريد فتحه الآن؟"):
             W.open_path(self, output)
 
     def _undo(self) -> None:
-        if not W.confirm(self, "سيُعاد إرجاع قاعدة البيانات إلى ما كانت عليه قبل هذا "
-                               "الاستيراد (مع أخذ نسخة أمان للحالة الحالية).\n\nمتابعة؟",
-                         "تراجع عن الاستيراد"):
+        if not W.confirm(
+            self,
+            "سيُعاد إرجاع قاعدة البيانات إلى ما كانت عليه قبل هذا "
+            "الاستيراد (مع أخذ نسخة أمان للحالة الحالية).\n\nمتابعة؟",
+            "تراجع عن الاستيراد",
+        ):
             return
         ok, message = self.ctx.backup.restore(self.backup_path)
         if ok:
@@ -171,9 +189,23 @@ class ImportHistoryDialog(QDialog):
         header.addWidget(W.button("🔄 تحديث", "Ghost", self._refresh))
         layout.addLayout(header)
 
-        self.table = W.TablePanel(["#", "التاريخ", "الاتجاه", "المؤسسة", "المستخدم", "الملف",
-                                   "موظفون +", "موظفون ~", "إجازات +", "إجازات ~",
-                                   "انتقالات", "مرفقات", "تعارضات"])
+        self.table = W.TablePanel(
+            [
+                "#",
+                "التاريخ",
+                "الاتجاه",
+                "المؤسسة",
+                "المستخدم",
+                "الملف",
+                "موظفون +",
+                "موظفون ~",
+                "إجازات +",
+                "إجازات ~",
+                "انتقالات",
+                "مرفقات",
+                "تعارضات",
+            ]
+        )
         layout.addWidget(self.table, 1)
 
         buttons = QHBoxLayout()
@@ -183,15 +215,28 @@ class ImportHistoryDialog(QDialog):
         layout.addLayout(buttons)
 
     def _refresh(self) -> None:
-        self.records = self.ctx.db.list_imports(limit=300,
-                                                institution=self.cb_institution.currentData() or "")
+        self.records = self.ctx.db.list_imports(
+            limit=300, institution=self.cb_institution.currentData() or ""
+        )
         rows = []
         for record in self.records:
-            rows.append([str(record.id), record.ts, "استيراد" if record.direction == "import"
-                         else "تصدير", record.institution or record.scope, record.username,
-                         record.source_file, record.employees_added, record.employees_updated,
-                         record.leaves_added, record.leaves_updated, record.moves,
-                         record.attachments, record.employees_conflict])
+            rows.append(
+                [
+                    str(record.id),
+                    record.ts,
+                    "استيراد" if record.direction == "import" else "تصدير",
+                    record.institution or record.scope,
+                    record.username,
+                    record.source_file,
+                    record.employees_added,
+                    record.employees_updated,
+                    record.leaves_added,
+                    record.leaves_updated,
+                    record.moves,
+                    record.attachments,
+                    record.employees_conflict,
+                ]
+            )
         self.table.set_rows(rows)
 
     def _current(self):
@@ -214,22 +259,46 @@ class ImportHistoryDialog(QDialog):
 
     def _export_table(self) -> None:
         from ..exporters import excel as X
-        path, _ = QFileDialog.getSaveFileName(self, "تصدير السجل", "سجل_الاستيراد.xlsx",
-                                              "Excel (*.xlsx)")
+
+        path, _ = QFileDialog.getSaveFileName(self, "تصدير السجل", "سجل_الاستيراد.xlsx", "Excel (*.xlsx)")
         if not path:
             return
-        headers = ["#", "التاريخ", "الاتجاه", "المؤسسة", "المستخدم", "الملف", "موظفون مضافون",
-                   "موظفون محدَّثون", "إجازات مضافة", "إجازات محدَّثة", "انتقالات", "مرفقات",
-                   "تعارضات"]
-        rows = [[str(record.id), record.ts,
-                 "استيراد" if record.direction == "import" else "تصدير",
-                 record.institution or record.scope, record.username, record.source_file,
-                 record.employees_added, record.employees_updated, record.leaves_added,
-                 record.leaves_updated, record.moves, record.attachments,
-                 record.employees_conflict] for record in self.records]
+        headers = [
+            "#",
+            "التاريخ",
+            "الاتجاه",
+            "المؤسسة",
+            "المستخدم",
+            "الملف",
+            "موظفون مضافون",
+            "موظفون محدَّثون",
+            "إجازات مضافة",
+            "إجازات محدَّثة",
+            "انتقالات",
+            "مرفقات",
+            "تعارضات",
+        ]
+        rows = [
+            [
+                str(record.id),
+                record.ts,
+                "استيراد" if record.direction == "import" else "تصدير",
+                record.institution or record.scope,
+                record.username,
+                record.source_file,
+                record.employees_added,
+                record.employees_updated,
+                record.leaves_added,
+                record.leaves_updated,
+                record.moves,
+                record.attachments,
+                record.employees_conflict,
+            ]
+            for record in self.records
+        ]
         try:
             X.write_table(path, headers, rows, sheet="سجل الاستيراد")
-        except Exception as exc:                      # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             W.error(self, f"تعذّر التصدير: {exc}")
             return
         W.info(self, f"تم التصدير إلى:\n{path}")
@@ -326,7 +395,7 @@ class TransferImportDialog(QDialog):
         self.btn_apply.setEnabled(False)
         try:
             info = T.read_transfer_info(self.path)
-        except Exception as exc:                      # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             W.error(self, f"تعذّر قراءة الملف: {exc}")
             return
         self._show_info(info)
@@ -345,13 +414,14 @@ class TransferImportDialog(QDialog):
             f"المؤسسة: {manifest.get('institution') or 'غير محددة'}",
             f"إصدار المخطط: {manifest.get('schema_version') or '—'} | "
             f"إصدار البرنامج: {manifest.get('app_version') or '—'}",
-            f"أُنشئ في: {manifest.get('generated_at') or '—'} بواسطة "
-            f"{manifest.get('generated_by') or '—'}",
+            f"أُنشئ في: {manifest.get('generated_at') or '—'} بواسطة {manifest.get('generated_by') or '—'}",
         ]
         if counts:
-            lines.append(f"المحتوى: {counts.get('employees', '?')} موظفاً، "
-                         f"{counts.get('leaves', '?')} إجازة، "
-                         f"{counts.get('attachments', 0)} مرفقاً")
+            lines.append(
+                f"المحتوى: {counts.get('employees', '?')} موظفاً، "
+                f"{counts.get('leaves', '?')} إجازة، "
+                f"{counts.get('attachments', 0)} مرفقاً"
+            )
         if info["attachment_files"]:
             lines.append(f"ملفات مرفقات في الأرشيف: {info['attachment_files']}")
         lines.append(f"بصمة الملف: {info['checksum'][:24]}…")
@@ -366,19 +436,20 @@ class TransferImportDialog(QDialog):
         self.fill_from_path(Path(path))
 
     def _options(self) -> M.MergeOptions:
-        return M.MergeOptions(institution=self.e_institution.text().strip(),
-                              allow_other_institutions=self.chk_other.isChecked(),
-                              prefer=self.cb_prefer.currentData(),
-                              transfer_attachments=self.chk_attachments.isChecked())
+        return M.MergeOptions(
+            institution=self.e_institution.text().strip(),
+            allow_other_institutions=self.chk_other.isChecked(),
+            prefer=self.cb_prefer.currentData(),
+            transfer_attachments=self.chk_attachments.isChecked(),
+        )
 
     def _preview(self) -> None:
         if not self.path:
             W.warn(self, "اختر ملفاً أولاً.")
             return
         try:
-            self.plan, self.report, _info = T.preview_transfer(self.ctx.db, self.path,
-                                                              self._options())
-        except Exception as exc:                      # noqa: BLE001
+            self.plan, self.report, _info = T.preview_transfer(self.ctx.db, self.path, self._options())
+        except Exception as exc:  # noqa: BLE001
             W.error(self, f"تعذّرت المعاينة: {exc}")
             return
         report = self.report
@@ -387,54 +458,71 @@ class TransferImportDialog(QDialog):
         if report.conflict_list:
             conflict_lines.append(f"التعارضات ({len(report.conflict_list)}):")
             for item in report.conflict_list[:80]:
-                conflict_lines.append(f"  • [{item.get('kind')}] {item.get('emp_id')} — "
-                                      f"{item.get('detail')} ⇒ {item.get('winner')}")
+                conflict_lines.append(
+                    f"  • [{item.get('kind')}] {item.get('emp_id')} — "
+                    f"{item.get('detail')} ⇒ {item.get('winner')}"
+                )
         if report.move_list:
             conflict_lines.append("")
             conflict_lines.append(f"انتقالات بين المؤسسات ({len(report.move_list)}):")
             for item in report.move_list[:80]:
-                conflict_lines.append(f"  • {item.get('emp_id')} ({item.get('name')}): "
-                                      f"{item.get('from_institution')} ← "
-                                      f"{item.get('to_institution')} بتاريخ "
-                                      f"{item.get('moved_on')}")
+                conflict_lines.append(
+                    f"  • {item.get('emp_id')} ({item.get('name')}): "
+                    f"{item.get('from_institution')} ← "
+                    f"{item.get('to_institution')} بتاريخ "
+                    f"{item.get('moved_on')}"
+                )
         if report.overlap_list:
             conflict_lines.append("")
             conflict_lines.append(f"تقاطعات زمنية ({len(report.overlap_list)}):")
             for item in report.overlap_list[:40]:
-                conflict_lines.append(f"  • {item.get('emp_id')}: {item.get('new_type')} "
-                                      f"{item.get('new_start')} تتقاطع مع "
-                                      f"{item.get('existing_type')} {item.get('existing_start')}")
+                conflict_lines.append(
+                    f"  • {item.get('emp_id')}: {item.get('new_type')} "
+                    f"{item.get('new_start')} تتقاطع مع "
+                    f"{item.get('existing_type')} {item.get('existing_start')}"
+                )
         if report.skipped_list:
             conflict_lines.append("")
             conflict_lines.append(f"سجلات ستُتجاهل ({len(report.skipped_list)}):")
             for item in report.skipped_list[:40]:
-                conflict_lines.append(f"  • {item.get('emp_id')} ({item.get('name')}): "
-                                      f"{item.get('reason')}")
+                conflict_lines.append(f"  • {item.get('emp_id')} ({item.get('name')}): {item.get('reason')}")
         self.conflicts.setPlainText("\n".join(conflict_lines) or "لا توجد تعارضات أو انتقالات.")
 
         plan_lines = [
             f"سيُضاف: {len(self.plan.employees_add)} موظفاً، "
             f"{len(self.plan.leaves_add)} إجازة، {len(self.plan.attachments_add)} مرفقاً",
-            f"سيُحدَّث: {len(self.plan.employees_update)} موظفاً، "
-            f"{len(self.plan.leaves_update)} إجازة",
-            f"بلا تغيير: {len(self.plan.employees_unchanged)} موظفاً، "
-            f"{len(self.plan.leaves_unchanged)} إجازة",
+            f"سيُحدَّث: {len(self.plan.employees_update)} موظفاً، {len(self.plan.leaves_update)} إجازة",
+            f"بلا تغيير: {len(self.plan.employees_unchanged)} موظفاً، {len(self.plan.leaves_unchanged)} إجازة",
             f"مؤسسات الملف: {'، '.join(self.plan.source_institutions) or '—'}",
         ]
         if self.plan.employees_add:
             plan_lines.append("")
-            plan_lines.append("موظفون جدد: " + "، ".join(
-                f"{record.get('emp_id')} ({record.get('name')})"
-                for record in self.plan.employees_add[:40]))
+            plan_lines.append(
+                "موظفون جدد: "
+                + "، ".join(
+                    f"{record.get('emp_id')} ({record.get('name')})"
+                    for record in self.plan.employees_add[:40]
+                )
+            )
         if self.plan.leaves_add:
             plan_lines.append("")
-            plan_lines.append("إجازات ستُضاف: " + "، ".join(
-                f"{record.get('emp_id')}/{record.get('type')}/{record.get('start_date')}"
-                for record in self.plan.leaves_add[:40]))
+            plan_lines.append(
+                "إجازات ستُضاف: "
+                + "، ".join(
+                    f"{record.get('emp_id')}/{record.get('type')}/{record.get('start_date')}"
+                    for record in self.plan.leaves_add[:40]
+                )
+            )
         self.details.setPlainText("\n".join(plan_lines))
-        self.btn_apply.setEnabled(bool(self.plan.employees_add or self.plan.employees_update
-                                       or self.plan.leaves_add or self.plan.leaves_update
-                                       or self.plan.attachments_add))
+        self.btn_apply.setEnabled(
+            bool(
+                self.plan.employees_add
+                or self.plan.employees_update
+                or self.plan.leaves_add
+                or self.plan.leaves_update
+                or self.plan.attachments_add
+            )
+        )
 
     def _apply(self) -> None:
         if not self.path or self.plan is None:
@@ -443,33 +531,43 @@ class TransferImportDialog(QDialog):
         self._preview()
         if self.report is None:
             return
-        total = (self.report.employees_added + self.report.employees_updated
-                 + self.report.leaves_added + self.report.leaves_updated)
+        total = (
+            self.report.employees_added
+            + self.report.employees_updated
+            + self.report.leaves_added
+            + self.report.leaves_updated
+        )
         if not W.confirm(
-                self,
-                f"سيُدمج ملف «{self.path.name}» في قاعدة المركز:\n\n"
-                f"• إضافة {self.report.employees_added} موظفاً و"
-                f"{self.report.leaves_added} إجازة\n"
-                f"• تحديث {self.report.employees_updated} موظفاً و"
-                f"{self.report.leaves_updated} إجازة\n"
-                f"• انتقالات: {self.report.moves} | مرفقات: {self.report.attachments_added}\n"
-                f"• تعارضات: {self.report.conflicts}\n\n"
-                + ("لا يوجد تغيير فعلي.\n\n" if total == 0 else "")
-                + "ستُؤخذ نسخة احتياطية تلقائياً قبل التنفيذ. متابعة؟",
-                "تأكيد الدمج"):
+            self,
+            f"سيُدمج ملف «{self.path.name}» في قاعدة المركز:\n\n"
+            f"• إضافة {self.report.employees_added} موظفاً و"
+            f"{self.report.leaves_added} إجازة\n"
+            f"• تحديث {self.report.employees_updated} موظفاً و"
+            f"{self.report.leaves_updated} إجازة\n"
+            f"• انتقالات: {self.report.moves} | مرفقات: {self.report.attachments_added}\n"
+            f"• تعارضات: {self.report.conflicts}\n\n"
+            + ("لا يوجد تغيير فعلي.\n\n" if total == 0 else "")
+            + "ستُؤخذ نسخة احتياطية تلقائياً قبل التنفيذ. متابعة؟",
+            "تأكيد الدمج",
+        ):
             return
 
         backup_path = None
         try:
             backup_path = self.ctx.backup.create("pre_import")
-        except Exception as exc:                      # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             from ..logging_setup import get_logger
+
             get_logger("import").warning("تعذّر إنشاء نسخة قبل الاستيراد: %s", exc)
         try:
-            report = T.apply_transfer(self.ctx.db, self.path, self._options(),
-                                      user=self.ctx.user(),
-                                      attachments_dir=self.ctx.paths.attachments_dir)
-        except Exception as exc:                      # noqa: BLE001
+            report = T.apply_transfer(
+                self.ctx.db,
+                self.path,
+                self._options(),
+                user=self.ctx.user(),
+                attachments_dir=self.ctx.paths.attachments_dir,
+            )
+        except Exception as exc:  # noqa: BLE001
             W.error(self, f"فشل الاستيراد: {exc}\n\nلم يُغيَّر أي شيء (تُراجَع المعاملة كاملة).")
             return
         self.ctx.refresh_policy()
@@ -490,24 +588,34 @@ def export_for_institution(parent, ctx, institution: str = "", center_side: bool
     institution = institution or ctx.session.scoped_institution or ""
     default = f"نقل_{institution or 'كل_المؤسسات'}_{datetime.now():%Y-%m-%d}.amdhz"
     path, _ = QFileDialog.getSaveFileName(
-        parent, "تصدير ملف نقل", str(ctx.paths.reports_dir / default),
-        "أرشيف نقل (*.amdhz);;قاعدة بيانات (*.db)")
+        parent,
+        "تصدير ملف نقل",
+        str(ctx.paths.reports_dir / default),
+        "أرشيف نقل (*.amdhz);;قاعدة بيانات (*.db)",
+    )
     if not path:
         return None
     include_attachments = True
     if Path(path).suffix.lower() == ".db":
         include_attachments = W.confirm(
-            parent, "ملف .db لا يحمل المرفقات (ملفات الأوامر).\n\n"
-                    "هل تريد المتابعة بلا مرفقات؟\n(اختر «لا» لتصدير أرشيف .amdhz مع المرفقات)",
-            "تنبيه المرفقات")
+            parent,
+            "ملف .db لا يحمل المرفقات (ملفات الأوامر).\n\n"
+            "هل تريد المتابعة بلا مرفقات؟\n(اختر «لا» لتصدير أرشيف .amdhz مع المرفقات)",
+            "تنبيه المرفقات",
+        )
         if not include_attachments:
             path = str(Path(path).with_suffix(".amdhz"))
     try:
         manifest = T.export_transfer(
-            ctx.db, path, institution=institution, include_attachments=include_attachments,
-            user=ctx.user(), attachments_dir=ctx.paths.attachments_dir,
-            center=ctx.db.center_institution())
-    except Exception as exc:                          # noqa: BLE001
+            ctx.db,
+            path,
+            institution=institution,
+            include_attachments=include_attachments,
+            user=ctx.user(),
+            attachments_dir=ctx.paths.attachments_dir,
+            center=ctx.db.center_institution(),
+        )
+    except Exception as exc:  # noqa: BLE001
         W.error(parent, f"تعذّر التصدير: {exc}")
         return None
     output = Path(manifest["path"])

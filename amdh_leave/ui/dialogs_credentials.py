@@ -8,23 +8,27 @@ from datetime import datetime
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QPageSize, QTextDocument
 from PyQt6.QtWidgets import (
-    QApplication, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QVBoxLayout,
+    QApplication,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QVBoxLayout,
 )
 
 from .. import config
-from ..services import dates as D
-from . import theme, widgets as W
+from . import widgets as W
 from .dialogs_base import BaseDialog
 
 try:
     from PyQt6.QtPrintSupport import QPrinter, QPrintPreviewDialog
+
     HAS_PRINT = True
-except ImportError:                                   # pragma: no cover
+except ImportError:  # pragma: no cover
     HAS_PRINT = False
 
 
-def credentials_html(institution: str, code: str, username: str, password: str,
-                     role_label: str) -> str:
+def credentials_html(institution: str, code: str, username: str, password: str, role_label: str) -> str:
     """صفحة A4 عربية جاهزة للطباعة (بيانات الدخول والتعليمات)."""
     esc = html.escape
     return f"""<!DOCTYPE html>
@@ -49,7 +53,7 @@ th {{ background: #e2e8f0; width: 28%; }}
 <div class="sub">{esc(config.APP_NAME)} — الإصدار {esc(config.APP_VERSION)}</div>
 <table>
 <tr><th>المؤسسة</th><td>{esc(institution)}</td></tr>
-<tr><th>الرمز</th><td>{esc(code or '—')}</td></tr>
+<tr><th>الرمز</th><td>{esc(code or "—")}</td></tr>
 <tr><th>اسم المستخدم</th><td class="pass">{esc(username)}</td></tr>
 <tr><th>كلمة المرور</th><td class="pass">{esc(password)}</td></tr>
 <tr><th>نوع الحساب</th><td>{esc(role_label)}</td></tr>
@@ -77,8 +81,17 @@ th {{ background: #e2e8f0; width: 28%; }}
 class CredentialsDialog(BaseDialog):
     """عرض بيانات الدخول مرة واحدة مع معاينة وطباعة وحفظ PDF."""
 
-    def __init__(self, parent, ctx, *, institution: str, code: str = "", username: str = "",
-                 password: str = "", role_label: str = "مدخل بيانات") -> None:
+    def __init__(
+        self,
+        parent,
+        ctx,
+        *,
+        institution: str,
+        code: str = "",
+        username: str = "",
+        password: str = "",
+        role_label: str = "مدخل بيانات",
+    ) -> None:
         super().__init__(parent, ctx, "بيانات دخول المؤسسة")
         self.institution = institution
         self.code = code
@@ -94,9 +107,12 @@ class CredentialsDialog(BaseDialog):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 14)
         layout.addWidget(W.title_label("🔑 بيانات دخول المؤسسة", 15))
-        layout.addWidget(W.muted_label(
-            "اعرضها مرة واحدة، واطبعها ورقياً وسلّمها لموظف المؤسسة. "
-            "لن تُعرض كلمة المرور مرة أخرى بعد الإغلاق."))
+        layout.addWidget(
+            W.muted_label(
+                "اعرضها مرة واحدة، واطبعها ورقياً وسلّمها لموظف المؤسسة. "
+                "لن تُعرض كلمة المرور مرة أخرى بعد الإغلاق."
+            )
+        )
 
         card = W.card()
         form = QFormLayout(card)
@@ -124,7 +140,8 @@ class CredentialsDialog(BaseDialog):
         instructions = W.muted_label(
             "تعليمات: شغّل البرنامج، أدخل اسم المستخدم وكلمة المرور، ثم يمكنك إدخال "
             "موظفي مؤسستك وإجازاتهم. الحساب مقيَّد بمؤسستك فقط. "
-            "عند نهاية الشهر استخدم «تصدير للمركز».")
+            "عند نهاية الشهر استخدم «تصدير للمركز»."
+        )
         instructions.setWordWrap(True)
         layout.addWidget(instructions)
         layout.addStretch()
@@ -143,14 +160,14 @@ class CredentialsDialog(BaseDialog):
 
     def _toggle(self) -> None:
         shown = self.e_pass.echoMode() == QLineEdit.EchoMode.Password
-        self.e_pass.setEchoMode(QLineEdit.EchoMode.Normal if shown
-                                else QLineEdit.EchoMode.Password)
+        self.e_pass.setEchoMode(QLineEdit.EchoMode.Normal if shown else QLineEdit.EchoMode.Password)
         self.btn_show.setText("🙈 إخفاء" if shown else "👁 إظهار")
 
     def _document(self) -> QTextDocument:
         document = QTextDocument()
-        document.setHtml(credentials_html(self.institution, self.code, self.username,
-                                          self.password, self.role_label))
+        document.setHtml(
+            credentials_html(self.institution, self.code, self.username, self.password, self.role_label)
+        )
         return document
 
     def _print(self) -> None:
@@ -170,8 +187,11 @@ class CredentialsDialog(BaseDialog):
             W.error(self, "توليد PDF غير متاح في هذه البيئة.")
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "حفظ بطاقة بيانات الدخول",
-            str(self.ctx.paths.reports_dir / f"بيانات_دخول_{self.username}.pdf"), "PDF (*.pdf)")
+            self,
+            "حفظ بطاقة بيانات الدخول",
+            str(self.ctx.paths.reports_dir / f"بيانات_دخول_{self.username}.pdf"),
+            "PDF (*.pdf)",
+        )
         if not path:
             return
         printer = QPrinter(QPrinter.PrinterMode.HighResolution)
@@ -183,6 +203,6 @@ class CredentialsDialog(BaseDialog):
 
     def _copy(self) -> None:
         QApplication.clipboard().setText(
-            f"المؤسسة: {self.institution}\nاسم المستخدم: {self.username}\n"
-            f"كلمة المرور: {self.password}\n")
+            f"المؤسسة: {self.institution}\nاسم المستخدم: {self.username}\nكلمة المرور: {self.password}\n"
+        )
         W.info(self, "تم نسخ بيانات الدخول إلى الحافظة.")

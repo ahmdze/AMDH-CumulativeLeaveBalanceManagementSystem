@@ -6,11 +6,14 @@ from datetime import date
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QComboBox, QDateEdit, QFormLayout, QHBoxLayout, QLabel,
-    QVBoxLayout, QWidget,
+    QComboBox,
+    QDateEdit,
+    QFormLayout,
+    QHBoxLayout,
+    QVBoxLayout,
 )
 
-from ..services.dates import parse_iso, to_iso
+from ..services.dates import to_iso
 from . import widgets as W
 from .dialogs_base import BaseDialog
 
@@ -80,10 +83,9 @@ class AdvancedSearchDialog(BaseDialog):
         self.lbl_results = W.muted_label("")
         layout.addWidget(self.lbl_results)
 
-        self.results_table = W.TablePanel([
-            "الاسم", "الرقم الوظيفي", "النوع", "من", "إلى",
-            "الأيام", "الحالة", "المؤسسة"
-        ])
+        self.results_table = W.TablePanel(
+            ["الاسم", "الرقم الوظيفي", "النوع", "من", "إلى", "الأيام", "الحالة", "المؤسسة"]
+        )
         layout.addWidget(self.results_table)
 
         # أزرار
@@ -137,27 +139,31 @@ class AdvancedSearchDialog(BaseDialog):
                 if lv.start_date < date_from or lv.start_date > date_to:
                     continue
 
-            status_label = {"approved": "مقبول", "pending": "قيد الانتظار",
-                           "rejected": "مرفوض"}.get(lv.status, lv.status or "")
-            results.append([
-                emp.name, emp.emp_id, lv.type or "",
-                to_iso(lv.start_date) if lv.start_date else "",
-                to_iso(lv.end_date) if lv.end_date else "",
-                lv.days_actual or 0,
-                status_label,
-                emp.institution or ""
-            ])
+            status_label = {"approved": "مقبول", "pending": "قيد الانتظار", "rejected": "مرفوض"}.get(
+                lv.status, lv.status or ""
+            )
+            results.append(
+                [
+                    emp.name,
+                    emp.emp_id,
+                    lv.type or "",
+                    to_iso(lv.start_date) if lv.start_date else "",
+                    to_iso(lv.end_date) if lv.end_date else "",
+                    lv.days_actual or 0,
+                    status_label,
+                    emp.institution or "",
+                ]
+            )
 
         results.sort(key=lambda r: r[3], reverse=True)
         self.results_table.set_rows(
-            results,
-            empty_text="لا توجد نتائج مطابقة",
-            footer=f"العدد: {len(results)}"
+            results, empty_text="لا توجد نتائج مطابقة", footer=f"العدد: {len(results)}"
         )
         self.lbl_results.setText(f"تم العثور على {len(results)} نتيجة")
 
     def _export_excel(self) -> None:
         from PyQt6.QtWidgets import QFileDialog
+
         from ..exporters import excel as X
 
         rows = self.results_table.get_rows()
@@ -166,7 +172,8 @@ class AdvancedSearchDialog(BaseDialog):
             return
 
         path, _ = QFileDialog.getSaveFileName(
-            self, "تصدير نتائج البحث", "search_results.xlsx", "Excel (*.xlsx)")
+            self, "تصدير نتائج البحث", "search_results.xlsx", "Excel (*.xlsx)"
+        )
         if not path:
             return
         try:

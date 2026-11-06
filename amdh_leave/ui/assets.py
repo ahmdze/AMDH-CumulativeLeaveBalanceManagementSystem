@@ -22,7 +22,7 @@ DEPARTMENT_LOGO = "department_logo.png"
 DEVELOPER_PHOTO = "developer.png"
 APP_ICON = "icon.ico"
 
-PLACEHOLDER_MAX_BYTES = 1500      # أي ملف أصغر من هذا يُعدّ فارغاً
+PLACEHOLDER_MAX_BYTES = 1500  # أي ملف أصغر من هذا يُعدّ فارغاً
 _user_assets_dir: Path | None = None
 _cache: dict[tuple[str, int, int, bool], QPixmap | None] = {}
 
@@ -68,8 +68,9 @@ def is_placeholder(name: str) -> bool:
     return asset_path(name) is None
 
 
-def load_pixmap(name: str, width: int = 0, height: int = 0,
-                keep_aspect: bool = True, allow_user: bool = True) -> QPixmap | None:
+def load_pixmap(
+    name: str, width: int = 0, height: int = 0, keep_aspect: bool = True, allow_user: bool = True
+) -> QPixmap | None:
     path = asset_path(name) if allow_user else package_asset_path(name)
     if path is None:
         return None
@@ -81,10 +82,10 @@ def load_pixmap(name: str, width: int = 0, height: int = 0,
         _cache[key] = None
         return None
     if width or height:
-        mode = (Qt.AspectRatioMode.KeepAspectRatio if keep_aspect
-                else Qt.AspectRatioMode.IgnoreAspectRatio)
-        pixmap = pixmap.scaled(width or height, height or width, mode,
-                               Qt.TransformationMode.SmoothTransformation)
+        mode = Qt.AspectRatioMode.KeepAspectRatio if keep_aspect else Qt.AspectRatioMode.IgnoreAspectRatio
+        pixmap = pixmap.scaled(
+            width or height, height or width, mode, Qt.TransformationMode.SmoothTransformation
+        )
     _cache[key] = pixmap
     return pixmap
 
@@ -123,18 +124,20 @@ def draw_logo(pixmap_size: int = 256) -> QPixmap:
     for index, ratio in enumerate(heights):
         height = pixmap_size * ratio
         painter.drawRoundedRect(
-            QRectF(start_x + index * (bar_w + gap), bottom - height, bar_w, height),
-            bar_w * 0.3, bar_w * 0.3)
+            QRectF(start_x + index * (bar_w + gap), bottom - height, bar_w, height), bar_w * 0.3, bar_w * 0.3
+        )
 
     pen = QPen(white, max(2.0, pixmap_size * 0.055))
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
     painter.setPen(pen)
     painter.setBrush(Qt.BrushStyle.NoBrush)
-    painter.drawLine(int(pixmap_size * 0.58), int(pixmap_size * 0.36),
-                     int(pixmap_size * 0.68), int(pixmap_size * 0.48))
-    painter.drawLine(int(pixmap_size * 0.68), int(pixmap_size * 0.48),
-                     int(pixmap_size * 0.84), int(pixmap_size * 0.26))
+    painter.drawLine(
+        int(pixmap_size * 0.58), int(pixmap_size * 0.36), int(pixmap_size * 0.68), int(pixmap_size * 0.48)
+    )
+    painter.drawLine(
+        int(pixmap_size * 0.68), int(pixmap_size * 0.48), int(pixmap_size * 0.84), int(pixmap_size * 0.26)
+    )
     painter.end()
     return pixmap
 
@@ -146,22 +149,28 @@ def draw_department_logo(pixmap_size: int = 256) -> QPixmap:
     white = QColor(theme.color("on_solid"))
     painter.setBrush(white)
     painter.setPen(Qt.PenStyle.NoPen)
-    body = QRectF(pixmap_size * 0.24, pixmap_size * 0.34,
-                  pixmap_size * 0.52, pixmap_size * 0.42)
+    body = QRectF(pixmap_size * 0.24, pixmap_size * 0.34, pixmap_size * 0.52, pixmap_size * 0.42)
     painter.drawRoundedRect(body, pixmap_size * 0.03, pixmap_size * 0.03)
     painter.setBrush(QColor(theme.color("blue")))
     for row in range(2):
         for col in range(3):
-            painter.drawRect(QRectF(pixmap_size * (0.3 + col * 0.15),
-                                    pixmap_size * (0.42 + row * 0.14),
-                                    pixmap_size * 0.08, pixmap_size * 0.08))
+            painter.drawRect(
+                QRectF(
+                    pixmap_size * (0.3 + col * 0.15),
+                    pixmap_size * (0.42 + row * 0.14),
+                    pixmap_size * 0.08,
+                    pixmap_size * 0.08,
+                )
+            )
     pen = QPen(white, max(2.0, pixmap_size * 0.05))
     pen.setCapStyle(Qt.PenCapStyle.RoundCap)
     painter.setPen(pen)
-    painter.drawLine(int(pixmap_size * 0.5), int(pixmap_size * 0.18),
-                     int(pixmap_size * 0.5), int(pixmap_size * 0.3))
-    painter.drawLine(int(pixmap_size * 0.44), int(pixmap_size * 0.24),
-                     int(pixmap_size * 0.56), int(pixmap_size * 0.24))
+    painter.drawLine(
+        int(pixmap_size * 0.5), int(pixmap_size * 0.18), int(pixmap_size * 0.5), int(pixmap_size * 0.3)
+    )
+    painter.drawLine(
+        int(pixmap_size * 0.44), int(pixmap_size * 0.24), int(pixmap_size * 0.56), int(pixmap_size * 0.24)
+    )
     painter.end()
     return pixmap
 
@@ -185,8 +194,9 @@ def draw_developer_photo(width: int = 320, height: int = 400) -> QPixmap:
     painter.setPen(QPen(QColor(theme.color("text"))))
     font = QFont("Segoe UI", max(8, int(width * 0.045)))
     painter.setFont(font)
-    painter.drawText(QRectF(0, height * 0.92, width, height * 0.08),
-                     int(Qt.AlignmentFlag.AlignCenter), "ضع صورتك هنا")
+    painter.drawText(
+        QRectF(0, height * 0.92, width, height * 0.08), int(Qt.AlignmentFlag.AlignCenter), "ضع صورتك هنا"
+    )
     painter.end()
     return pixmap
 

@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import random
 import re
-import string
 from datetime import date, datetime
 from pathlib import Path
 
@@ -80,20 +79,43 @@ def institution_rows(db) -> list[list]:
     rows = []
     for inst in db.list_institutions():
         info = status.get(inst.name, {})
-        rows.append([
-            inst.name, inst.code, inst.kind, inst.manager, inst.phone, inst.address,
-            inst.notes, inst.username, "نعم" if inst.active else "لا", inst.employees,
-            inst.last_import_at or "—",
-            "نعم" if info.get("reported_this_month") else "لا",
-            inst.last_export_at or "—",
-            "مركز الدائرة" if inst.is_center else "",
-        ])
+        rows.append(
+            [
+                inst.name,
+                inst.code,
+                inst.kind,
+                inst.manager,
+                inst.phone,
+                inst.address,
+                inst.notes,
+                inst.username,
+                "نعم" if inst.active else "لا",
+                inst.employees,
+                inst.last_import_at or "—",
+                "نعم" if info.get("reported_this_month") else "لا",
+                inst.last_export_at or "—",
+                "مركز الدائرة" if inst.is_center else "",
+            ]
+        )
     return rows
 
 
-EXPORT_HEADERS = ["اسم المؤسسة", "الرمز", "النوع", "المدير/المسؤول", "الهاتف", "العنوان",
-                  "ملاحظات", "اسم المستخدم", "مُفعَّلة", "عدد الموظفين", "آخر استيراد",
-                  "أرسلت هذا الشهر", "آخر تصدير", "مركز الدائرة"]
+EXPORT_HEADERS = [
+    "اسم المؤسسة",
+    "الرمز",
+    "النوع",
+    "المدير/المسؤول",
+    "الهاتف",
+    "العنوان",
+    "ملاحظات",
+    "اسم المستخدم",
+    "مُفعَّلة",
+    "عدد الموظفين",
+    "آخر استيراد",
+    "أرسلت هذا الشهر",
+    "آخر تصدير",
+    "مركز الدائرة",
+]
 
 
 def export_excel(path: str | Path, db) -> Path:
@@ -103,6 +125,7 @@ def export_excel(path: str | Path, db) -> Path:
     import openpyxl
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
+
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "المؤسسات"
@@ -131,14 +154,25 @@ def export_template(path: str | Path) -> Path:
     import openpyxl
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
+
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "المؤسسات"
     sheet.sheet_view.rightToLeft = True
-    sheet.append(["name", "code", "kind", "manager", "phone", "address", "notes", "username",
-                  "active"])
-    sheet.append(["مستشفى الكرامة", "H1", "مستشفى", "د. علي حسين", "07701234567",
-                  "مركز المدينة", "ملاحظة اختيارية", "", "نعم"])
+    sheet.append(["name", "code", "kind", "manager", "phone", "address", "notes", "username", "active"])
+    sheet.append(
+        [
+            "مستشفى الكرامة",
+            "H1",
+            "مستشفى",
+            "د. علي حسين",
+            "07701234567",
+            "مركز المدينة",
+            "ملاحظة اختيارية",
+            "",
+            "نعم",
+        ]
+    )
     sheet.append(["مركز صحي النور", "PH2", "مركز صحي", "د. سارة", "", "", "", "", "نعم"])
     for cell in sheet[1]:
         cell.font = Font(bold=True, color="7DD3C8")
@@ -175,6 +209,7 @@ def guess_mapping(headers: list[str]) -> dict[str, str]:
 
 def normalize_row(raw: dict, mapping: dict[str, str]) -> dict:
     """يحوّل صفاً خاماً إلى حقول مؤسسة بالأنواع الصحيحة."""
+
     def value(key: str) -> str:
         header = mapping.get(key)
         if not header:
@@ -215,8 +250,9 @@ def validate_row(row: dict, existing_names: set[str], seen: set[str]) -> list[Is
 # ---------------------------------------------------------------------------
 # المستخدم المرتبط
 # ---------------------------------------------------------------------------
-def create_user_for_institution(db, institution: Institution, *, password: str = "",
-                                role: str = "editor", user: str = "") -> tuple[AppUser, str]:
+def create_user_for_institution(
+    db, institution: Institution, *, password: str = "", role: str = "editor", user: str = ""
+) -> tuple[AppUser, str]:
     """ينشئ (أو يحدّث) مستخدماً مرتبطاً بالمؤسسة ويعيده مع كلمة المرور الصريحة."""
     if not institution.code:
         institution.code = suggest_code(db, institution.name)
@@ -234,9 +270,16 @@ def create_user_for_institution(db, institution: Institution, *, password: str =
         account = existing
     else:
         password_hash, salt, iterations = sec.hash_password(explicit)
-        account = AppUser(username=username, display_name=institution.name, role=role,
-                          institution=institution.name, password_hash=password_hash, salt=salt,
-                          iterations=iterations, active=True)
+        account = AppUser(
+            username=username,
+            display_name=institution.name,
+            role=role,
+            institution=institution.name,
+            password_hash=password_hash,
+            salt=salt,
+            iterations=iterations,
+            active=True,
+        )
         db.save_user(account)
     institution.username = username
     db.save_institution(institution.to_fields(), user)
@@ -247,9 +290,17 @@ def create_user_for_institution(db, institution: Institution, *, password: str =
 # ---------------------------------------------------------------------------
 # الاستيراد من Excel
 # ---------------------------------------------------------------------------
-def import_from_rows(db, rows: list[dict], mapping: dict[str, str], *, user: str = "",
-                     create_users: bool = True, password_mode: str = "generate",
-                     unified_password: str = "", update_existing: bool = True) -> dict:
+def import_from_rows(
+    db,
+    rows: list[dict],
+    mapping: dict[str, str],
+    *,
+    user: str = "",
+    create_users: bool = True,
+    password_mode: str = "generate",
+    unified_password: str = "",
+    update_existing: bool = True,
+) -> dict:
     """ينشئ/يحدّث المؤسسات من صفوف Excel، وينشئ مستخدماً لكل مؤسسة جديدة."""
     result = {"added": 0, "updated": 0, "skipped": 0, "users": [], "errors": []}
     existing = {inst.name: inst for inst in db.list_institutions()}
@@ -280,10 +331,14 @@ def import_from_rows(db, rows: list[dict], mapping: dict[str, str], *, user: str
         result["updated" if current else "added"] += 1
         if create_users:
             password = unified_password if password_mode == "unified" else ""
-            account, plain = create_user_for_institution(db, institution, password=password,
-                                                         user=user)
-            result["users"].append({"institution": name, "username": account.username,
-                                    "password": plain if password_mode != "unified" else "موحّدة"})
+            account, plain = create_user_for_institution(db, institution, password=password, user=user)
+            result["users"].append(
+                {
+                    "institution": name,
+                    "username": account.username,
+                    "password": plain if password_mode != "unified" else "موحّدة",
+                }
+            )
     return result
 
 
@@ -299,6 +354,7 @@ def export_credentials(path: str | Path, users: list[dict]) -> Path:
     import openpyxl
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
+
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "بيانات الدخول"
@@ -327,27 +383,32 @@ def institutions_status(db, month: str = "") -> list[dict]:
     for inst in db.list_institutions():
         last = inst.last_import_at or ""
         recorded = db.last_import_for(inst.name)
-        rows.append({
-            "name": inst.name,
-            "code": inst.code,
-            "kind": inst.kind,
-            "username": inst.username,
-            "employees": inst.employees,
-            "last_import_at": last,
-            "last_import_user": inst.last_import_user,
-            "last_import_file": inst.last_import_file,
-            "reported_this_month": last.startswith(month),
-            "last_record_id": recorded.id if recorded else None,
-            "is_center": inst.is_center,
-            "active": inst.active,
-        })
+        rows.append(
+            {
+                "name": inst.name,
+                "code": inst.code,
+                "kind": inst.kind,
+                "username": inst.username,
+                "employees": inst.employees,
+                "last_import_at": last,
+                "last_import_user": inst.last_import_user,
+                "last_import_file": inst.last_import_file,
+                "reported_this_month": last.startswith(month),
+                "last_record_id": recorded.id if recorded else None,
+                "is_center": inst.is_center,
+                "active": inst.active,
+            }
+        )
     return rows
 
 
 def pending_institutions(db, month: str = "") -> list[dict]:
     """المؤسسات التي لم تُرسل بياناتها في الشهر المطلوب (باستثناء مركز الدائرة)."""
-    return [row for row in institutions_status(db, month)
-            if not row["reported_this_month"] and not row["is_center"] and row["active"]]
+    return [
+        row
+        for row in institutions_status(db, month)
+        if not row["reported_this_month"] and not row["is_center"] and row["active"]
+    ]
 
 
 def month_label(month: str = "") -> str:
@@ -365,19 +426,20 @@ def institution_counts(db, name: str = "") -> dict:
     where = "WHERE institution=?" if name else ""
     args = (name,) if name else ()
     employees = db.conn.execute(
-        f"SELECT COUNT(*) FROM employees {where} {('AND' if where else 'WHERE')} {live}",
-        args).fetchone()[0]
+        f"SELECT COUNT(*) FROM employees {where} {('AND' if where else 'WHERE')} {live}", args
+    ).fetchone()[0]
     if name:
         leaves = db.conn.execute(
-            f"SELECT COUNT(*) FROM leaves l JOIN employees e ON e.emp_id=l.emp_id "
-            f"WHERE e.institution=? AND (l.deleted_at IS NULL OR l.deleted_at='')",
-            (name,)).fetchone()[0]
+            "SELECT COUNT(*) FROM leaves l JOIN employees e ON e.emp_id=l.emp_id "
+            "WHERE e.institution=? AND (l.deleted_at IS NULL OR l.deleted_at='')",
+            (name,),
+        ).fetchone()[0]
         attachments = db.conn.execute(
-            f"SELECT COUNT(*) FROM attachments a JOIN employees e ON e.emp_id=a.emp_id "
-            f"WHERE e.institution=?", (name,)).fetchone()[0]
+            "SELECT COUNT(*) FROM attachments a JOIN employees e ON e.emp_id=a.emp_id WHERE e.institution=?",
+            (name,),
+        ).fetchone()[0]
     else:
-        leaves = db.conn.execute(
-            f"SELECT COUNT(*) FROM leaves WHERE {live}").fetchone()[0]
+        leaves = db.conn.execute(f"SELECT COUNT(*) FROM leaves WHERE {live}").fetchone()[0]
         attachments = db.conn.execute("SELECT COUNT(*) FROM attachments").fetchone()[0]
     return {"employees": employees, "leaves": leaves, "attachments": attachments}
 
@@ -387,13 +449,14 @@ def last_change_at(db, name: str = "") -> str:
     scope = "WHERE e.institution=?" if name else ""
     args = (name,) if name else ()
     rows = [
-        db.conn.execute(
-            f"SELECT MAX(updated_at) FROM employees e {scope}", args).fetchone()[0],
+        db.conn.execute(f"SELECT MAX(updated_at) FROM employees e {scope}", args).fetchone()[0],
         db.conn.execute(
             f"SELECT MAX(COALESCE(l.modified_at, l.added_date)) FROM leaves l "
-            f"JOIN employees e ON e.emp_id=l.emp_id {scope}", args).fetchone()[0],
+            f"JOIN employees e ON e.emp_id=l.emp_id {scope}",
+            args,
+        ).fetchone()[0],
         db.conn.execute(
-            f"SELECT MAX(a.added_at) FROM attachments a "
-            f"JOIN employees e ON e.emp_id=a.emp_id {scope}", args).fetchone()[0],
+            f"SELECT MAX(a.added_at) FROM attachments a JOIN employees e ON e.emp_id=a.emp_id {scope}", args
+        ).fetchone()[0],
     ]
     return max([str(item) for item in rows if item] or [""])

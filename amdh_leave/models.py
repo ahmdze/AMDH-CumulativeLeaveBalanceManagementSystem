@@ -7,6 +7,7 @@ from datetime import date
 
 from .services.dates import parse_iso
 
+
 # ---------------------------------------------------------------------------
 # الموظف
 # ---------------------------------------------------------------------------
@@ -37,11 +38,11 @@ class Employee:
     opening_balance_note: str = ""
     opening_updated_at: str = ""
     opening_updated_by: str = ""
-    leaves: list["Leave"] = field(default_factory=list)
+    leaves: list[Leave] = field(default_factory=list)
 
     # -- تحويل -------------------------------------------------------------
     @classmethod
-    def from_mapping(cls, m) -> "Employee":
+    def from_mapping(cls, m) -> Employee:
         return cls(
             emp_id=str(m["emp_id"]),
             name=m.get("name") or "",
@@ -84,8 +85,9 @@ class Employee:
             "moved_on": self.moved_on.strftime("%Y-%m-%d") if self.moved_on else "",
             "opening_balance_set": int(bool(self.opening_balance_set)),
             "opening_balance": int(self.opening_balance or 0),
-            "opening_balance_date": (self.opening_balance_date.strftime("%Y-%m-%d")
-                                     if self.opening_balance_date else ""),
+            "opening_balance_date": (
+                self.opening_balance_date.strftime("%Y-%m-%d") if self.opening_balance_date else ""
+            ),
             "opening_balance_by": self.opening_balance_by,
             "opening_balance_note": self.opening_balance_note,
             "opening_updated_at": self.opening_updated_at,
@@ -139,7 +141,7 @@ class Leave:
     institution: str = ""
 
     @classmethod
-    def from_mapping(cls, m) -> "Leave":
+    def from_mapping(cls, m) -> Leave:
         return cls(
             id=m.get("id"),
             emp_id=str(m.get("emp_id") or ""),
@@ -210,12 +212,12 @@ class Leave:
 # ---------------------------------------------------------------------------
 @dataclass
 class Balance:
-    raw_days: int = 0        # أيام الخدمة الكلية
-    outside: int = 0         # أيام مستبعدة من الخدمة
-    net_days: int = 0        # أيام الدوام المحسوبة
-    earned: int = 0          # الإجازات المستحقة بعد تاريخ الافتتاحي
-    taken: int = 0           # المأخوذة بعد تاريخ الافتتاحي
-    balance: int = 0         # الرصيد (قد يكون سالباً وهو مشروع)
+    raw_days: int = 0  # أيام الخدمة الكلية
+    outside: int = 0  # أيام مستبعدة من الخدمة
+    net_days: int = 0  # أيام الدوام المحسوبة
+    earned: int = 0  # الإجازات المستحقة بعد تاريخ الافتتاحي
+    taken: int = 0  # المأخوذة بعد تاريخ الافتتاحي
+    balance: int = 0  # الرصيد (قد يكون سالباً وهو مشروع)
     opening_balance: int = 0  # الرصيد الافتتاحي (المتبقي كما في تاريخه)
     opening_date: date | None = None
     earned_after: int = 0
@@ -286,7 +288,7 @@ class AppUser:
     last_login: str = ""
 
     @classmethod
-    def from_mapping(cls, m) -> "AppUser":
+    def from_mapping(cls, m) -> AppUser:
         return cls(
             username=str(m.get("username") or ""),
             display_name=m.get("display_name") or "",
@@ -316,7 +318,7 @@ class Attachment:
     institution: str = ""
 
     @classmethod
-    def from_mapping(cls, m) -> "Attachment":
+    def from_mapping(cls, m) -> Attachment:
         return cls(
             id=m.get("id"),
             leave_id=m.get("leave_id"),
@@ -354,7 +356,7 @@ class Institution:
     employees: int = 0
 
     @classmethod
-    def from_mapping(cls, m) -> "Institution":
+    def from_mapping(cls, m) -> Institution:
         return cls(
             name=str(m.get("name") or ""),
             code=m.get("code") or "",
@@ -403,7 +405,7 @@ class EmployeeMove:
     note: str = ""
 
     @classmethod
-    def from_mapping(cls, m) -> "EmployeeMove":
+    def from_mapping(cls, m) -> EmployeeMove:
         return cls(
             id=m.get("id"),
             emp_id=str(m.get("emp_id") or ""),
@@ -443,7 +445,7 @@ class ImportRecord:
     report: str = ""
 
     @classmethod
-    def from_mapping(cls, m) -> "ImportRecord":
+    def from_mapping(cls, m) -> ImportRecord:
         record = cls()
         for field_name in cls.__dataclass_fields__:  # type: ignore[attr-defined]
             if field_name in m and m[field_name] is not None:
@@ -473,6 +475,7 @@ class AuditEntry:
 @dataclass
 class Issue:
     """نتيجة تحقق: level = error (يمنع) أو warning (لا يمنع) أو info."""
+
     level: str
     message: str
 

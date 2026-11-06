@@ -6,8 +6,7 @@ import os
 import sys
 from pathlib import Path
 
-from .colors import (alpha, darken, ensure_contrast, gradient,
-                     lighten, mix, readable_on)
+from .colors import alpha, darken, ensure_contrast, gradient, lighten, mix, readable_on
 
 APP_NAME = "نظام إدارة الرصيد التراكمي للإجازات"
 APP_VERSION = "1.0.0"
@@ -27,23 +26,24 @@ def settings_app_name() -> str:
     suffix = os.environ.get("AMDH_SETTINGS_SUFFIX", "")
     return SETTINGS_APP + suffix
 
+
 DB_FILENAME = "employees_leave.db"
 
 # ----------------------------------------------------------------------------
 # الثوابت النظامية
 # ----------------------------------------------------------------------------
-DAYS_PER_LEAVE = 10        # يوم إجازة واحد لكل 10 أيام دوام
-MAX_ANNUAL = 36            # المعدل السنوي (يوم)
+DAYS_PER_LEAVE = 10  # يوم إجازة واحد لكل 10 أيام دوام
+MAX_ANNUAL = 36  # المعدل السنوي (يوم)
 UNITS = ("يوم", "شهر", "سنة")
-LEGACY_UNIT_DAYS = {"يوم": 1, "شهر": 30, "سنة": 365}   # للتوافق مع البيانات القديمة فقط
+LEGACY_UNIT_DAYS = {"يوم": 1, "شهر": 30, "سنة": 365}  # للتوافق مع البيانات القديمة فقط
 
 # أيام العطلة الأسبوعية (بترقيم بايثون: الاثنين=0 ... الجمعة=4، السبت=5، الأحد=6)
 WEEKDAY_NAMES = ("الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد")
-DEFAULT_WEEKEND = (4, 5)   # الجمعة والسبت
+DEFAULT_WEEKEND = (4, 5)  # الجمعة والسبت
 
 # طرق الاحتساب
-BASIS_CONTINUOUS = "continuous"   # من تاريخ المباشرة حتى اليوم (السلوك الحالي)
-BASIS_ANNUAL = "annual"           # ترصيد سنوي (سنة خدمة) مع ترحيل وصلاحية
+BASIS_CONTINUOUS = "continuous"  # من تاريخ المباشرة حتى اليوم (السلوك الحالي)
+BASIS_ANNUAL = "annual"  # ترصيد سنوي (سنة خدمة) مع ترحيل وصلاحية
 
 COUNT_MODES = ("calendar", "working")
 COUNT_MODE_LABELS = {"calendar": "أيام تقويمية", "working": "أيام عمل"}
@@ -56,6 +56,7 @@ LEAVE_STATUS_LABELS = {"approved": "معتمدة", "pending": "قيد الانت
 
 ROLES = ("admin", "editor", "viewer")
 ROLE_LABELS = {"admin": "مدير النظام", "editor": "مدخل بيانات", "viewer": "مطّلع فقط"}
+
 
 # ----------------------------------------------------------------------------
 # المسارات
@@ -118,7 +119,7 @@ class Paths:
     def db_path(self) -> Path:
         return self.data_dir / DB_FILENAME
 
-    def ensure(self) -> "Paths":
+    def ensure(self) -> Paths:
         for d in (self.data_dir, self.backups_dir, self.attachments_dir, self.logs_dir, self.reports_dir):
             try:
                 d.mkdir(parents=True, exist_ok=True)
@@ -142,43 +143,88 @@ class Paths:
 _THEME_ANCHORS: dict[str, dict[str, str]] = {
     # 1) داكن — أردوازي هادئ بلمسة فيروزية
     "dark": {
-        "label": "داكن", "mode": "dark",
-        "bg": "#0B1220", "surface": "#121C2E", "card": "#1A2740",
-        "text": "#EEF3F9", "muted": "#94A6BE", "border": "#26344C",
-        "accent": "#2DD4BF", "blue": "#60A5FA", "warn": "#FB7185",
-        "gold": "#FBBF24", "pos": "#34D399", "neg": "#FB7185",
+        "label": "داكن",
+        "mode": "dark",
+        "bg": "#0B1220",
+        "surface": "#121C2E",
+        "card": "#1A2740",
+        "text": "#EEF3F9",
+        "muted": "#94A6BE",
+        "border": "#26344C",
+        "accent": "#2DD4BF",
+        "blue": "#60A5FA",
+        "warn": "#FB7185",
+        "gold": "#FBBF24",
+        "pos": "#34D399",
+        "neg": "#FB7185",
     },
     # 2) فاتح — نهاري نظيف بأزرق مخضرّ
     "light": {
-        "label": "فاتح", "mode": "light",
-        "bg": "#F3F6FB", "surface": "#FFFFFF", "card": "#FFFFFF",
-        "text": "#121A28", "muted": "#5C6C85", "border": "#D8E0EC",
-        "accent": "#0D9488", "blue": "#2563EB", "warn": "#DC2626",
-        "gold": "#D97706", "pos": "#15803D", "neg": "#DC2626",
+        "label": "فاتح",
+        "mode": "light",
+        "bg": "#F3F6FB",
+        "surface": "#FFFFFF",
+        "card": "#FFFFFF",
+        "text": "#121A28",
+        "muted": "#5C6C85",
+        "border": "#D8E0EC",
+        "accent": "#0D9488",
+        "blue": "#2563EB",
+        "warn": "#DC2626",
+        "gold": "#D97706",
+        "pos": "#15803D",
+        "neg": "#DC2626",
     },
     # 3) أزرق ليلي — أعماق المحيط بسماوي مشرق
     "midnight": {
-        "label": "أزرق ليلي", "mode": "dark",
-        "bg": "#050C1C", "surface": "#0C1930", "card": "#122545",
-        "text": "#E7EFFA", "muted": "#8BA5CA", "border": "#1D3860",
-        "accent": "#38BDF8", "blue": "#818CF8", "warn": "#FB7185",
-        "gold": "#FCD34D", "pos": "#2DD4BF", "neg": "#FB7185",
+        "label": "أزرق ليلي",
+        "mode": "dark",
+        "bg": "#050C1C",
+        "surface": "#0C1930",
+        "card": "#122545",
+        "text": "#E7EFFA",
+        "muted": "#8BA5CA",
+        "border": "#1D3860",
+        "accent": "#38BDF8",
+        "blue": "#818CF8",
+        "warn": "#FB7185",
+        "gold": "#FCD34D",
+        "pos": "#2DD4BF",
+        "neg": "#FB7185",
     },
     # 4) زمردي — غابة زمردية بنعنع مشرق
     "emerald": {
-        "label": "زمردي", "mode": "dark",
-        "bg": "#061A15", "surface": "#0C2A21", "card": "#123A2C",
-        "text": "#E9F7F1", "muted": "#7FB39E", "border": "#1B4F3D",
-        "accent": "#34D399", "blue": "#38BDF8", "warn": "#F87171",
-        "gold": "#FCD34D", "pos": "#6EE7B7", "neg": "#F87171",
+        "label": "زمردي",
+        "mode": "dark",
+        "bg": "#061A15",
+        "surface": "#0C2A21",
+        "card": "#123A2C",
+        "text": "#E9F7F1",
+        "muted": "#7FB39E",
+        "border": "#1B4F3D",
+        "accent": "#34D399",
+        "blue": "#38BDF8",
+        "warn": "#F87171",
+        "gold": "#FCD34D",
+        "pos": "#6EE7B7",
+        "neg": "#F87171",
     },
     # 5) رملي دافئ — نهاري بحبّر برتقالي محروق
     "warm": {
-        "label": "رملي دافئ", "mode": "light",
-        "bg": "#FBF6EF", "surface": "#FFFFFF", "card": "#FFFCF7",
-        "text": "#3E2C18", "muted": "#8A7255", "border": "#E7D8C1",
-        "accent": "#C2410C", "blue": "#0E7490", "warn": "#DC2626",
-        "gold": "#B45309", "pos": "#15803D", "neg": "#DC2626",
+        "label": "رملي دافئ",
+        "mode": "light",
+        "bg": "#FBF6EF",
+        "surface": "#FFFFFF",
+        "card": "#FFFCF7",
+        "text": "#3E2C18",
+        "muted": "#8A7255",
+        "border": "#E7D8C1",
+        "accent": "#C2410C",
+        "blue": "#0E7490",
+        "warn": "#DC2626",
+        "gold": "#B45309",
+        "pos": "#15803D",
+        "neg": "#DC2626",
     },
 }
 
@@ -199,8 +245,7 @@ def build_palette(anchors: dict[str, str]) -> dict[str, str]:
         pressed = darken(color, 0.18) if dark else darken(color, 0.24)
         start = lighten(color, 0.05 if dark else 0.10)
         end = darken(color, 0.12 if dark else 0.06)
-        return {"hover": hover, "pressed": pressed,
-                "grad": gradient(start, end), "on": readable_on(color)}
+        return {"hover": hover, "pressed": pressed, "grad": gradient(start, end), "on": readable_on(color)}
 
     accent_ramp, blue_ramp = ramp(accent), ramp(blue)
     warn_ramp, gold_ramp = ramp(warn), ramp(gold)
@@ -266,9 +311,7 @@ def build_palette(anchors: dict[str, str]) -> dict[str, str]:
     }
 
 
-PALETTES: dict[str, dict[str, str]] = {
-    key: build_palette(anchors) for key, anchors in _THEME_ANCHORS.items()
-}
+PALETTES: dict[str, dict[str, str]] = {key: build_palette(anchors) for key, anchors in _THEME_ANCHORS.items()}
 
 # (المفتاح، الاسم العربي، الوضع) — الترتيب هو ترتيب العرض في الواجهة
 THEMES: list[tuple[str, str, str]] = [
@@ -278,12 +321,21 @@ THEME_LABELS = {key: label for key, label, _mode in THEMES}
 THEME_MODES = {key: mode for key, _label, mode in THEMES}
 # توافق مع القيم المحفوظة سابقاً (العربية أو مفاتيح بديلة)
 THEME_ALIASES: dict[str, str] = {label: key for key, label, _mode in THEMES}
-THEME_ALIASES.update({
-    "midnight-blue": "midnight", "ocean": "midnight", "deep": "midnight",
-    "forest": "emerald", "green": "emerald",
-    "sand": "warm", "sunset": "warm", "sun": "warm",
-    "dark-blue": "midnight", "day": "light", "night": "dark",
-})
+THEME_ALIASES.update(
+    {
+        "midnight-blue": "midnight",
+        "ocean": "midnight",
+        "deep": "midnight",
+        "forest": "emerald",
+        "green": "emerald",
+        "sand": "warm",
+        "sunset": "warm",
+        "sun": "warm",
+        "dark-blue": "midnight",
+        "day": "light",
+        "night": "dark",
+    }
+)
 
 
 def palette(theme: str = "dark") -> dict[str, str]:
@@ -293,6 +345,7 @@ def palette(theme: str = "dark") -> dict[str, str]:
 def stylesheet(theme: str = "dark", palette_override: dict[str, str] | None = None) -> str:
     """أنماط Qt جاهزة للثيم المطلوب (مع إمكانية تمرير لوحة معدّلة/مخصّصة)."""
     from . import style
+
     return style.build(palette_override or palette(theme))
 
 
@@ -302,33 +355,114 @@ def stylesheet(theme: str = "dark", palette_override: dict[str, str] | None = No
 # المفاتيح: النوع -> (يخصم من الرصيد، يُستبعد من أيام الخدمة، طريقة العد،
 #                     سقف الأيام، فترة السقف، يتطلب أمراً، نوع خاص، الجنس، الترتيب)
 DEFAULT_RULES: list[dict] = [
-    {"type": "اعتيادية",   "consumes_balance": 1, "service_exclusion": 0, "count_mode": "calendar",
-     "quota_days": 0, "quota_period": "none", "requires_order": 0, "is_adjustment": 0,
-     "gender": "", "order_index": 1},
-    {"type": "طويلة",      "consumes_balance": 1, "service_exclusion": 0, "count_mode": "calendar",
-     "quota_days": 0, "quota_period": "none", "requires_order": 1, "is_adjustment": 0,
-     "gender": "", "order_index": 2},
-    {"type": "دراسات",     "consumes_balance": 1, "service_exclusion": 0, "count_mode": "calendar",
-     "quota_days": 0, "quota_period": "none", "requires_order": 1, "is_adjustment": 0,
-     "gender": "", "order_index": 3},
-    {"type": "مرضية",      "consumes_balance": 1, "service_exclusion": 0, "count_mode": "calendar",
-     "quota_days": 0, "quota_period": "none", "requires_order": 1, "is_adjustment": 0,
-     "gender": "", "order_index": 4},
-    {"type": "5 سنوات",    "consumes_balance": 0, "service_exclusion": 1, "count_mode": "calendar",
-     "quota_days": 0, "quota_period": "none", "requires_order": 1, "is_adjustment": 0,
-     "gender": "", "order_index": 5},
-    {"type": "كارت الزمنية", "consumes_balance": 1, "service_exclusion": 0, "count_mode": "calendar",
-     "quota_days": 0, "quota_period": "none", "requires_order": 0, "is_adjustment": 0,
-     "gender": "", "order_index": 6},
-    {"type": "قبل الوضع",  "consumes_balance": 1, "service_exclusion": 0, "count_mode": "calendar",
-     "quota_days": 0, "quota_period": "none", "requires_order": 1, "is_adjustment": 0,
-     "gender": "أنثى", "order_index": 7},
-    {"type": "بعد الوضع",  "consumes_balance": 1, "service_exclusion": 0, "count_mode": "calendar",
-     "quota_days": 0, "quota_period": "none", "requires_order": 1, "is_adjustment": 0,
-     "gender": "أنثى", "order_index": 8},
-    {"type": "أمومة",      "consumes_balance": 0, "service_exclusion": 1, "count_mode": "calendar",
-     "quota_days": 0, "quota_period": "none", "requires_order": 1, "is_adjustment": 0,
-     "gender": "أنثى", "order_index": 9},
+    {
+        "type": "اعتيادية",
+        "consumes_balance": 1,
+        "service_exclusion": 0,
+        "count_mode": "calendar",
+        "quota_days": 0,
+        "quota_period": "none",
+        "requires_order": 0,
+        "is_adjustment": 0,
+        "gender": "",
+        "order_index": 1,
+    },
+    {
+        "type": "طويلة",
+        "consumes_balance": 1,
+        "service_exclusion": 0,
+        "count_mode": "calendar",
+        "quota_days": 0,
+        "quota_period": "none",
+        "requires_order": 1,
+        "is_adjustment": 0,
+        "gender": "",
+        "order_index": 2,
+    },
+    {
+        "type": "دراسات",
+        "consumes_balance": 1,
+        "service_exclusion": 0,
+        "count_mode": "calendar",
+        "quota_days": 0,
+        "quota_period": "none",
+        "requires_order": 1,
+        "is_adjustment": 0,
+        "gender": "",
+        "order_index": 3,
+    },
+    {
+        "type": "مرضية",
+        "consumes_balance": 1,
+        "service_exclusion": 0,
+        "count_mode": "calendar",
+        "quota_days": 0,
+        "quota_period": "none",
+        "requires_order": 1,
+        "is_adjustment": 0,
+        "gender": "",
+        "order_index": 4,
+    },
+    {
+        "type": "5 سنوات",
+        "consumes_balance": 0,
+        "service_exclusion": 1,
+        "count_mode": "calendar",
+        "quota_days": 0,
+        "quota_period": "none",
+        "requires_order": 1,
+        "is_adjustment": 0,
+        "gender": "",
+        "order_index": 5,
+    },
+    {
+        "type": "كارت الزمنية",
+        "consumes_balance": 1,
+        "service_exclusion": 0,
+        "count_mode": "calendar",
+        "quota_days": 0,
+        "quota_period": "none",
+        "requires_order": 0,
+        "is_adjustment": 0,
+        "gender": "",
+        "order_index": 6,
+    },
+    {
+        "type": "قبل الوضع",
+        "consumes_balance": 1,
+        "service_exclusion": 0,
+        "count_mode": "calendar",
+        "quota_days": 0,
+        "quota_period": "none",
+        "requires_order": 1,
+        "is_adjustment": 0,
+        "gender": "أنثى",
+        "order_index": 7,
+    },
+    {
+        "type": "بعد الوضع",
+        "consumes_balance": 1,
+        "service_exclusion": 0,
+        "count_mode": "calendar",
+        "quota_days": 0,
+        "quota_period": "none",
+        "requires_order": 1,
+        "is_adjustment": 0,
+        "gender": "أنثى",
+        "order_index": 8,
+    },
+    {
+        "type": "أمومة",
+        "consumes_balance": 0,
+        "service_exclusion": 1,
+        "count_mode": "calendar",
+        "quota_days": 0,
+        "quota_period": "none",
+        "requires_order": 1,
+        "is_adjustment": 0,
+        "gender": "أنثى",
+        "order_index": 9,
+    },
 ]
 
 # للتوافق مع البيانات القديمة فقط — لم يعد يُنشأ من الواجهة
@@ -340,15 +474,15 @@ ADJUSTMENT_TYPE = "تسوية رصيد"
 DEFAULT_POLICY: dict[str, object] = {
     "days_per_leave": DAYS_PER_LEAVE,
     "max_annual": MAX_ANNUAL,
-    "enforce_annual_cap": False,   # لا يُفرض سقف المعدل السنوي إلا بتفعيل صريح
+    "enforce_annual_cap": False,  # لا يُفرض سقف المعدل السنوي إلا بتفعيل صريح
     "basis": BASIS_CONTINUOUS,
-    "expiry_years": 0,        # 0 = بلا صلاحية
-    "carryover_cap": 0,       # 0 = بلا سقف للترحيل
-    "allow_negative_balance": True,   # الرصيد السالب مشروع حسب الضوابط الإدارية
-    "warn_negative_balance": False,   # تنبيه اختياري فقط، وغير مُفعَّل افتراضياً
+    "expiry_years": 0,  # 0 = بلا صلاحية
+    "carryover_cap": 0,  # 0 = بلا سقف للترحيل
+    "allow_negative_balance": True,  # الرصيد السالب مشروع حسب الضوابط الإدارية
+    "warn_negative_balance": False,  # تنبيه اختياري فقط، وغير مُفعَّل افتراضياً
     "warn_leaving_soon_days": 5,
     "low_balance_days": 5,
-    "first_day_of_week": 5,   # السبت
+    "first_day_of_week": 5,  # السبت
     "auth_enabled": True,
     "session_timeout_minutes": 0,
     "backup_on_start": True,

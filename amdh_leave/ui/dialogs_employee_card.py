@@ -9,26 +9,25 @@
 
 from __future__ import annotations
 
-import os
 from datetime import date
-from pathlib import Path
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QColor, QFont
+from PyQt6.QtCore import QMarginsF, QSizeF, Qt
+from PyQt6.QtGui import QFont, QPageLayout, QPageSize, QTextDocument
+from PyQt6.QtPrintSupport import QPrintDialog, QPrinter
 from PyQt6.QtWidgets import (
-    QDialog, QFormLayout, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
 )
-from PyQt6.QtPrintSupport import QPrinter, QPrintDialog
-from PyQt6.QtGui import QPageSize, QPageLayout, QTextDocument
-
-from PyQt6.QtCore import QSizeF, QMarginsF
 
 from .. import config
 from ..models import Employee
 from ..rules import Policy
 from ..services import balance as B
 from ..services import dates as D
-from . import theme, widgets as W
+from . import widgets as W
 from .dialogs_base import BaseDialog
 
 
@@ -459,10 +458,9 @@ class EmployeeCardDialog(BaseDialog):
     def _export_pdf(self) -> None:
         """تصدير البطاقة كملف PDF لملء ورقة A5 بالكامل."""
         from PyQt6.QtWidgets import QFileDialog
+
         path, _ = QFileDialog.getSaveFileName(
-            self, "تصدير PDF",
-            f"بطاقة_{self.employee.emp_id}_{self.employee.name}.pdf",
-            "PDF Files (*.pdf)"
+            self, "تصدير PDF", f"بطاقة_{self.employee.emp_id}_{self.employee.name}.pdf", "PDF Files (*.pdf)"
         )
         if not path:
             return

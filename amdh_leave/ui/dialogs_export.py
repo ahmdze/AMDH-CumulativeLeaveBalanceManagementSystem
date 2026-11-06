@@ -7,8 +7,16 @@ from pathlib import Path
 
 from PyQt6.QtCore import QDate, Qt
 from PyQt6.QtWidgets import (
-    QButtonGroup, QComboBox, QDateEdit, QDialog, QFileDialog, QGroupBox, QHBoxLayout,
-    QLabel, QRadioButton, QVBoxLayout, QWidget,
+    QButtonGroup,
+    QComboBox,
+    QDateEdit,
+    QDialog,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QRadioButton,
+    QVBoxLayout,
 )
 
 from ..services import institutions as INST
@@ -51,9 +59,12 @@ class ExportToCenterDialog(QDialog):
         title = QLabel("📤  تصدير بيانات المؤسسة إلى مركز الدائرة")
         title.setStyleSheet(theme.label_style("accent", 15, bold=True))
         layout.addWidget(title)
-        layout.addWidget(W.muted_label(
-            "يُصدَّر ملف نقل منقّى (بلا مستخدمين ولا سجل تدقيق) مع المرفقات، "
-            "ثم يُسلَّم إلى المركز ليستورده من «استيراد من مؤسسة»."))
+        layout.addWidget(
+            W.muted_label(
+                "يُصدَّر ملف نقل منقّى (بلا مستخدمين ولا سجل تدقيق) مع المرفقات، "
+                "ثم يُسلَّم إلى المركز ليستورده من «استيراد من مؤسسة»."
+            )
+        )
 
         scope = W.card()
         scope_row = QHBoxLayout(scope)
@@ -169,8 +180,7 @@ class ExportToCenterDialog(QDialog):
         if institution:
             record = self.ctx.db.get_institution(institution)
             return record.last_export_at if record else ""
-        dates = [item.last_export_at for item in self.ctx.db.list_institutions()
-                 if item.last_export_at]
+        dates = [item.last_export_at for item in self.ctx.db.list_institutions() if item.last_export_at]
         return max(dates) if dates else ""
 
     def _refresh(self) -> None:
@@ -183,8 +193,9 @@ class ExportToCenterDialog(QDialog):
         self.lbl_last.setText(f"آخر تصدير: {last or 'لا يوجد'}")
         changed = INST.last_change_at(self.ctx.db, institution)
         if last and changed and changed <= last:
-            self.lbl_warning.setText("⚠ لم تتغيّر بيانات هذه المؤسسة منذ آخر تصدير — "
-                                     "يمكنك التصدير على أي حال.")
+            self.lbl_warning.setText(
+                "⚠ لم تتغيّر بيانات هذه المؤسسة منذ آخر تصدير — يمكنك التصدير على أي حال."
+            )
             self.lbl_warning.setStyleSheet(theme.label_style("gold", 10))
         elif not last:
             self.lbl_warning.setText("ℹ هذه أول عملية تصدير لهذه المؤسسة.")
@@ -203,24 +214,32 @@ class ExportToCenterDialog(QDialog):
         first, last = self._period()
         default = self.ctx.paths.reports_dir / self._default_name()
         path, _ = QFileDialog.getSaveFileName(
-            self, "حفظ ملف النقل", str(default),
-            "أرشيف نقل (*.amdhz);;قاعدة بيانات (*.db)")
+            self, "حفظ ملف النقل", str(default), "أرشيف نقل (*.amdhz);;قاعدة بيانات (*.db)"
+        )
         if not path:
             return
         include_attachments = True
         if Path(path).suffix.lower() == ".db":
             include_attachments = W.confirm(
-                self, "ملف .db لا يحمل المرفقات.\n\nهل تريد المتابعة بلا مرفقات؟\n"
-                      "(اختر «لا» لتصدير أرشيف .amdhz مع المرفقات)", "تنبيه المرفقات")
+                self,
+                "ملف .db لا يحمل المرفقات.\n\nهل تريد المتابعة بلا مرفقات؟\n"
+                "(اختر «لا» لتصدير أرشيف .amdhz مع المرفقات)",
+                "تنبيه المرفقات",
+            )
             if not include_attachments:
                 path = str(Path(path).with_suffix(".amdhz"))
         try:
             manifest = T.export_transfer(
-                self.ctx.db, path, institution=institution,
-                include_attachments=include_attachments, user=self.ctx.user(),
+                self.ctx.db,
+                path,
+                institution=institution,
+                include_attachments=include_attachments,
+                user=self.ctx.user(),
                 attachments_dir=self.ctx.paths.attachments_dir,
-                period=(first, last), center=self.ctx.db.center_institution())
-        except Exception as exc:                      # noqa: BLE001
+                period=(first, last),
+                center=self.ctx.db.center_institution(),
+            )
+        except Exception as exc:  # noqa: BLE001
             W.error(self, f"تعذّر التصدير: {exc}")
             return
         output = Path(manifest["path"])
@@ -235,7 +254,8 @@ class ExportToCenterDialog(QDialog):
             f"الإجازات: {counts.get('leaves', 0)} | "
             f"المرفقات: {counts.get('attachments', 0)}\n\n"
             "سلّم هذا الملف إلى مركز الدائرة ليستورده من «استيراد من مؤسسة».",
-            "تم التصدير")
+            "تم التصدير",
+        )
         if W.confirm(self, "هل تريد فتح مجلد الملف الآن؟"):
             W.open_path(self, output.parent)
         self.accept()

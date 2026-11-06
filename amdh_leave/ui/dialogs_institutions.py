@@ -10,25 +10,41 @@ from datetime import datetime
 from pathlib import Path
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFileDialog, QGridLayout,
-                             QHBoxLayout, QInputDialog, QLabel, QLineEdit, QPlainTextEdit,
-                             QPushButton, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QGridLayout,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QPlainTextEdit,
+    QTextEdit,
+    QVBoxLayout,
+)
 
 from .. import config
 from ..services import institutions as INST
 from ..services import merge as M
 from ..services import provisioning as P
-from ..services import transfer as T
 from . import dialogs_import as DI
-from .dialogs_credentials import CredentialsDialog
-from .dialogs_export import export_for_center
 from . import theme
 from . import widgets as W
+from .dialogs_credentials import CredentialsDialog
+from .dialogs_export import export_for_center
 
-COLUMNS = [("المؤسسة", 230, "name"), ("الرمز", 80, "code"), ("النوع", 120, "kind"),
-           ("المستخدم المرتبط", 130, "username"), ("الموظفون", 80, "employees"),
-           ("آخر استيراد", 150, "last_import_at"), ("أرسلت هذا الشهر", 120, "reported"),
-           ("مُفعّلة", 80, "active")]
+COLUMNS = [
+    ("المؤسسة", 230, "name"),
+    ("الرمز", 80, "code"),
+    ("النوع", 120, "kind"),
+    ("المستخدم المرتبط", 130, "username"),
+    ("الموظفون", 80, "employees"),
+    ("آخر استيراد", 150, "last_import_at"),
+    ("أرسلت هذا الشهر", 120, "reported"),
+    ("مُفعّلة", 80, "active"),
+]
 
 
 # ---------------------------------------------------------------------------
@@ -87,13 +103,19 @@ class InstitutionDialog(QDialog):
         self.e_password.setPlaceholderText("كلمة المرور الموحّدة")
         self.e_password.setEnabled(False)
         self.cb_password.currentIndexChanged.connect(
-            lambda: self.e_password.setEnabled(self.cb_password.currentData() == "unified"))
+            lambda: self.e_password.setEnabled(self.cb_password.currentData() == "unified")
+        )
 
         rows = [
-            ("اسم المؤسسة *", self.e_name), ("الرمز", self.e_code), ("النوع", self.cb_kind),
-            ("المدير/المسؤول", self.e_manager), ("الهاتف", self.e_phone),
-            ("العنوان", self.e_address), ("ملاحظات", self.e_notes),
-            ("اسم المستخدم", self.e_username), ("الحالة", self.chk_active),
+            ("اسم المؤسسة *", self.e_name),
+            ("الرمز", self.e_code),
+            ("النوع", self.cb_kind),
+            ("المدير/المسؤول", self.e_manager),
+            ("الهاتف", self.e_phone),
+            ("العنوان", self.e_address),
+            ("ملاحظات", self.e_notes),
+            ("اسم المستخدم", self.e_username),
+            ("الحالة", self.chk_active),
         ]
         for index, (label, widget) in enumerate(rows):
             grid.addWidget(QLabel(label), index, 0)
@@ -106,7 +128,8 @@ class InstitutionDialog(QDialog):
         layout.addWidget(card)
 
         self.lbl_hint = W.muted_label(
-            "المستخدم المرتبط يرى موظفي مؤسسته فقط ويستطيع تصدير ملف نقل ليستورده المركز.")
+            "المستخدم المرتبط يرى موظفي مؤسسته فقط ويستطيع تصدير ملف نقل ليستورده المركز."
+        )
         layout.addWidget(self.lbl_hint)
 
         buttons = QHBoxLayout()
@@ -136,8 +159,11 @@ class InstitutionDialog(QDialog):
             W.warn(self, "اسم المؤسسة إلزامي.")
             return
         existing = self.ctx.db.get_institution(name)
-        if existing is None and self.institution is None and name in {
-                item.name for item in self.ctx.db.list_institutions()}:
+        if (
+            existing is None
+            and self.institution is None
+            and name in {item.name for item in self.ctx.db.list_institutions()}
+        ):
             W.warn(self, "توجد مؤسسة بهذا الاسم.")
             return
         data = {
@@ -162,9 +188,9 @@ class InstitutionDialog(QDialog):
                 W.warn(self, "أدخل كلمة المرور الموحّدة أو اختر التوليد التلقائي.")
                 return
             account, plain = INST.create_user_for_institution(
-                self.ctx.db, institution, password=password, user=self.ctx.user())
-            self.created_user = {"institution": name, "username": account.username,
-                                 "password": plain}
+                self.ctx.db, institution, password=password, user=self.ctx.user()
+            )
+            self.created_user = {"institution": name, "username": account.username, "password": plain}
         self.result_data = data
         self.accept()
 
@@ -221,7 +247,8 @@ class ImportInstitutionsDialog(QDialog):
         self.e_password.setEchoMode(QLineEdit.EchoMode.Password)
         self.e_password.setEnabled(False)
         self.cb_password.currentIndexChanged.connect(
-            lambda: self.e_password.setEnabled(self.cb_password.currentData() == "unified"))
+            lambda: self.e_password.setEnabled(self.cb_password.currentData() == "unified")
+        )
         self.chk_update = QCheckBox("تحديث المؤسسات الموجودة")
         self.chk_update.setChecked(True)
         options.addWidget(self.chk_users)
@@ -245,7 +272,7 @@ class ImportInstitutionsDialog(QDialog):
     def _load(self) -> None:
         try:
             self.headers, self.rows = INST.read_excel(self.path)
-        except Exception as exc:                      # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             W.error(self, f"تعذّر قراءة الملف: {exc}")
             self.reject()
             return
@@ -256,13 +283,14 @@ class ImportInstitutionsDialog(QDialog):
             if target:
                 combo.setCurrentText(target)
             combo.currentTextChanged.connect(self._refresh_preview)
-        self.lbl_summary.setText(
-            f"عدد الصفوف: {len(self.rows)} | الأعمدة المكتشفة: {len(self.headers)}")
+        self.lbl_summary.setText(f"عدد الصفوف: {len(self.rows)} | الأعمدة المكتشفة: {len(self.headers)}")
         self._refresh_preview()
 
     def _current_mapping(self) -> dict[str, str]:
-        return {key: (combo.currentText() if combo.currentIndex() > 0 else "")
-                for key, combo in self.combos.items()}
+        return {
+            key: (combo.currentText() if combo.currentIndex() > 0 else "")
+            for key, combo in self.combos.items()
+        }
 
     def _refresh_preview(self) -> None:
         mapping = self._current_mapping()
@@ -274,10 +302,14 @@ class ImportInstitutionsDialog(QDialog):
             issues = INST.validate_row(row, existing, seen)
             seen.add(row["name"])
             notes = " ".join(issue.message for issue in issues)
-            users = "مستخدم جديد" if self.chk_users.isChecked() and row["name"] not in existing \
+            users = (
+                "مستخدم جديد"
+                if self.chk_users.isChecked() and row["name"] not in existing
                 else ("تحديث" if row["name"] in existing else "")
-            lines.append(f"{index}. {row['name'] or '(بلا اسم)'} | {row['code']} | {row['kind']}"
-                         f" | {users} {notes}")
+            )
+            lines.append(
+                f"{index}. {row['name'] or '(بلا اسم)'} | {row['code']} | {row['kind']} | {users} {notes}"
+            )
         if len(self.rows) > 12:
             lines.append(f"… وبقية {len(self.rows) - 12} صفاً")
         self.preview.setPlainText("\n".join(lines))
@@ -289,9 +321,15 @@ class ImportInstitutionsDialog(QDialog):
             W.warn(self, "أدخل كلمة المرور الموحّدة.")
             return
         self.result = INST.import_from_rows(
-            self.ctx.db, self.rows, self._current_mapping(), user=self.ctx.user(),
-            create_users=self.chk_users.isChecked(), password_mode=mode,
-            unified_password=password, update_existing=self.chk_update.isChecked())
+            self.ctx.db,
+            self.rows,
+            self._current_mapping(),
+            user=self.ctx.user(),
+            create_users=self.chk_users.isChecked(),
+            password_mode=mode,
+            unified_password=password,
+            update_existing=self.chk_update.isChecked(),
+        )
         self.accept()
 
 
@@ -392,18 +430,31 @@ class InstitutionsDialog(QDialog):
             if mode == "inactive" and item["active"]:
                 continue
             rows.append(item)
-        self.table.set_rows([[item["name"], item["code"], item["kind"],
-                              item.get("username") or "",
-                              item["employees"], item["last_import_at"] or "—",
-                              "نعم" if item["reported_this_month"] else "لا",
-                              "نعم" if item["active"] else "لا"] for item in rows])
+        self.table.set_rows(
+            [
+                [
+                    item["name"],
+                    item["code"],
+                    item["kind"],
+                    item.get("username") or "",
+                    item["employees"],
+                    item["last_import_at"] or "—",
+                    "نعم" if item["reported_this_month"] else "لا",
+                    "نعم" if item["active"] else "لا",
+                ]
+                for item in rows
+            ]
+        )
         total = len(status)
-        pending = len([item for item in status
-                       if not item["reported_this_month"] and not item["is_center"]
-                       and item["active"]])
+        pending = len(
+            [
+                item
+                for item in status
+                if not item["reported_this_month"] and not item["is_center"] and item["active"]
+            ]
+        )
         employees = self.ctx.db.stats()["employees"]
-        self.lbl_summary.setText(
-            f"المؤسسات: {total} | الموظفون: {employees} | لم تُرسل هذا الشهر: {pending}")
+        self.lbl_summary.setText(f"المؤسسات: {total} | الموظفون: {employees} | لم تُرسل هذا الشهر: {pending}")
 
     def _selected_name(self) -> str:
         row = self.table.current_row()
@@ -420,17 +471,23 @@ class InstitutionsDialog(QDialog):
     # -- عمليات --------------------------------------------------------
     def _show_credentials(self, institution, username: str, password: str) -> None:
         CredentialsDialog(
-            self, self.ctx, institution=institution.name, code=institution.code,
-            username=username, password=password,
-            role_label=config.ROLE_LABELS.get("editor", "مدخل بيانات")).exec()
+            self,
+            self.ctx,
+            institution=institution.name,
+            code=institution.code,
+            username=username,
+            password=password,
+            role_label=config.ROLE_LABELS.get("editor", "مدخل بيانات"),
+        ).exec()
 
     def _add(self) -> None:
         dialog = InstitutionDialog(self, self.ctx)
         if dialog.exec() and dialog.created_user:
             institution = self.ctx.db.get_institution(dialog.created_user["institution"])
             if institution:
-                self._show_credentials(institution, dialog.created_user["username"],
-                                       dialog.created_user["password"])
+                self._show_credentials(
+                    institution, dialog.created_user["username"], dialog.created_user["password"]
+                )
         self._refresh()
 
     def _edit(self) -> None:
@@ -444,8 +501,9 @@ class InstitutionsDialog(QDialog):
         dialog = InstitutionDialog(self, self.ctx, institution)
         if dialog.exec() and dialog.created_user:
             refreshed = self.ctx.db.get_institution(name) or institution
-            self._show_credentials(refreshed, dialog.created_user["username"],
-                                   dialog.created_user["password"])
+            self._show_credentials(
+                refreshed, dialog.created_user["username"], dialog.created_user["password"]
+            )
         self._refresh()
 
     def _delete(self) -> None:
@@ -453,8 +511,10 @@ class InstitutionsDialog(QDialog):
         if not name:
             W.warn(self, "حدد مؤسسة أولاً.")
             return
-        if not W.confirm(self, f"حذف المؤسسة «{name}» ومستخدمها المرتبط؟\n\n"
-                               "لا يمكن التراجع، ولا يمكن الحذف إن كان لها موظفون."):
+        if not W.confirm(
+            self,
+            f"حذف المؤسسة «{name}» ومستخدمها المرتبط؟\n\nلا يمكن التراجع، ولا يمكن الحذف إن كان لها موظفون.",
+        ):
             return
         ok, message = self.ctx.db.delete_institution(name, user=self.ctx.user())
         (W.info if ok else W.warn)(self, message)
@@ -468,67 +528,72 @@ class InstitutionsDialog(QDialog):
         institution = self.ctx.db.get_institution(name)
         if institution is None:
             return
-        if not W.confirm(self, f"إنشاء/تصفير مستخدم المؤسسة «{name}»؟\n\n"
-                               "ستُنشأ كلمة مرور جديدة تُعرض مرة واحدة."):
+        if not W.confirm(
+            self, f"إنشاء/تصفير مستخدم المؤسسة «{name}»؟\n\nستُنشأ كلمة مرور جديدة تُعرض مرة واحدة."
+        ):
             return
-        account, password = INST.create_user_for_institution(self.ctx.db, institution,
-                                                             user=self.ctx.user())
+        account, password = INST.create_user_for_institution(self.ctx.db, institution, user=self.ctx.user())
         self._show_credentials(institution, account.username, password)
         self._refresh()
 
     def _open_users(self) -> None:
         from . import dialogs_admin
+
         dialogs_admin.UsersDialog(self, self.ctx).exec()
 
     def _export_excel(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "تصدير المؤسسات", "المؤسسات.xlsx",
-                                              "Excel (*.xlsx)")
+        path, _ = QFileDialog.getSaveFileName(self, "تصدير المؤسسات", "المؤسسات.xlsx", "Excel (*.xlsx)")
         if not path:
             return
         try:
             output = INST.export_excel(path, self.ctx.db)
-        except Exception as exc:                      # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             W.error(self, f"تعذّر التصدير: {exc}")
             return
         if W.confirm(self, f"تم التصدير إلى:\n{output}\n\nهل تريد فتحه الآن؟"):
             W.open_path(self, output)
 
     def _template(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "قالب استيراد المؤسسات",
-                                              "قالب_المؤسسات.xlsx", "Excel (*.xlsx)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "قالب استيراد المؤسسات", "قالب_المؤسسات.xlsx", "Excel (*.xlsx)"
+        )
         if not path:
             return
         try:
             output = INST.export_template(path)
-        except Exception as exc:                      # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             W.error(self, f"تعذّر إنشاء القالب: {exc}")
             return
         W.info(self, f"أُنشئ القالب: {output}")
 
     def _import_excel(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "استيراد مؤسسات من Excel", "",
-                                              "Excel (*.xlsx *.xlsm)")
+        path, _ = QFileDialog.getOpenFileName(self, "استيراد مؤسسات من Excel", "", "Excel (*.xlsx *.xlsm)")
         if not path:
             return
         dialog = ImportInstitutionsDialog(self, self.ctx, Path(path))
         if dialog.exec() and dialog.result:
             result = dialog.result
-            lines = [f"أُضيفت: {result['added']}", f"حُدِّثت: {result['updated']}",
-                     f"تُجوهلت: {result['skipped']}"]
+            lines = [
+                f"أُضيفت: {result['added']}",
+                f"حُدِّثت: {result['updated']}",
+                f"تُجوهلت: {result['skipped']}",
+            ]
             if result["users"]:
                 lines.append("")
                 lines.append("المستخدمون المُنشأون:")
-                lines.extend(f"  • {item['institution']} — {item['username']} / "
-                             f"{item['password']}" for item in result["users"][:40])
+                lines.extend(
+                    f"  • {item['institution']} — {item['username']} / {item['password']}"
+                    for item in result["users"][:40]
+                )
             if result["errors"]:
                 lines.append("")
                 lines.extend("⚠ " + error for error in result["errors"][:15])
             if result["users"] and W.confirm(
-                    self, "\n".join(lines) + "\n\nهل تريد حفظ بيانات الدخول في ملف Excel؟",
-                    "نتيجة الاستيراد"):
-                target, _ = QFileDialog.getSaveFileName(self, "حفظ بيانات الدخول",
-                                                        "بيانات_دخول_المؤسسات.xlsx",
-                                                        "Excel (*.xlsx)")
+                self, "\n".join(lines) + "\n\nهل تريد حفظ بيانات الدخول في ملف Excel؟", "نتيجة الاستيراد"
+            ):
+                target, _ = QFileDialog.getSaveFileName(
+                    self, "حفظ بيانات الدخول", "بيانات_دخول_المؤسسات.xlsx", "Excel (*.xlsx)"
+                )
                 if target:
                     INST.export_credentials(target, result["users"])
                     W.open_path(self, target)
@@ -564,32 +629,35 @@ class InstitutionsDialog(QDialog):
             W.warn(self, "لا يمكن تجهيز نسخة لمؤسسة مركز الدائرة نفسها.")
             return
         admin_password, ok = QInputDialog.getText(
-            self, "نسخة المؤسسة",
-            "كلمة مرور admin للصيانة في هذه النسخة:\n"
-            "(تُحفظ كبصمة فقط، ولا تُكتب في ملفات الحزمة)",
-            QLineEdit.EchoMode.Password)
+            self,
+            "نسخة المؤسسة",
+            "كلمة مرور admin للصيانة في هذه النسخة:\n(تُحفظ كبصمة فقط، ولا تُكتب في ملفات الحزمة)",
+            QLineEdit.EchoMode.Password,
+        )
         if not ok or not admin_password:
             return
         if len(admin_password) < 8:
-            if not W.confirm(self, "كلمة مرور الصيانة قصيرة (أقل من 8 أحرف).\n"
-                                   "هل تريد المتابعة على أي حال؟"):
+            if not W.confirm(self, "كلمة مرور الصيانة قصيرة (أقل من 8 أحرف).\nهل تريد المتابعة على أي حال؟"):
                 return
         if not W.confirm(
-                self,
-                f"سيُجهَّز مجلد كامل للمؤسسة «{name}» يحوي:\n"
-                "• نسخة البرنامج (AMDH-Leave.exe و_internal)\n"
-                "• قاعدة بيانات مؤسستها + admin + مستخدمها\n"
-                "• مفتاح فتح تلقائي + مرفقات + بيانات دخول\n\n"
-                "وسيُصفَّر مستخدم المؤسسة الحالي وتُعرض كلمة مروره الجديدة مرة واحدة.\n"
-                "متابعة؟", "تجهيز نسخة المؤسسة"):
+            self,
+            f"سيُجهَّز مجلد كامل للمؤسسة «{name}» يحوي:\n"
+            "• نسخة البرنامج (AMDH-Leave.exe و_internal)\n"
+            "• قاعدة بيانات مؤسستها + admin + مستخدمها\n"
+            "• مفتاح فتح تلقائي + مرفقات + بيانات دخول\n\n"
+            "وسيُصفَّر مستخدم المؤسسة الحالي وتُعرض كلمة مروره الجديدة مرة واحدة.\n"
+            "متابعة؟",
+            "تجهيز نسخة المؤسسة",
+        ):
             return
         parent = QFileDialog.getExistingDirectory(self, "اختر مجلداً لحزمة المؤسسة")
         if not parent:
             return
         try:
             account, user_password = INST.create_user_for_institution(
-                self.ctx.db, institution, user=self.ctx.user())
-        except Exception as exc:                      # noqa: BLE001
+                self.ctx.db, institution, user=self.ctx.user()
+            )
+        except Exception as exc:  # noqa: BLE001
             W.error(self, f"تعذّر إنشاء مستخدم المؤسسة: {exc}")
             return
         code = (institution.code or "INST").replace(" ", "_")
@@ -600,29 +668,53 @@ class InstitutionsDialog(QDialog):
             suffix += 1
         try:
             result = P.build_institution_folder(
-                self.ctx, name, folder, admin_password=admin_password,
-                user_password=user_password, include_program=True, make_zip=True)
-        except Exception as exc:                      # noqa: BLE001
-            W.error(self, f"تعذّر تجهيز الحزمة: {exc}\n\n"
-                          f"مستخدم المؤسسة: {account.username}\nكلمة المرور: {user_password}")
+                self.ctx,
+                name,
+                folder,
+                admin_password=admin_password,
+                user_password=user_password,
+                include_program=True,
+                make_zip=True,
+            )
+        except Exception as exc:  # noqa: BLE001
+            W.error(
+                self,
+                f"تعذّر تجهيز الحزمة: {exc}\n\n"
+                f"مستخدم المؤسسة: {account.username}\nكلمة المرور: {user_password}",
+            )
             return
         try:
             package_file = result.get("zip") or result.get("folder")
             file_name = Path(package_file).name if package_file else ""
             self.ctx.db.add_vault_entry(
-                kind="institution_key", label=f"مفتاح نسخة {name}", institution=name,
-                file_name=file_name, file_path=str(result.get("folder", "")),
-                password=result["key"], note="مفتاح فتح تلقائي لنسخة المؤسسة.",
-                user=self.ctx.user())
+                kind="institution_key",
+                label=f"مفتاح نسخة {name}",
+                institution=name,
+                file_name=file_name,
+                file_path=str(result.get("folder", "")),
+                password=result["key"],
+                note="مفتاح فتح تلقائي لنسخة المؤسسة.",
+                user=self.ctx.user(),
+            )
             self.ctx.db.add_vault_entry(
-                kind="maintenance", label=f"admin — {name}", institution=name,
-                file_name=file_name, password=admin_password,
-                note="كلمة مرور حساب الصيانة في نسخة المؤسسة.", user=self.ctx.user())
+                kind="maintenance",
+                label=f"admin — {name}",
+                institution=name,
+                file_name=file_name,
+                password=admin_password,
+                note="كلمة مرور حساب الصيانة في نسخة المؤسسة.",
+                user=self.ctx.user(),
+            )
             self.ctx.db.add_vault_entry(
-                kind="institution_user", label=result["username"], institution=name,
-                file_name=file_name, password=result["password"],
-                note="حساب مدخل البيانات في نسخة المؤسسة.", user=self.ctx.user())
-        except Exception:                             # noqa: BLE001
+                kind="institution_user",
+                label=result["username"],
+                institution=name,
+                file_name=file_name,
+                password=result["password"],
+                note="حساب مدخل البيانات في نسخة المؤسسة.",
+                user=self.ctx.user(),
+            )
+        except Exception:  # noqa: BLE001
             pass
         lines = [
             f"تم تجهيز نسخة المؤسسة: {name}",
@@ -630,17 +722,19 @@ class InstitutionsDialog(QDialog):
         ]
         if result.get("zip"):
             lines.append(f"ملف ZIP: {result['zip']}")
-        lines.extend([
-            "",
-            f"اسم المستخدم: {result['username']}",
-            f"كلمة المرور: {result['password']}",
-            f"الموظفون: {result['counts']['employees']} | "
-            f"الإجازات: {result['counts']['leaves']} | "
-            f"المرفقات: {result['counts']['attachments']}",
-            "",
-            "حساب admin في النسخة يستخدم كلمة مرور الصيانة التي أدخلتها، وهي غير مكتوبة في الحزمة.",
-            "سلّم بيانات_الدخول.txt مع الحزمة، واحفظ كلمة مرور admin في مكان آمن.",
-        ])
+        lines.extend(
+            [
+                "",
+                f"اسم المستخدم: {result['username']}",
+                f"كلمة المرور: {result['password']}",
+                f"الموظفون: {result['counts']['employees']} | "
+                f"الإجازات: {result['counts']['leaves']} | "
+                f"المرفقات: {result['counts']['attachments']}",
+                "",
+                "حساب admin في النسخة يستخدم كلمة مرور الصيانة التي أدخلتها، وهي غير مكتوبة في الحزمة.",
+                "سلّم بيانات_الدخول.txt مع الحزمة، واحفظ كلمة مرور admin في مكان آمن.",
+            ]
+        )
         W.info(self, "\n".join(lines), "نسخة المؤسسة")
         self._refresh()
 
@@ -654,7 +748,7 @@ class InstitutionsDialog(QDialog):
             return
         record = self.ctx.db.last_import_for(name)
         if record is None:
-            W.info(self, f"لا يوجد سجل استيراد لهذه المؤسسة بعد.")
+            W.info(self, "لا يوجد سجل استيراد لهذه المؤسسة بعد.")
             return
         report = M.MergeReport.from_json(record.report)
         if not report.source_file:
@@ -667,8 +761,9 @@ class InstitutionsDialog(QDialog):
         if not pending:
             W.info(self, "كل المؤسسات أرسلت بياناتها هذا الشهر. ✅")
             return
-        lines = [f"المؤسسات التي لم تُرسل بياناتها في شهر "
-                 f"{INST.month_label()} ({len(pending)}):", ""]
-        lines.extend(f"  • {item['name']} ({item['code']}) — آخر استيراد: "
-                     f"{item['last_import_at'] or 'لا يوجد'}" for item in pending)
+        lines = [f"المؤسسات التي لم تُرسل بياناتها في شهر {INST.month_label()} ({len(pending)}):", ""]
+        lines.extend(
+            f"  • {item['name']} ({item['code']}) — آخر استيراد: {item['last_import_at'] or 'لا يوجد'}"
+            for item in pending
+        )
         W.warn(self, "\n".join(lines), "المتابعة الشهرية")

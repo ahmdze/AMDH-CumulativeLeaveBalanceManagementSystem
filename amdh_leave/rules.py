@@ -29,20 +29,20 @@ def _as_int(value, default: int = 0) -> int:
 @dataclass
 class LeaveRule:
     type: str
-    consumes_balance: bool = True      # يُخصم من الرصيد السنوي
-    service_exclusion: bool = False    # يُستبعد من أيام الخدمة (مثل إجازة 5 سنوات)
-    count_mode: str = "calendar"       # calendar | working
-    quota_days: int = 0                # 0 = بلا سقف
-    quota_period: str = "none"         # none | year | service
+    consumes_balance: bool = True  # يُخصم من الرصيد السنوي
+    service_exclusion: bool = False  # يُستبعد من أيام الخدمة (مثل إجازة 5 سنوات)
+    count_mode: str = "calendar"  # calendar | working
+    quota_days: int = 0  # 0 = بلا سقف
+    quota_period: str = "none"  # none | year | service
     requires_order: bool = False
     is_adjustment: bool = False
-    gender: str = ""                   # "" = للجميع
+    gender: str = ""  # "" = للجميع
     order_index: int = 0
     active: bool = True
     notes: str = ""
 
     @classmethod
-    def from_mapping(cls, m) -> "LeaveRule":
+    def from_mapping(cls, m) -> LeaveRule:
         return cls(
             type=str(m.get("type") or ""),
             consumes_balance=_as_bool(m.get("consumes_balance"), True),
@@ -99,7 +99,7 @@ _FALLBACK_RULE = LeaveRule(type="غير محددة")
 class Policy:
     days_per_leave: int = config.DAYS_PER_LEAVE
     max_annual: int = config.MAX_ANNUAL
-    enforce_annual_cap: bool = False   # لا يُفرض السقف إلا بتفعيل صريح
+    enforce_annual_cap: bool = False  # لا يُفرض السقف إلا بتفعيل صريح
     basis: str = config.BASIS_CONTINUOUS
     expiry_years: int = 0
     carryover_cap: int = 0
@@ -116,12 +116,13 @@ class Policy:
     weekend: tuple[int, ...] = config.DEFAULT_WEEKEND
     holidays: set[date] = field(default_factory=set)
     rules: dict[str, LeaveRule] = field(default_factory=default_rules)
-    read_only: bool = False   # للمستخدم المطّلع فقط
+    read_only: bool = False  # للمستخدم المطّلع فقط
 
     # -- بناء من app_meta ---------------------------------------------------
     @classmethod
-    def from_meta(cls, meta: dict, rules: dict[str, LeaveRule] | None = None,
-                  holidays: set[date] | None = None) -> "Policy":
+    def from_meta(
+        cls, meta: dict, rules: dict[str, LeaveRule] | None = None, holidays: set[date] | None = None
+    ) -> Policy:
         d = config.DEFAULT_POLICY
         weekend_raw = str(meta.get("weekend", ",".join(str(x) for x in config.DEFAULT_WEEKEND)))
         weekend: list[int] = []
@@ -138,7 +139,9 @@ class Policy:
             carryover_cap=max(0, _as_int(meta.get("carryover_cap"), d["carryover_cap"])),
             allow_negative_balance=_as_bool(meta.get("allow_negative_balance"), True),
             warn_negative_balance=_as_bool(meta.get("warn_negative_balance"), False),
-            warn_leaving_soon_days=max(0, _as_int(meta.get("warn_leaving_soon_days"), d["warn_leaving_soon_days"])),
+            warn_leaving_soon_days=max(
+                0, _as_int(meta.get("warn_leaving_soon_days"), d["warn_leaving_soon_days"])
+            ),
             low_balance_days=_as_int(meta.get("low_balance_days"), d["low_balance_days"]),
             first_day_of_week=_as_int(meta.get("first_day_of_week"), d["first_day_of_week"]),
             auth_enabled=_as_bool(meta.get("auth_enabled"), False),
@@ -179,7 +182,8 @@ class Policy:
     def types_for_gender(self, gender: str, include_adjustment: bool = False) -> list[str]:
         gender = gender or "ذكر"
         items = [
-            r for r in self.rules.values()
+            r
+            for r in self.rules.values()
             if r.active and (r.gender in ("", gender)) and (include_adjustment or not r.is_adjustment)
         ]
         items.sort(key=lambda r: (r.is_adjustment, r.order_index, r.type))
@@ -199,7 +203,7 @@ class Policy:
     def annual_rate_note(self) -> str:
         return f"يوم إجازة لكل {self.days_per_leave} أيام دوام  |  المعدل السنوي {self.max_annual} يوم"
 
-    def with_rule(self, rule: LeaveRule) -> "Policy":
+    def with_rule(self, rule: LeaveRule) -> Policy:
         rules = dict(self.rules)
         rules[rule.type] = rule
         return replace(self, rules=rules)

@@ -17,7 +17,7 @@ from . import dates as D
 @dataclass
 class Alert:
     kind: str
-    severity: str           # high | medium | info
+    severity: str  # high | medium | info
     message: str
     emp_id: str = ""
     name: str = ""
@@ -30,8 +30,7 @@ SEVERITY_LABELS = {"high": "مهم", "medium": "متوسط", "info": "معلوم
 SEVERITY_ORDER = {"high": 0, "medium": 1, "info": 2}
 
 
-def collect_alerts(employees: list[Employee], policy: Policy,
-                   today: date | None = None) -> list[Alert]:
+def collect_alerts(employees: list[Employee], policy: Policy, today: date | None = None) -> list[Alert]:
     today = today or date.today()
     alerts: list[Alert] = []
     ahead = policy.warn_leaving_soon_days
@@ -42,31 +41,68 @@ def collect_alerts(employees: list[Employee], policy: Policy,
         bal = B.compute_balance(emp, emp.leaves, policy, today)
 
         if bal.extra.get("no_start_date"):
-            alerts.append(Alert("missing_data", "medium", "لا يوجد تاريخ مباشرة — تعذّر حساب الرصيد",
-                                emp.emp_id, emp.name, emp.institution))
+            alerts.append(
+                Alert(
+                    "missing_data",
+                    "medium",
+                    "لا يوجد تاريخ مباشرة — تعذّر حساب الرصيد",
+                    emp.emp_id,
+                    emp.name,
+                    emp.institution,
+                )
+            )
         elif bal.balance < 0:
-            alerts.append(Alert(
-                "negative_balance", "info",
-                f"الرصيد سالب ({bal.balance} يوم) — مسموح حسب الضوابط الإدارية",
-                emp.emp_id, emp.name, emp.institution))
+            alerts.append(
+                Alert(
+                    "negative_balance",
+                    "info",
+                    f"الرصيد سالب ({bal.balance} يوم) — مسموح حسب الضوابط الإدارية",
+                    emp.emp_id,
+                    emp.name,
+                    emp.institution,
+                )
+            )
         elif bal.balance <= policy.low_balance_days:
-            alerts.append(Alert("low_balance", "medium",
-                                f"رصيد منخفض ({bal.balance} يوم)",
-                                emp.emp_id, emp.name, emp.institution))
+            alerts.append(
+                Alert(
+                    "low_balance",
+                    "medium",
+                    f"رصيد منخفض ({bal.balance} يوم)",
+                    emp.emp_id,
+                    emp.name,
+                    emp.institution,
+                )
+            )
 
         if emp.end_date and 0 <= (emp.end_date - today).days <= 30:
-            alerts.append(Alert("service_ending", "medium",
-                                f"انتهاء الخدمة بعد {(emp.end_date - today).days} يوم "
-                                f"({D.to_iso(emp.end_date)})",
-                                emp.emp_id, emp.name, emp.institution, emp.end_date))
+            alerts.append(
+                Alert(
+                    "service_ending",
+                    "medium",
+                    f"انتهاء الخدمة بعد {(emp.end_date - today).days} يوم ({D.to_iso(emp.end_date)})",
+                    emp.emp_id,
+                    emp.name,
+                    emp.institution,
+                    emp.end_date,
+                )
+            )
 
         for lv in emp.leaves:
             if lv.is_deleted:
                 continue
             if lv.status == "pending":
-                alerts.append(Alert("pending", "medium",
-                                    f"إجازة «{lv.type}» قيد الانتظار ({D.to_iso(lv.start_date)})",
-                                    emp.emp_id, emp.name, emp.institution, lv.start_date, lv.id))
+                alerts.append(
+                    Alert(
+                        "pending",
+                        "medium",
+                        f"إجازة «{lv.type}» قيد الانتظار ({D.to_iso(lv.start_date)})",
+                        emp.emp_id,
+                        emp.name,
+                        emp.institution,
+                        lv.start_date,
+                        lv.id,
+                    )
+                )
                 continue
             if lv.status == "rejected" or B.is_service_exclusion(policy, lv):
                 continue
@@ -76,13 +112,31 @@ def collect_alerts(employees: list[Employee], policy: Policy,
             remaining = (end - today).days
             if 0 <= remaining <= ahead:
                 when = "تنتهي اليوم" if remaining == 0 else f"تنتهي بعد {remaining} يوم"
-                alerts.append(Alert("ending_soon", "medium",
-                                    f"إجازة «{lv.type}» {when} (حتى {D.to_iso(end)})",
-                                    emp.emp_id, emp.name, emp.institution, end, lv.id))
+                alerts.append(
+                    Alert(
+                        "ending_soon",
+                        "medium",
+                        f"إجازة «{lv.type}» {when} (حتى {D.to_iso(end)})",
+                        emp.emp_id,
+                        emp.name,
+                        emp.institution,
+                        end,
+                        lv.id,
+                    )
+                )
             if start == today:
-                alerts.append(Alert("started_today", "info",
-                                    f"بدء إجازة «{lv.type}» اليوم حتى {D.to_iso(end)}",
-                                    emp.emp_id, emp.name, emp.institution, start, lv.id))
+                alerts.append(
+                    Alert(
+                        "started_today",
+                        "info",
+                        f"بدء إجازة «{lv.type}» اليوم حتى {D.to_iso(end)}",
+                        emp.emp_id,
+                        emp.name,
+                        emp.institution,
+                        start,
+                        lv.id,
+                    )
+                )
 
     alerts.sort(key=lambda a: (SEVERITY_ORDER.get(a.severity, 9), a.name))
     return alerts
@@ -100,55 +154,58 @@ def alert_lines(alerts: list[Alert]) -> list[str]:
 # ---------------------------------------------------------------------------
 # التقارير
 # ---------------------------------------------------------------------------
-def global_report(employees: list[Employee], policy: Policy,
-                  today: date | None = None) -> list[dict]:
+def global_report(employees: list[Employee], policy: Policy, today: date | None = None) -> list[dict]:
     today = today or date.today()
     rows = []
     for emp in employees:
         if emp.is_deleted:
             continue
         bal = B.compute_balance(emp, emp.leaves, policy, today)
-        rows.append({
-            "emp_id": emp.emp_id,
-            "name": emp.name,
-            "job_title": emp.job_title,
-            "workplace": emp.workplace,
-            "institution": emp.institution,
-            "gender": emp.gender,
-            "start_date": D.to_iso(emp.start_date),
-            "raw_days": bal.raw_days,
-            "outside": bal.outside,
-            "net_days": bal.net_days,
-            "earned": bal.earned,
-            "taken": bal.taken,
-            "balance": bal.balance,
-            "leaves_count": len([lv for lv in emp.leaves if not lv.is_deleted]),
-            "notes": emp.notes,
-        })
+        rows.append(
+            {
+                "emp_id": emp.emp_id,
+                "name": emp.name,
+                "job_title": emp.job_title,
+                "workplace": emp.workplace,
+                "institution": emp.institution,
+                "gender": emp.gender,
+                "start_date": D.to_iso(emp.start_date),
+                "raw_days": bal.raw_days,
+                "outside": bal.outside,
+                "net_days": bal.net_days,
+                "earned": bal.earned,
+                "taken": bal.taken,
+                "balance": bal.balance,
+                "leaves_count": len([lv for lv in emp.leaves if not lv.is_deleted]),
+                "notes": emp.notes,
+            }
+        )
     rows.sort(key=lambda r: (-r["balance"], r["name"]))
     return rows
 
 
 def statement_rows(employee: Employee, policy: Policy, today: date | None = None) -> list[dict]:
     st = B.yearly_statement(employee, employee.leaves, policy, today)
-    return [{
-        "index": line.index,
-        "start": D.to_iso(line.start),
-        "end": D.to_iso(line.end),
-        "service_days": line.service_days,
-        "outside_days": line.outside_days,
-        "net_days": line.net_days,
-        "earned": line.earned,
-        "taken": line.taken,
-        "expired": line.expired,
-        "carry_in": line.carry_in,
-        "carry_out": line.carry_out,
-        "current": line.is_current,
-    } for line in st.lines]
+    return [
+        {
+            "index": line.index,
+            "start": D.to_iso(line.start),
+            "end": D.to_iso(line.end),
+            "service_days": line.service_days,
+            "outside_days": line.outside_days,
+            "net_days": line.net_days,
+            "earned": line.earned,
+            "taken": line.taken,
+            "expired": line.expired,
+            "carry_in": line.carry_in,
+            "carry_out": line.carry_out,
+            "current": line.is_current,
+        }
+        for line in st.lines
+    ]
 
 
-def dashboard_data(employees: list[Employee], policy: Policy,
-                   today: date | None = None) -> dict:
+def dashboard_data(employees: list[Employee], policy: Policy, today: date | None = None) -> dict:
     today = today or date.today()
     live = [e for e in employees if not e.is_deleted]
     rows = global_report(live, policy, today)
@@ -200,15 +257,24 @@ def dashboard_data(employees: list[Employee], policy: Policy,
         "by_institution": dict(sorted(by_institution.items(), key=lambda kv: -kv[1]["count"])),
         "by_type": dict(sorted(by_type.items(), key=lambda kv: -kv[1]["days"])),
         "monthly": monthly,
-        "on_leave": [{"emp_id": e.emp_id, "name": e.name, "institution": e.institution,
-                      "type": lv.type, "start": D.to_iso(lv.start_date),
-                      "end": D.to_iso(lv.end_date)} for e, lv in on_leave],
+        "on_leave": [
+            {
+                "emp_id": e.emp_id,
+                "name": e.name,
+                "institution": e.institution,
+                "type": lv.type,
+                "start": D.to_iso(lv.start_date),
+                "end": D.to_iso(lv.end_date),
+            }
+            for e, lv in on_leave
+        ],
         "year": today.year,
     }
 
 
-def calendar_month(employees: list[Employee], policy: Policy, year: int, month: int,
-                   first_day_of_week: int | None = None) -> dict:
+def calendar_month(
+    employees: list[Employee], policy: Policy, year: int, month: int, first_day_of_week: int | None = None
+) -> dict:
     """بيانات شبكة التقويم: كل يوم -> قائمة (موظف، إجازة)."""
     first_day_of_week = policy.first_day_of_week if first_day_of_week is None else first_day_of_week
     grid = D.month_grid(year, month, first_day_of_week)
@@ -227,12 +293,16 @@ def calendar_month(employees: list[Employee], policy: Policy, year: int, month: 
             while day <= hi:
                 per_day.setdefault(day, []).append((emp, lv))
                 day += timedelta(days=1)
-    return {"grid": grid, "per_day": per_day, "weekdays": D.weekday_labels(first_day_of_week),
-            "year": year, "month": month}
+    return {
+        "grid": grid,
+        "per_day": per_day,
+        "weekdays": D.weekday_labels(first_day_of_week),
+        "year": year,
+        "month": month,
+    }
 
 
-def advanced_statistics(employees: list[Employee], policy: Policy,
-                        today: date | None = None) -> dict:
+def advanced_statistics(employees: list[Employee], policy: Policy, today: date | None = None) -> dict:
     """إحصائيات متقدمة: متوسط الإجازات، أكثر الأنواع، التوزيع حسب المؤسسة، إلخ."""
     today = today or date.today()
     live = [e for e in employees if not e.is_deleted]
@@ -240,8 +310,11 @@ def advanced_statistics(employees: list[Employee], policy: Policy,
 
     if not rows:
         return {
-            "avg_balance": 0, "avg_taken": 0, "avg_earned": 0,
-            "most_used_type": "", "most_used_count": 0,
+            "avg_balance": 0,
+            "avg_taken": 0,
+            "avg_earned": 0,
+            "most_used_type": "",
+            "most_used_count": 0,
             "consumption_rate": 0,
             "by_institution_stats": {},
             "yearly_trend": [],

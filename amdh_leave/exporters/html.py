@@ -50,8 +50,14 @@ def esc(value) -> str:
 
 
 def _page(title: str, body: str, auto_print: bool = True) -> str:
-    script = ("<script>window.addEventListener('load',function(){"
-              "setTimeout(function(){window.print();},250);});</script>") if auto_print else ""
+    script = (
+        (
+            "<script>window.addEventListener('load',function(){"
+            "setTimeout(function(){window.print();},250);});</script>"
+        )
+        if auto_print
+        else ""
+    )
     return f"""<!DOCTYPE html>
 <html dir="rtl" lang="ar">
 <head>
@@ -63,7 +69,7 @@ def _page(title: str, body: str, auto_print: bool = True) -> str:
 <body>
 <div class="toolbar"><button onclick="window.print()">🖨 طباعة / حفظ PDF</button></div>
 {body}
-<p class="muted">تاريخ التقرير: {esc(date.today().strftime('%Y-%m-%d'))} — {esc(config.APP_NAME)}</p>
+<p class="muted">تاريخ التقرير: {esc(date.today().strftime("%Y-%m-%d"))} — {esc(config.APP_NAME)}</p>
 {script}
 </body>
 </html>"""
@@ -93,11 +99,14 @@ def save(content: str, reports_dir: Path, filename: str) -> Path:
 # ---------------------------------------------------------------------------
 # التقارير
 # ---------------------------------------------------------------------------
-def global_report_html(rows: list[dict], policy: Policy, title: str = "تقرير الأرصدة التراكمية",
-                       institution: str = "") -> str:
-    head = ("<tr><th>#</th><th>الرقم الوظيفي</th><th>الاسم</th><th>العنوان الوظيفي</th>"
-            "<th>مكان العمل</th><th>المؤسسة</th><th>أيام الخدمة</th><th>خارج الرصيد</th>"
-            "<th>الدوام المحسوبة</th><th>المستحقة</th><th>المأخوذة</th><th>الرصيد</th></tr>")
+def global_report_html(
+    rows: list[dict], policy: Policy, title: str = "تقرير الأرصدة التراكمية", institution: str = ""
+) -> str:
+    head = (
+        "<tr><th>#</th><th>الرقم الوظيفي</th><th>الاسم</th><th>العنوان الوظيفي</th>"
+        "<th>مكان العمل</th><th>المؤسسة</th><th>أيام الخدمة</th><th>خارج الرصيد</th>"
+        "<th>الدوام المحسوبة</th><th>المستحقة</th><th>المأخوذة</th><th>الرصيد</th></tr>"
+    )
     body_rows = []
     totals = {"raw": 0, "outside": 0, "net": 0, "earned": 0, "taken": 0, "balance": 0}
     for i, r in enumerate(rows, 1):
@@ -107,24 +116,40 @@ def global_report_html(rows: list[dict], policy: Policy, title: str = "تقري�
             f"<td>{esc(r['job_title'])}</td><td>{esc(r['workplace'])}</td><td>{esc(r['institution'])}</td>"
             f"<td>{r['raw_days']}</td><td>{r['outside']}</td><td>{r['net_days']}</td>"
             f"<td>{r['earned']}</td><td>{r['taken']}</td>"
-            f"<td class='{cls}'><b>{r['balance']}</b></td></tr>")
-        totals["raw"] += r["raw_days"]; totals["outside"] += r["outside"]
-        totals["net"] += r["net_days"]; totals["earned"] += r["earned"]
-        totals["taken"] += r["taken"]; totals["balance"] += r["balance"]
-    total_row = (f"<tr class='group'><td colspan='6'>الإجمالي ({len(rows)} موظف)</td>"
-                 f"<td>{totals['raw']}</td><td>{totals['outside']}</td><td>{totals['net']}</td>"
-                 f"<td>{totals['earned']}</td><td>{totals['taken']}</td>"
-                 f"<td><b>{totals['balance']}</b></td></tr>")
+            f"<td class='{cls}'><b>{r['balance']}</b></td></tr>"
+        )
+        totals["raw"] += r["raw_days"]
+        totals["outside"] += r["outside"]
+        totals["net"] += r["net_days"]
+        totals["earned"] += r["earned"]
+        totals["taken"] += r["taken"]
+        totals["balance"] += r["balance"]
+    total_row = (
+        f"<tr class='group'><td colspan='6'>الإجمالي ({len(rows)} موظف)</td>"
+        f"<td>{totals['raw']}</td><td>{totals['outside']}</td><td>{totals['net']}</td>"
+        f"<td>{totals['earned']}</td><td>{totals['taken']}</td>"
+        f"<td><b>{totals['balance']}</b></td></tr>"
+    )
     scope = f"<p class='muted'>النطاق: {esc(institution) if institution else 'كل المؤسسات'}</p>"
-    note = ("<p class='muted'>ملاحظة: الرصيد السالب مسموح حسب الضوابط الإدارية المعتمدة.</p>"
-            f"<p class='muted'>{esc(policy.annual_rate_note)}</p>")
-    body = (f"<h1>{esc(title)}</h1>{scope}<table><thead>{head}</thead><tbody>"
-            f"{''.join(body_rows)}{total_row}</tbody></table>{note}")
+    note = (
+        "<p class='muted'>ملاحظة: الرصيد السالب مسموح حسب الضوابط الإدارية المعتمدة.</p>"
+        f"<p class='muted'>{esc(policy.annual_rate_note)}</p>"
+    )
+    body = (
+        f"<h1>{esc(title)}</h1>{scope}<table><thead>{head}</thead><tbody>"
+        f"{''.join(body_rows)}{total_row}</tbody></table>{note}"
+    )
     return _page(title, body, auto_print=False)
 
 
-def employee_detail_html(employee: Employee, policy: Policy, balance, statement=None,
-                         attachments: list | None = None, auto_print: bool = True) -> str:
+def employee_detail_html(
+    employee: Employee,
+    policy: Policy,
+    balance,
+    statement=None,
+    attachments: list | None = None,
+    auto_print: bool = True,
+) -> str:
     leaves = [lv for lv in employee.leaves if not lv.is_deleted]
     rows = []
     for i, lv in enumerate(leaves, 1):
@@ -135,7 +160,8 @@ def employee_detail_html(employee: Employee, policy: Policy, balance, statement=
             f"<td>{lv.days_actual}</td><td>{esc('نعم' if B.is_service_exclusion(policy, lv) else 'لا')}</td>"
             f"<td>{esc(config.LEAVE_STATUS_LABELS.get(lv.status, lv.status))}</td>"
             f"<td>{esc(lv.order)}</td><td>{esc(D.to_iso(lv.order_date))}</td>"
-            f"<td>{esc(lv.reason)}</td><td>{esc(lv.added_date)}</td></tr>")
+            f"<td>{esc(lv.reason)}</td><td>{esc(lv.added_date)}</td></tr>"
+        )
     if not rows:
         rows.append("<tr><td colspan='12' class='muted'>لا توجد إجازات مسجلة</td></tr>")
 
@@ -160,14 +186,18 @@ def employee_detail_html(employee: Employee, policy: Policy, balance, statement=
     if balance.has_opening:
         info["الرصيد الافتتاحي"] = (
             f"{balance.opening_balance} يوم كما في {D.to_iso(balance.opening_date)}"
-            + (f" — حسبه: {balance.extra.get('opening_by')}"
-               if balance.extra.get("opening_by") else ""))
-    info_html = "".join(f"<div class='item'><label>{esc(k)}</label><span>{esc(v)}</span></div>"
-                        for k, v in info.items())
-    nums_html = "".join(f"<div class='item'><label>{esc(k)}</label><span>{v} يوم</span></div>"
-                        for k, v in nums.items())
-    nums_html += (f"<div class='item'><label>الرصيد المتبقي</label>"
-                  f"<span class='balance {bal_class}'>{balance.balance} يوم</span></div>")
+            + (f" — حسبه: {balance.extra.get('opening_by')}" if balance.extra.get("opening_by") else "")
+        )
+    info_html = "".join(
+        f"<div class='item'><label>{esc(k)}</label><span>{esc(v)}</span></div>" for k, v in info.items()
+    )
+    nums_html = "".join(
+        f"<div class='item'><label>{esc(k)}</label><span>{v} يوم</span></div>" for k, v in nums.items()
+    )
+    nums_html += (
+        f"<div class='item'><label>الرصيد المتبقي</label>"
+        f"<span class='balance {bal_class}'>{balance.balance} يوم</span></div>"
+    )
 
     st_html = ""
     if statement and statement.lines:
@@ -175,43 +205,54 @@ def employee_detail_html(employee: Employee, policy: Policy, balance, statement=
             f"<tr><td>{line.index}</td><td>{esc(D.to_iso(line.start))}</td><td>{esc(D.to_iso(line.end))}</td>"
             f"<td>{line.service_days}</td><td>{line.outside_days}</td><td>{line.net_days}</td>"
             f"<td>{line.earned}</td><td>{line.taken}</td><td>{line.expired}</td>"
-            f"<td>{line.carry_out}</td></tr>" for line in statement.lines)
-        st_html = (f"<h2>كشف الحساب السنوي</h2><table><thead><tr><th>سنة الخدمة</th><th>من</th><th>إلى</th>"
-                   f"<th>أيام الخدمة</th><th>خارج الرصيد</th><th>صافي الدوام</th><th>المستحق</th>"
-                   f"<th>المأخوذ</th><th>منتهي</th><th>الرصيد المرحّل</th></tr></thead><tbody>{srows}</tbody></table>"
-                   f"<p class='muted'>{esc(statement.policy_note)}</p>")
+            f"<td>{line.carry_out}</td></tr>"
+            for line in statement.lines
+        )
+        st_html = (
+            f"<h2>كشف الحساب السنوي</h2><table><thead><tr><th>سنة الخدمة</th><th>من</th><th>إلى</th>"
+            f"<th>أيام الخدمة</th><th>خارج الرصيد</th><th>صافي الدوام</th><th>المستحق</th>"
+            f"<th>المأخوذ</th><th>منتهي</th><th>الرصيد المرحّل</th></tr></thead><tbody>{srows}</tbody></table>"
+            f"<p class='muted'>{esc(statement.policy_note)}</p>"
+        )
 
     att_html = ""
     if attachments:
-        items = "".join(f"<li>{esc(a.filename)} <span class='muted'>({esc(a.added_at)})</span></li>"
-                        for a in attachments)
+        items = "".join(
+            f"<li>{esc(a.filename)} <span class='muted'>({esc(a.added_at)})</span></li>" for a in attachments
+        )
         att_html = f"<h2>المرفقات</h2><ul>{items}</ul>"
 
-    body = (f"<h1>البيانات التفصيلية لسجل الإجازات والرصيد التراكمي<br>"
-            f"{esc(employee.job_title)} - {esc(employee.name)}</h1>"
-            f"<div class='grid'>{info_html}</div>"
-            f"<h2>ملخص الرصيد</h2><div class='grid'>{nums_html}</div>"
-            f"{st_html}{att_html}"
-            f"<h2>سجل الإجازات</h2><table><thead><tr><th>#</th><th>النوع</th><th>من</th><th>إلى</th>"
-            f"<th>العدد</th><th>الأيام المؤثرة</th><th>خارج الرصيد</th><th>الحالة</th><th>الأمر</th>"
-            f"<th>تاريخ الأمر</th><th>السبب</th><th>تاريخ الإضافة</th></tr></thead>"
-            f"<tbody>{''.join(rows)}</tbody></table>"
-            f"<div class='signatures'><div>توقيع الموظف: ______________</div>"
-            f"<div>الموظف المسؤول: ______________</div></div>")
+    body = (
+        f"<h1>البيانات التفصيلية لسجل الإجازات والرصيد التراكمي<br>"
+        f"{esc(employee.job_title)} - {esc(employee.name)}</h1>"
+        f"<div class='grid'>{info_html}</div>"
+        f"<h2>ملخص الرصيد</h2><div class='grid'>{nums_html}</div>"
+        f"{st_html}{att_html}"
+        f"<h2>سجل الإجازات</h2><table><thead><tr><th>#</th><th>النوع</th><th>من</th><th>إلى</th>"
+        f"<th>العدد</th><th>الأيام المؤثرة</th><th>خارج الرصيد</th><th>الحالة</th><th>الأمر</th>"
+        f"<th>تاريخ الأمر</th><th>السبب</th><th>تاريخ الإضافة</th></tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+        f"<div class='signatures'><div>توقيع الموظف: ______________</div>"
+        f"<div>الموظف المسؤول: ______________</div></div>"
+    )
     return _page(f"سجل إجازات {employee.name}", body, auto_print=auto_print)
 
 
 def alerts_html(alerts: list, policy: Policy) -> str:
     from ..services.reports import SEVERITY_LABELS
+
     rows = "".join(
         f"<tr><td>{esc(SEVERITY_LABELS.get(a.severity, a.severity))}</td>"
         f"<td>{esc(a.name)}</td><td>{esc(a.institution)}</td><td>{esc(a.message)}</td></tr>"
-        for a in alerts)
+        for a in alerts
+    )
     if not rows:
         rows = "<tr><td colspan='4' class='muted'>لا توجد تنبيهات</td></tr>"
-    body = (f"<h1>تقرير الإشعارات والتنبيهات ({len(alerts)})</h1>"
-            f"<table><thead><tr><th>الأهمية</th><th>الموظف</th><th>المؤسسة</th><th>التنبيه</th></tr></thead>"
-            f"<tbody>{rows}</tbody></table>")
+    body = (
+        f"<h1>تقرير الإشعارات والتنبيهات ({len(alerts)})</h1>"
+        f"<table><thead><tr><th>الأهمية</th><th>الموظف</th><th>المؤسسة</th><th>التنبيه</th></tr></thead>"
+        f"<tbody>{rows}</tbody></table>"
+    )
     return _page("تقرير التنبيهات", body, auto_print=False)
 
 
@@ -230,15 +271,19 @@ def calendar_html(data: dict, policy: Policy, institution: str = "") -> str:
             items = per_day.get(day, [])
             weekend = D.is_weekend(day, policy.weekend)
             style = "background:#f1f5f9;" if weekend else ""
-            names = "<br>".join(f"{esc(e.name)} <span class='muted'>({esc(lv.type)})</span>"
-                                for e, lv in items)
-            cells.append(f"<td style='{style}vertical-align:top;text-align:right'>"
-                         f"<b>{day.day}</b><br>{names}</td>")
+            names = "<br>".join(
+                f"{esc(e.name)} <span class='muted'>({esc(lv.type)})</span>" for e, lv in items
+            )
+            cells.append(
+                f"<td style='{style}vertical-align:top;text-align:right'><b>{day.day}</b><br>{names}</td>"
+            )
         body_rows.append(f"<tr>{''.join(cells)}</tr>")
     title = f"تقويم الإجازات {data['month']:02d}/{data['year']}"
-    body = (f"<h1>{esc(title)}</h1>"
-            f"<p class='muted'>النطاق: {esc(institution) if institution else 'كل المؤسسات'}</p>"
-            f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>")
+    body = (
+        f"<h1>{esc(title)}</h1>"
+        f"<p class='muted'>النطاق: {esc(institution) if institution else 'كل المؤسسات'}</p>"
+        f"<table><thead><tr>{head}</tr></thead><tbody>{''.join(body_rows)}</tbody></table>"
+    )
     return _page(title, body, auto_print=False)
 
 

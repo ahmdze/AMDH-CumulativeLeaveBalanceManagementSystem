@@ -84,9 +84,12 @@ def is_weekend(d: date, weekend: tuple[int, ...] | list[int] = ()) -> bool:
     return d.weekday() in set(weekend or ())
 
 
-def count_working_days(start: date | None, end: date | None,
-                       weekend: tuple[int, ...] | list[int] = (),
-                       holidays: set[date] | None = None) -> int:
+def count_working_days(
+    start: date | None,
+    end: date | None,
+    weekend: tuple[int, ...] | list[int] = (),
+    holidays: set[date] | None = None,
+) -> int:
     """عدد أيام العمل الفعلية داخل المدى (باستثناء العطلة الأسبوعية والعطل الرسمية)."""
     if not start or not end or end < start:
         return 0
@@ -100,9 +103,13 @@ def count_working_days(start: date | None, end: date | None,
     return count
 
 
-def days_count(start: date | None, end: date | None, mode: str,
-               weekend: tuple[int, ...] | list[int] = (),
-               holidays: set[date] | None = None) -> int:
+def days_count(
+    start: date | None,
+    end: date | None,
+    mode: str,
+    weekend: tuple[int, ...] | list[int] = (),
+    holidays: set[date] | None = None,
+) -> int:
     if mode == "working":
         return count_working_days(start, end, weekend, holidays)
     return days_inclusive(start, end)
@@ -136,16 +143,16 @@ def month_grid(year: int, month: int, first_day_of_week: int = 5) -> list[list[d
     cells += [date(year, month, day) for day in range(1, total_days + 1)]
     while len(cells) % 7:
         cells.append(None)
-    return [cells[i:i + 7] for i in range(0, len(cells), 7)]
+    return [cells[i : i + 7] for i in range(0, len(cells), 7)]
 
 
 def weekday_labels(first_day_of_week: int = 5) -> list[str]:
     from ..config import WEEKDAY_NAMES
+
     return [WEEKDAY_NAMES[(first_day_of_week + i) % 7] for i in range(7)]
 
 
-def overlaps(a_start: date | None, a_end: date | None,
-             b_start: date | None, b_end: date | None) -> bool:
+def overlaps(a_start: date | None, a_end: date | None, b_start: date | None, b_end: date | None) -> bool:
     if not a_start or not a_end or not b_start or not b_end:
         return False
     return a_start <= b_end and b_start <= a_end

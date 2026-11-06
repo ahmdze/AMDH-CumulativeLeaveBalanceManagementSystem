@@ -9,13 +9,17 @@ from __future__ import annotations
 import html
 from datetime import datetime
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QComboBox, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPlainTextEdit, QTextEdit, QVBoxLayout, QWidget,
+    QComboBox,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLineEdit,
+    QPlainTextEdit,
+    QVBoxLayout,
 )
 
-from . import theme, widgets as W
+from . import widgets as W
 from .dialogs_base import BaseDialog
 
 KINDS = [
@@ -56,8 +60,12 @@ class VaultEntryDialog(BaseDialog):
         form.addRow("كلمة المرور/المفتاح", self.e_password)
         form.addRow("ملاحظات", self.e_note)
         layout.addWidget(card)
-        layout.addLayout(self.buttons_row(W.button("إلغاء", "Ghost", self.reject, width=90),
-                                          W.button("💾 حفظ", "Accent", self._save, width=120)))
+        layout.addLayout(
+            self.buttons_row(
+                W.button("إلغاء", "Ghost", self.reject, width=90),
+                W.button("💾 حفظ", "Accent", self._save, width=120),
+            )
+        )
 
     def _save(self) -> None:
         if not self.e_label.text().strip() and not self.e_institution.text().strip():
@@ -76,8 +84,13 @@ class VaultEntryDialog(BaseDialog):
             self.ctx.db.update_vault_entry(int(self.entry["id"]), **values)
         else:
             self.ctx.db.add_vault_entry(**values, user=self.ctx.user())
-        self.ctx.db.log(self.ctx.user(), "تعديل" if self.entry else "إضافة", "vault",
-                        self.entry.get("id", ""), values["label"])
+        self.ctx.db.log(
+            self.ctx.user(),
+            "تعديل" if self.entry else "إضافة",
+            "vault",
+            self.entry.get("id", ""),
+            values["label"],
+        )
         self.accept()
 
 
@@ -98,13 +111,17 @@ class VaultDialog(BaseDialog):
         header.addWidget(W.button("🖨 بطاقة استرداد", "Gold", self._export_card))
         header.addWidget(W.button("🔄 تحديث", "Ghost", self._refresh))
         layout.addLayout(header)
-        layout.addWidget(W.muted_label(
-            "تُحفظ كلمة مرور قاعدة المركز ومفاتيح نسخ المؤسسات هنا. "
-            "الخزنة محمية فقط عندما تكون قاعدة البيانات مشفّرة. "
-            "صدّر «بطاقة استرداد» واطبعها واحفظها خارج الجهاز؛ الخزنة وحدها لا تكفي "
-            "إذا فُقدت قاعدة البيانات."))
-        self.table = W.TablePanel(["#", "النوع", "التسمية", "المؤسسة", "الملف",
-                                   "كلمة المرور", "ملاحظات", "التاريخ"])
+        layout.addWidget(
+            W.muted_label(
+                "تُحفظ كلمة مرور قاعدة المركز ومفاتيح نسخ المؤسسات هنا. "
+                "الخزنة محمية فقط عندما تكون قاعدة البيانات مشفّرة. "
+                "صدّر «بطاقة استرداد» واطبعها واحفظها خارج الجهاز؛ الخزنة وحدها لا تكفي "
+                "إذا فُقدت قاعدة البيانات."
+            )
+        )
+        self.table = W.TablePanel(
+            ["#", "النوع", "التسمية", "المؤسسة", "الملف", "كلمة المرور", "ملاحظات", "التاريخ"]
+        )
         self.table.table.doubleClicked.connect(lambda _i: self._edit())
         layout.addWidget(self.table, 1)
         row = QHBoxLayout()
@@ -124,10 +141,18 @@ class VaultDialog(BaseDialog):
         for index, item in enumerate(self.entries, 1):
             password = item.get("password", "")
             shown = password if self.show_passwords else ("••••••••" if password else "")
-            rows.append([index, KIND_LABELS.get(item.get("kind"), item.get("kind", "")),
-                         item.get("label", ""), item.get("institution", ""),
-                         item.get("file_name", ""), shown, item.get("note", ""),
-                         item.get("created_at", "")])
+            rows.append(
+                [
+                    index,
+                    KIND_LABELS.get(item.get("kind"), item.get("kind", "")),
+                    item.get("label", ""),
+                    item.get("institution", ""),
+                    item.get("file_name", ""),
+                    shown,
+                    item.get("note", ""),
+                    item.get("created_at", ""),
+                ]
+            )
         self.table.set_rows(rows, empty_text="لا توجد مداخل في الخزنة")
 
     def _selected(self) -> dict | None:
@@ -162,14 +187,17 @@ class VaultDialog(BaseDialog):
         entry = self._selected()
         if entry:
             from PyQt6.QtWidgets import QApplication
+
             QApplication.clipboard().setText(str(entry.get("password", "")))
             W.info(self, "نُسخت كلمة المرور إلى الحافظة.")
 
     def _export_card(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
-            self, "حفظ بطاقة الاسترداد",
+            self,
+            "حفظ بطاقة الاسترداد",
             str(self.ctx.paths.reports_dir / "بطاقة_استرداد_التشفير.html"),
-            "HTML (*.html)")
+            "HTML (*.html)",
+        )
         if not path:
             return
         rows = []
@@ -182,7 +210,8 @@ class VaultDialog(BaseDialog):
                 f"<td>{html.escape(item.get('file_name', ''))}</td>"
                 f"<td dir='ltr'>{html.escape(item.get('password', ''))}</td>"
                 f"<td>{html.escape(item.get('created_at', ''))}</td>"
-                "</tr>")
+                "</tr>"
+            )
         content = f"""<!DOCTYPE html>
 <html dir="rtl" lang="ar"><head><meta charset="utf-8">
 <title>بطاقة استرداد كلمات المرور</title>
@@ -199,10 +228,11 @@ padding:10px; margin:12px 0; }}
 <p>تاريخ التصدير: {datetime.now():%Y-%m-%d %H:%M}</p>
 <table><thead><tr><th>النوع</th><th>التسمية</th><th>المؤسسة</th><th>الملف</th>
 <th>كلمة المرور/المفتاح</th><th>التاريخ</th></tr></thead><tbody>
-{''.join(rows) or '<tr><td colspan="6">لا توجد مداخل</td></tr>'}
+{"".join(rows) or '<tr><td colspan="6">لا توجد مداخل</td></tr>'}
 </tbody></table>
 </body></html>"""
         from pathlib import Path
+
         Path(path).write_text(content, encoding="utf-8")
         self.ctx.db.log(self.ctx.user(), "تصدير", "vault", "", "بطاقة استرداد")
         if W.confirm(self, f"تم حفظ البطاقة:\n{path}\n\nهل تريد فتحها للطباعة؟"):

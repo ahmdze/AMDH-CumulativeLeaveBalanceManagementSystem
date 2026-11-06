@@ -7,11 +7,20 @@ import uuid
 from datetime import date
 from pathlib import Path
 
-from PyQt6.QtCore import QUrl, Qt
+from PyQt6.QtCore import Qt, QUrl
 from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QFrame, QHBoxLayout,
-    QLabel, QLineEdit, QSpinBox, QVBoxLayout, QWidget,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFileDialog,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .. import config
@@ -22,15 +31,15 @@ from ..models import Leave
 from ..services import balance as B
 from ..services import dates as D
 from ..services import reports, validation
-from . import theme, widgets as W
+from . import theme
+from . import widgets as W
 from .dialogs_base import BaseDialog, IssuesBox
 
 
 class LeaveDialog(BaseDialog):
     """تسجيل أو تعديل إجازة مع معاينة حيّة للأثر على الرصيد."""
 
-    def __init__(self, parent=None, ctx=None, emp_id: str = "", leave_id: int | None = None,
-                 on_save=None):
+    def __init__(self, parent=None, ctx=None, emp_id: str = "", leave_id: int | None = None, on_save=None):
         super().__init__(parent, ctx, "تعديل إجازة" if leave_id else "تسجيل إجازة")
         self.emp_id = emp_id
         self.leave_id = leave_id
@@ -49,11 +58,15 @@ class LeaveDialog(BaseDialog):
     # ------------------------------------------------------------------
     def _build(self) -> None:
         layout = QVBoxLayout(self)
-        layout.addWidget(W.title_label(
-            f"{'تعديل إجازة' if self.leave_id else 'تسجيل إجازة'} — {self.employee.name}", 15))
-        layout.addWidget(W.muted_label(
-            f"الرقم الوظيفي: {self.employee.emp_id} | {self.employee.job_title} | "
-            f"{self.employee.institution}"))
+        layout.addWidget(
+            W.title_label(f"{'تعديل إجازة' if self.leave_id else 'تسجيل إجازة'} — {self.employee.name}", 15)
+        )
+        layout.addWidget(
+            W.muted_label(
+                f"الرقم الوظيفي: {self.employee.emp_id} | {self.employee.job_title} | "
+                f"{self.employee.institution}"
+            )
+        )
 
         frame = W.card()
         form = QFormLayout(frame)
@@ -134,8 +147,12 @@ class LeaveDialog(BaseDialog):
         self.issues = IssuesBox()
         layout.addWidget(self.issues)
         layout.addStretch()
-        layout.addLayout(self.buttons_row(W.button("إلغاء", "Ghost", self.reject, width=110),
-                                          W.button("💾 حفظ الإجازة", "Accent", self._save, width=160)))
+        layout.addLayout(
+            self.buttons_row(
+                W.button("إلغاء", "Ghost", self.reject, width=110),
+                W.button("💾 حفظ الإجازة", "Accent", self._save, width=160),
+            )
+        )
 
     @staticmethod
     def _holder(layout) -> QWidget:
@@ -181,7 +198,8 @@ class LeaveDialog(BaseDialog):
             self.sp_days.setValue(leave.days_actual)
             self.lbl_rule_hint.setText(
                 f"⚠️ الأيام المخزنة سابقاً ({leave.days_actual}) تختلف عن المحتسبة حالياً "
-                f"({computed}) — تم الإبقاء على المخزنة ويمكن تعديلها يدوياً.")
+                f"({computed}) — تم الإبقاء على المخزنة ويمكن تعديلها يدوياً."
+            )
         else:
             self.sp_days.setValue(leave.days_actual)
 
@@ -234,13 +252,25 @@ class LeaveDialog(BaseDialog):
             days = self.sp_amount.value()
         working = D.count_working_days(start, end, self.policy.weekend, self.policy.holidays)
         return Leave(
-            id=self.leave_id, emp_id=self.emp_id, type=leave_type, start_date=start, end_date=end,
-            amount=self.sp_amount.value(), unit=self.cb_unit.currentText(), days_actual=days,
-            working_days=working, count_mode=rule.count_mode,
-            order=self.e_order.text().strip(), order_date=self.d_order.value(),
-            outside_balance=self.chk_outside.isChecked(), reason=self.e_reason.text().strip(),
-            added_date="", status=self.cb_status.currentData(),
-            is_adjustment=rule.is_adjustment, manual_days=self.chk_manual.isChecked())
+            id=self.leave_id,
+            emp_id=self.emp_id,
+            type=leave_type,
+            start_date=start,
+            end_date=end,
+            amount=self.sp_amount.value(),
+            unit=self.cb_unit.currentText(),
+            days_actual=days,
+            working_days=working,
+            count_mode=rule.count_mode,
+            order=self.e_order.text().strip(),
+            order_date=self.d_order.value(),
+            outside_balance=self.chk_outside.isChecked(),
+            reason=self.e_reason.text().strip(),
+            added_date="",
+            status=self.cb_status.currentData(),
+            is_adjustment=rule.is_adjustment,
+            manual_days=self.chk_manual.isChecked(),
+        )
 
     def _recalc(self) -> None:
         if not hasattr(self, "lbl_period"):
@@ -252,19 +282,23 @@ class LeaveDialog(BaseDialog):
             self.sp_days.blockSignals(False)
         candidate = self._candidate()
         existing = self.employee.leaves
-        before = validation.preview_balance(self.employee, existing, self.policy, None,
-                                            exclude_id=self.leave_id)
+        before = validation.preview_balance(
+            self.employee, existing, self.policy, None, exclude_id=self.leave_id
+        )
         after = validation.preview_balance(self.employee, existing, self.policy, candidate)
-        self.lbl_before.set_value(before.balance, theme.balance_color(before.balance, self.policy.low_balance_days),
-                                  " يوم")
+        self.lbl_before.set_value(
+            before.balance, theme.balance_color(before.balance, self.policy.low_balance_days), " يوم"
+        )
         self.lbl_days.set_value(candidate.days_actual, "accent", " يوم")
-        self.lbl_after.set_value(after.balance, theme.balance_color(after.balance, self.policy.low_balance_days),
-                                 " يوم")
+        self.lbl_after.set_value(
+            after.balance, theme.balance_color(after.balance, self.policy.low_balance_days), " يوم"
+        )
         note, key = validation.balance_note(after, self.policy)
         self.lbl_note.setText(note)
         self.lbl_note.setStyleSheet(theme.label_style(key))
-        issues = validation.validate_leave(candidate, self.employee, existing, self.policy,
-                                           leave_id=self.leave_id)
+        issues = validation.validate_leave(
+            candidate, self.employee, existing, self.policy, leave_id=self.leave_id
+        )
         self.issues.set_issues(issues)
 
     # ------------------------------------------------------------------
@@ -273,16 +307,18 @@ class LeaveDialog(BaseDialog):
             W.error(self, "لا تملك صلاحية تسجيل الإجازات.")
             return
         candidate = self._candidate()
-        issues = validation.validate_leave(candidate, self.employee, self.employee.leaves,
-                                           self.policy, leave_id=self.leave_id)
+        issues = validation.validate_leave(
+            candidate, self.employee, self.employee.leaves, self.policy, leave_id=self.leave_id
+        )
         self.issues.set_issues(issues)
         errors = [i.message for i in issues if i.is_error]
         if errors:
             W.error(self, "\n".join(errors), "تعذّر الحفظ")
             return
         warnings = [i.message for i in issues if i.level == "warning"]
-        if warnings and not W.confirm(self, "تنبيهات:\n\n" + "\n".join(f"• {w}" for w in warnings) +
-                                      "\n\nهل تريد الحفظ على أي حال؟"):
+        if warnings and not W.confirm(
+            self, "تنبيهات:\n\n" + "\n".join(f"• {w}" for w in warnings) + "\n\nهل تريد الحفظ على أي حال؟"
+        ):
             return
         fields = candidate.to_fields()
         if self.leave_id:
@@ -337,8 +373,9 @@ class AttachmentsDialog(BaseDialog):
         if not self.leave_id:
             W.info(self, "احفظ الإجازة أولاً ثم أضف المرفقات.")
             return
-        path, _ = QFileDialog.getOpenFileName(self, "اختر الملف", "",
-                                              "ملفات (*.pdf *.png *.jpg *.jpeg *.bmp *.tif *.docx)")
+        path, _ = QFileDialog.getOpenFileName(
+            self, "اختر الملف", "", "ملفات (*.pdf *.png *.jpg *.jpeg *.bmp *.tif *.docx)"
+        )
         if not path:
             return
         source = Path(path)
@@ -349,9 +386,14 @@ class AttachmentsDialog(BaseDialog):
         except OSError as exc:
             W.error(self, f"تعذّر نسخ الملف: {exc}")
             return
-        self.ctx.db.add_attachment(self.leave_id, self.emp_id, source.name, stored,
-                                   self.ctx.user(),
-                                   attachments_dir=self.ctx.paths.attachments_dir)
+        self.ctx.db.add_attachment(
+            self.leave_id,
+            self.emp_id,
+            source.name,
+            stored,
+            self.ctx.user(),
+            attachments_dir=self.ctx.paths.attachments_dir,
+        )
         self._refresh()
 
     def _open(self) -> None:
@@ -416,14 +458,25 @@ class StatementDialog(BaseDialog):
         ]
         if self.balance.has_opening:
             values.append(("الرصيد الافتتاحي", self.balance.opening_balance, "blue"))
-        values.extend([
-            ("المستحقة بعد الافتتاحي" if self.balance.has_opening else "المستحقة",
-             self.balance.earned, "pos"),
-            ("المأخوذة بعد الافتتاحي" if self.balance.has_opening else "المأخوذة",
-             self.balance.taken, "gold"),
-            ("الرصيد", self.balance.balance,
-             theme.balance_color(self.balance.balance, self.policy.low_balance_days)),
-        ])
+        values.extend(
+            [
+                (
+                    "المستحقة بعد الافتتاحي" if self.balance.has_opening else "المستحقة",
+                    self.balance.earned,
+                    "pos",
+                ),
+                (
+                    "المأخوذة بعد الافتتاحي" if self.balance.has_opening else "المأخوذة",
+                    self.balance.taken,
+                    "gold",
+                ),
+                (
+                    "الرصيد",
+                    self.balance.balance,
+                    theme.balance_color(self.balance.balance, self.policy.low_balance_days),
+                ),
+            ]
+        )
         for title, value, key in values:
             widget = W.LabeledValue(title)
             widget.set_value(value, key, " يوم")
@@ -435,19 +488,48 @@ class StatementDialog(BaseDialog):
                 f"قبل النظام: الرصيد الافتتاحي {self.statement.opening_balance} يوم "
                 f"كما في {D.to_iso(self.statement.opening_date)}"
                 + (f" — حسبه: {self.statement.opening_by}" if self.statement.opening_by else "")
-                + (f" — {self.statement.opening_note}" if self.statement.opening_note else ""))
+                + (f" — {self.statement.opening_note}" if self.statement.opening_note else "")
+            )
             layout.addWidget(W.muted_label(opening))
 
-        layout.addWidget(W.muted_label(self.statement.policy_note +
-                                       " — قد يختلف مجموع الاستحقاق السنوي بيوم عن الاحتساب المتواصل "
-                                       "بسبب تقريب كل سنة على حدة."))
-        self.table = W.TablePanel(["سنة الخدمة", "من", "إلى", "أيام الخدمة", "خارج الرصيد",
-                                   "صافي الدوام", "المستحق", "المأخوذ", "منتهي", "الرصيد المرحّل"])
-        data = [[r["index"], r["start"], r["end"], r["service_days"], r["outside_days"],
-                 r["net_days"], r["earned"], r["taken"], r["expired"], r["carry_out"]]
-                for r in self.rows]
-        self.table.set_rows(data, numeric_columns={3, 4, 5, 6, 7, 8, 9},
-                            empty_text="لا توجد سنوات خدمة محتسبة")
+        layout.addWidget(
+            W.muted_label(
+                self.statement.policy_note + " — قد يختلف مجموع الاستحقاق السنوي بيوم عن الاحتساب المتواصل "
+                "بسبب تقريب كل سنة على حدة."
+            )
+        )
+        self.table = W.TablePanel(
+            [
+                "سنة الخدمة",
+                "من",
+                "إلى",
+                "أيام الخدمة",
+                "خارج الرصيد",
+                "صافي الدوام",
+                "المستحق",
+                "المأخوذ",
+                "منتهي",
+                "الرصيد المرحّل",
+            ]
+        )
+        data = [
+            [
+                r["index"],
+                r["start"],
+                r["end"],
+                r["service_days"],
+                r["outside_days"],
+                r["net_days"],
+                r["earned"],
+                r["taken"],
+                r["expired"],
+                r["carry_out"],
+            ]
+            for r in self.rows
+        ]
+        self.table.set_rows(
+            data, numeric_columns={3, 4, 5, 6, 7, 8, 9}, empty_text="لا توجد سنوات خدمة محتسبة"
+        )
         layout.addWidget(self.table)
         row = QHBoxLayout()
         row.addWidget(W.button("📊 Excel", "Ghost", self._excel))
@@ -458,8 +540,9 @@ class StatementDialog(BaseDialog):
         layout.addLayout(row)
 
     def _excel(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(self, "حفظ كشف الحساب", f"statement_{self.emp_id}.xlsx",
-                                              "Excel (*.xlsx)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, "حفظ كشف الحساب", f"statement_{self.emp_id}.xlsx", "Excel (*.xlsx)"
+        )
         if not path:
             return
         try:
@@ -525,26 +608,45 @@ class SettlementDialog(BaseDialog):
         self.lbl_taken = W.LabeledValue("المأخوذة")
         self.lbl_balance = W.LabeledValue("الرصيد المستحق")
         self.lbl_amount = W.LabeledValue("المبلغ")
-        for widget in (self.lbl_service, self.lbl_opening, self.lbl_earned, self.lbl_taken,
-                       self.lbl_balance, self.lbl_amount):
+        for widget in (
+            self.lbl_service,
+            self.lbl_opening,
+            self.lbl_earned,
+            self.lbl_taken,
+            self.lbl_balance,
+            self.lbl_amount,
+        ):
             summary_layout.addWidget(widget)
         layout.addWidget(summary)
-        layout.addWidget(W.muted_label("الرصيد السالب يعني أن الموظف استهلك أكثر من استحقاقه "
-                                       "(مسموح حسب الضوابط الإدارية) ويُعرض للمعلومة عند التصفية."))
+        layout.addWidget(
+            W.muted_label(
+                "الرصيد السالب يعني أن الموظف استهلك أكثر من استحقاقه "
+                "(مسموح حسب الضوابط الإدارية) ويُعرض للمعلومة عند التصفية."
+            )
+        )
         layout.addStretch()
         layout.addLayout(self.buttons_row(self.close_button()))
 
     def _recalc(self) -> None:
         as_of = W.date_of(self.d_asof)
         value = self.sp_value.value() or None
-        result = B.settlement(self.employee, self.employee.leaves, self.policy,
-                              today=as_of, day_value=value, as_of_end_of_service=False)
+        result = B.settlement(
+            self.employee,
+            self.employee.leaves,
+            self.policy,
+            today=as_of,
+            day_value=value,
+            as_of_end_of_service=False,
+        )
         self.lbl_service.set_value(result.service_days, "text", " يوم")
         self.lbl_opening.setVisible(self.employee.has_opening_balance)
         if self.employee.has_opening_balance:
             self.lbl_opening.set_value(self.employee.opening_balance, "blue", " يوم")
         self.lbl_earned.set_value(result.earned, "pos", " يوم")
         self.lbl_taken.set_value(result.taken, "gold", " يوم")
-        self.lbl_balance.set_value(result.balance_days,
-                                   theme.balance_color(result.balance_days, self.policy.low_balance_days), " يوم")
+        self.lbl_balance.set_value(
+            result.balance_days,
+            theme.balance_color(result.balance_days, self.policy.low_balance_days),
+            " يوم",
+        )
         self.lbl_amount.set_value(f"{result.amount:,.2f}" if result.amount is not None else "—", "accent")

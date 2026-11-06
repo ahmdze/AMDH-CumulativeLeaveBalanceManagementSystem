@@ -27,6 +27,7 @@ try:
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
     HAS_PDF = True
 except ImportError:  # pragma: no cover
     HAS_PDF = False
@@ -34,6 +35,7 @@ except ImportError:  # pragma: no cover
 try:
     import arabic_reshaper
     from bidi.algorithm import get_display
+
     HAS_BIDI = True
 except ImportError:  # pragma: no cover
     HAS_BIDI = False
@@ -58,7 +60,7 @@ FONT_ITALIC_NAME = "ArabicFont-Italic"
 
 def register_font() -> str | None:
     """يسجّل أول خط عربي متاح. يعيد اسم الخط أو None.
-    
+
     يسجل 3 نسخ: Regular, Bold, Italic — كلها من نفس الملف لتجنب خطأ
     "Can't map determine family/bold/italic" عند استخدام ParagraphStyle.
     """
@@ -115,25 +117,47 @@ def _styles():
     """يعيد ParagraphStyle مع تحديد fontName صريح لـ bold و italic لتجنب الخطأ."""
     base = getSampleStyleSheet()
     title = ParagraphStyle(
-        "ArTitle", parent=base["Title"], fontName=FONT_NAME, fontSize=15, alignment=1,
-        fontNameBold=FONT_BOLD_NAME, fontNameItalic=FONT_ITALIC_NAME,
+        "ArTitle",
+        parent=base["Title"],
+        fontName=FONT_NAME,
+        fontSize=15,
+        alignment=1,
+        fontNameBold=FONT_BOLD_NAME,
+        fontNameItalic=FONT_ITALIC_NAME,
         fontNameBoldItalic=FONT_BOLD_NAME,
     )
     info = ParagraphStyle(
-        "ArInfo", parent=base["Normal"], fontName=FONT_NAME, fontSize=10, alignment=1,
-        fontNameBold=FONT_BOLD_NAME, fontNameItalic=FONT_ITALIC_NAME,
+        "ArInfo",
+        parent=base["Normal"],
+        fontName=FONT_NAME,
+        fontSize=10,
+        alignment=1,
+        fontNameBold=FONT_BOLD_NAME,
+        fontNameItalic=FONT_ITALIC_NAME,
         fontNameBoldItalic=FONT_BOLD_NAME,
     )
     return title, info
 
 
-def _build(path: Path, title: str, subtitle: str, headers: list[str], rows: list[list],
-           landscape_mode: bool = True, widths: list[float] | None = None) -> Path:
+def _build(
+    path: Path,
+    title: str,
+    subtitle: str,
+    headers: list[str],
+    rows: list[list],
+    landscape_mode: bool = True,
+    widths: list[float] | None = None,
+) -> Path:
     _, info_style = _styles()
     pagesize = landscape(A4) if landscape_mode else A4
-    doc = SimpleDocTemplate(str(path), pagesize=pagesize,
-                            rightMargin=1.2 * cm, leftMargin=1.2 * cm,
-                            topMargin=1.5 * cm, bottomMargin=1.5 * cm)
+    doc = SimpleDocTemplate(
+        str(path),
+        pagesize=pagesize,
+        rightMargin=1.2 * cm,
+        leftMargin=1.2 * cm,
+        topMargin=1.5 * cm,
+        bottomMargin=1.5 * cm,
+    )
     story = [Paragraph(ar(title), _styles()[0]), Spacer(1, 0.2 * cm)]
     if subtitle:
         story.append(Paragraph(ar(subtitle), info_style))
@@ -142,20 +166,23 @@ def _build(path: Path, title: str, subtitle: str, headers: list[str], rows: list
     for row in rows:
         data.append([ar(v) for v in reversed(row)])
     table = Table(data, repeatRows=1, colWidths=widths)
-    table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1C2D3E")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#7DD3C8")),
-        ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
-        ("FONTSIZE", (0, 0), (-1, -1), 8),
-        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#94A3B8")),
-        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F1F5F9")]),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-    ]))
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1C2D3E")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#7DD3C8")),
+                ("FONTNAME", (0, 0), (-1, -1), FONT_NAME),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#94A3B8")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F1F5F9")]),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]
+        )
+    )
     story.append(table)
     story.append(Spacer(1, 0.4 * cm))
-    story.append(Paragraph(ar(f"تاريخ التقرير: {D.to_iso(date.today())} — {config.APP_NAME}"),
-                           info_style))
+    story.append(Paragraph(ar(f"تاريخ التقرير: {D.to_iso(date.today())} — {config.APP_NAME}"), info_style))
     doc.build(story)
     return path
 
@@ -165,48 +192,131 @@ def export_employee_leaves(path: str | Path, employee: Employee, policy: Policy)
     if not ok:
         raise RuntimeError(message)
     bal = B.compute_balance(employee, employee.leaves, policy)
-    headers = ["#", "النوع", "من", "إلى", "العدد", "الأيام المؤثرة", "خارج الرصيد", "الحالة", "الأمر", "السبب"]
+    headers = [
+        "#",
+        "النوع",
+        "من",
+        "إلى",
+        "العدد",
+        "الأيام المؤثرة",
+        "خارج الرصيد",
+        "الحالة",
+        "الأمر",
+        "السبب",
+    ]
     rows = []
     for i, lv in enumerate([x for x in employee.leaves if not x.is_deleted], 1):
         start, end = B.leave_span(lv)
-        rows.append([i, lv.type, D.to_iso(start), D.to_iso(end), f"{lv.amount} {lv.unit}",
-                     lv.days_actual, "نعم" if B.is_service_exclusion(policy, lv) else "لا",
-                     config.LEAVE_STATUS_LABELS.get(lv.status, lv.status), lv.order, lv.reason])
-    subtitle = (f"{employee.job_title} - {employee.name} | الرقم الوظيفي: {employee.emp_id} | "
-                f"المؤسسة: {employee.institution} | الخدمة: {bal.net_days} يوم | المستحقة: {bal.earned} | "
-                f"المأخوذة: {bal.taken} | الرصيد: {bal.balance} يوم")
+        rows.append(
+            [
+                i,
+                lv.type,
+                D.to_iso(start),
+                D.to_iso(end),
+                f"{lv.amount} {lv.unit}",
+                lv.days_actual,
+                "نعم" if B.is_service_exclusion(policy, lv) else "لا",
+                config.LEAVE_STATUS_LABELS.get(lv.status, lv.status),
+                lv.order,
+                lv.reason,
+            ]
+        )
+    subtitle = (
+        f"{employee.job_title} - {employee.name} | الرقم الوظيفي: {employee.emp_id} | "
+        f"المؤسسة: {employee.institution} | الخدمة: {bal.net_days} يوم | المستحقة: {bal.earned} | "
+        f"المأخوذة: {bal.taken} | الرصيد: {bal.balance} يوم"
+    )
     return _build(Path(path), f"سجل إجازات: {employee.name}", subtitle, headers, rows)
 
 
-def export_report(path: str | Path, rows: list[dict], policy: Policy,
-                  title: str = "تقرير الأرصدة التراكمية", institution: str = "") -> Path:
+def export_report(
+    path: str | Path,
+    rows: list[dict],
+    policy: Policy,
+    title: str = "تقرير الأرصدة التراكمية",
+    institution: str = "",
+) -> Path:
     ok, message = available()
     if not ok:
         raise RuntimeError(message)
-    headers = ["#", "الرقم الوظيفي", "الاسم", "العنوان الوظيفي", "المؤسسة",
-               "أيام الخدمة", "خارج الرصيد", "الدوام المحسوبة", "المستحقة", "المأخوذة", "الرصيد"]
-    data = [[i, r["emp_id"], r["name"], r["job_title"], r["institution"], r["raw_days"],
-             r["outside"], r["net_days"], r["earned"], r["taken"], r["balance"]]
-            for i, r in enumerate(rows, 1)]
-    subtitle = (f"النطاق: {institution or 'كل المؤسسات'} | عدد الموظفين: {len(rows)} | "
-                f"إجمالي الرصيد: {sum(r['balance'] for r in rows)} يوم | {policy.annual_rate_note}")
+    headers = [
+        "#",
+        "الرقم الوظيفي",
+        "الاسم",
+        "العنوان الوظيفي",
+        "المؤسسة",
+        "أيام الخدمة",
+        "خارج الرصيد",
+        "الدوام المحسوبة",
+        "المستحقة",
+        "المأخوذة",
+        "الرصيد",
+    ]
+    data = [
+        [
+            i,
+            r["emp_id"],
+            r["name"],
+            r["job_title"],
+            r["institution"],
+            r["raw_days"],
+            r["outside"],
+            r["net_days"],
+            r["earned"],
+            r["taken"],
+            r["balance"],
+        ]
+        for i, r in enumerate(rows, 1)
+    ]
+    subtitle = (
+        f"النطاق: {institution or 'كل المؤسسات'} | عدد الموظفين: {len(rows)} | "
+        f"إجمالي الرصيد: {sum(r['balance'] for r in rows)} يوم | {policy.annual_rate_note}"
+    )
     return _build(Path(path), title, subtitle, headers, data)
 
 
-def export_statement(path: str | Path, employee: Employee, policy: Policy, statement_rows: list[dict],
-                     balance) -> Path:
+def export_statement(
+    path: str | Path, employee: Employee, policy: Policy, statement_rows: list[dict], balance
+) -> Path:
     ok, message = available()
     if not ok:
         raise RuntimeError(message)
-    headers = ["سنة الخدمة", "من", "إلى", "أيام الخدمة", "خارج الرصيد", "صافي الدوام",
-               "المستحق", "المأخوذ", "منتهي", "الرصيد المرحّل"]
-    data = [[r["index"], r["start"], r["end"], r["service_days"], r["outside_days"], r["net_days"],
-             r["earned"], r["taken"], r["expired"], r["carry_out"]] for r in statement_rows]
-    subtitle = (f"{employee.name} | الرقم الوظيفي: {employee.emp_id} | المستحقة: {balance.earned} | "
-                f"المأخوذة: {balance.taken} | الرصيد: {balance.balance} يوم")
+    headers = [
+        "سنة الخدمة",
+        "من",
+        "إلى",
+        "أيام الخدمة",
+        "خارج الرصيد",
+        "صافي الدوام",
+        "المستحق",
+        "المأخوذ",
+        "منتهي",
+        "الرصيد المرحّل",
+    ]
+    data = [
+        [
+            r["index"],
+            r["start"],
+            r["end"],
+            r["service_days"],
+            r["outside_days"],
+            r["net_days"],
+            r["earned"],
+            r["taken"],
+            r["expired"],
+            r["carry_out"],
+        ]
+        for r in statement_rows
+    ]
+    subtitle = (
+        f"{employee.name} | الرقم الوظيفي: {employee.emp_id} | المستحقة: {balance.earned} | "
+        f"المأخوذة: {balance.taken} | الرصيد: {balance.balance} يوم"
+    )
     if getattr(balance, "has_opening", False):
-        subtitle = (f"{employee.name} | الرقم الوظيفي: {employee.emp_id} | "
-                    f"الرصيد الافتتاحي: {balance.opening_balance} "
-                    f"({D.to_iso(balance.opening_date)}) | المستحقة بعد الافتتاحي: {balance.earned} | "
-                    f"المأخوذة: {balance.taken} | الرصيد: {balance.balance} يوم")
+        subtitle = (
+            f"{employee.name} | الرقم الوظيفي: {employee.emp_id} | "
+            f"الرصيد الافتتاحي: {balance.opening_balance} "
+            f"({D.to_iso(balance.opening_date)}) | المستحقة بعد الافتتاحي: {balance.earned} | "
+            f"المأخوذة: {balance.taken} | الرصيد: {balance.balance} يوم"
+        )
     return _build(Path(path), "كشف حساب الرصيد التراكمي", subtitle, headers, data, landscape_mode=False)

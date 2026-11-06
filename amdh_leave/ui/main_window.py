@@ -7,8 +7,19 @@ from datetime import date
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QAction, QColor, QFont, QKeySequence
 from PyQt6.QtWidgets import (
-    QApplication, QComboBox, QFileDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMainWindow, QMenu, QScrollArea, QVBoxLayout, QWidget,
+    QApplication,
+    QComboBox,
+    QFileDialog,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMenu,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .. import config
@@ -19,33 +30,52 @@ from ..logging_setup import get_logger
 from ..services import balance as B
 from ..services import dates as D
 from ..services import reports
-from . import assets, theme, widgets as W
+from . import assets, theme
+from . import widgets as W
 from .calendar_view import CalendarDialog
 from .dashboard import DashboardDialog
-from .dialogs_admin import AuditDialog, HolidaysDialog, RulesEditorDialog, UsersDialog
 from .dialogs_about import AboutDialog
+from .dialogs_admin import AuditDialog, HolidaysDialog, RulesEditorDialog, UsersDialog
 from .dialogs_base import SettingsDialog, TrashDialog
 from .dialogs_db import DatabaseOperationsDialog
 from .dialogs_employee import EmployeeDialog
-from .dialogs_import import ImportHistoryDialog, TransferImportDialog
 from .dialogs_export import export_for_center as export_transfer_file
+from .dialogs_import import ImportHistoryDialog, TransferImportDialog
 from .dialogs_institutions import InstitutionsDialog
 from .dialogs_leave import AttachmentsDialog, LeaveDialog, SettlementDialog, StatementDialog
 from .notifications import NotificationsDialog
 from .register import LeavesRegisterDialog
 
 COLUMNS = [
-    ("الرقم الوظيفي", 120), ("الاسم", 200), ("العنوان الوظيفي", 150), ("مكان العمل", 140),
-    ("المؤسسة", 160), ("الجنس", 60), ("المباشرة", 100), ("انتهاء الخدمة", 100),
-    ("أيام الخدمة", 90), ("خارج الرصيد", 90), ("الدوام المحسوبة", 110), ("المستحقة", 85),
-    ("المأخوذة", 85), ("الرصيد", 85),
+    ("الرقم الوظيفي", 120),
+    ("الاسم", 200),
+    ("العنوان الوظيفي", 150),
+    ("مكان العمل", 140),
+    ("المؤسسة", 160),
+    ("الجنس", 60),
+    ("المباشرة", 100),
+    ("انتهاء الخدمة", 100),
+    ("أيام الخدمة", 90),
+    ("خارج الرصيد", 90),
+    ("الدوام المحسوبة", 110),
+    ("المستحقة", 85),
+    ("المأخوذة", 85),
+    ("الرصيد", 85),
 ]
 NUMERIC_COLUMNS = {8, 9, 10, 11, 12, 13}
 DETAIL_ITEMS = [
-    ("name", "الاسم"), ("job_title", "العنوان الوظيفي"), ("workplace", "مكان العمل"),
-    ("institution", "المؤسسة"), ("gender", "الجنس"), ("start_date", "تاريخ المباشرة"),
-    ("end_date", "انتهاء الخدمة"), ("raw_days", "أيام الخدمة"), ("outside", "خارج الرصيد"),
-    ("net_days", "الدوام المحسوبة"), ("earned", "المستحقة"), ("taken", "المأخوذة"),
+    ("name", "الاسم"),
+    ("job_title", "العنوان الوظيفي"),
+    ("workplace", "مكان العمل"),
+    ("institution", "المؤسسة"),
+    ("gender", "الجنس"),
+    ("start_date", "تاريخ المباشرة"),
+    ("end_date", "انتهاء الخدمة"),
+    ("raw_days", "أيام الخدمة"),
+    ("outside", "خارج الرصيد"),
+    ("net_days", "الدوام المحسوبة"),
+    ("earned", "المستحقة"),
+    ("taken", "المأخوذة"),
     ("balance", "الرصيد"),
 ]
 
@@ -114,8 +144,11 @@ class MainWindow(QMainWindow):
         layout.addWidget(W.separator())
         self.lbl_user = W.muted_label(self._user_text())
         layout.addWidget(self.lbl_user)
-        layout.addWidget(W.button("🎨 الثيم", "Ghost", self._choose_theme, width=110,
-                                  tooltip="اختيار ثيم الواجهة (5 ثيمات)"))
+        layout.addWidget(
+            W.button(
+                "🎨 الثيم", "Ghost", self._choose_theme, width=110, tooltip="اختيار ثيم الواجهة (5 ثيمات)"
+            )
+        )
         return header
 
     def _user_text(self) -> str:
@@ -161,9 +194,10 @@ class MainWindow(QMainWindow):
             # نجمع الأزرار في قائمة مؤقتة لهذا القسم
             section_buttons: list[tuple[str, str, callable, str | None, str]] = []
             section_label = None
-            
+
             def make_label():
                 from ..ui import theme
+
                 lbl = QLabel(title)
                 text_color = theme.color("text")
                 lbl.setStyleSheet(f"""
@@ -175,39 +209,57 @@ class MainWindow(QMainWindow):
                     margin-bottom: 4px;
                 """)
                 return lbl
-            
+
             section_label = make_label()
-            
+
             # نعيد تعريف add مؤقتاً لجمع الأزرار بدلاً من إضافتها مباشرة
-            original_add = add
-            def collect_button(text: str, style: str, slot, permission: str | None = None, tooltip: str = "") -> None:
+            def collect_button(
+                text: str, style: str, slot, permission: str | None = None, tooltip: str = ""
+            ) -> None:
                 if permission and not self.ctx.can(permission):
                     return
                 section_buttons.append((text, style, slot, permission, tooltip))
-            
+
             # إرجاع الدالة المجمعة لاستخدامها في هذا القسم
             return collect_button, section_label, section_buttons, is_first
 
         # 1. قسم إدارة الموظفين
         collect, label, buttons, is_first = add_section("إدارة الموظفين", is_first=True)
-        collect("إضافة موظف جديد  ➕", "Accent", self._add_employee, "edit_employee",
-            tooltip="إضافة موظف جديد إلى قاعدة البيانات")
-        collect("تعديل الموظف  ✏", "Ghost", self._edit_employee, "edit_employee",
-            tooltip="تعديل بيانات الموظف المحدد")
-        collect("بطاقة الموظف  🪪", "Ghost", self._open_employee_card,
-            tooltip="عرض بطاقة الموظف الشخصية")
-        collect("كشف حساب الموظف  🧾", "Ghost", self._open_statement,
-            tooltip="عرض كشف حساب الإجازات للموظف")
-        collect("تصفية نهاية الخدمة  📤", "Ghost", self._open_settlement,
-            tooltip="تصفية حساب الموظف عند نهاية الخدمة")
-        collect("حذف الموظف  🗑", "Warn", self._delete_employee, "delete_employee",
-            tooltip="حذف الموظف من قاعدة البيانات")
+        collect(
+            "إضافة موظف جديد  ➕",
+            "Accent",
+            self._add_employee,
+            "edit_employee",
+            tooltip="إضافة موظف جديد إلى قاعدة البيانات",
+        )
+        collect(
+            "تعديل الموظف  ✏",
+            "Ghost",
+            self._edit_employee,
+            "edit_employee",
+            tooltip="تعديل بيانات الموظف المحدد",
+        )
+        collect("بطاقة الموظف  🪪", "Ghost", self._open_employee_card, tooltip="عرض بطاقة الموظف الشخصية")
+        collect("كشف حساب الموظف  🧾", "Ghost", self._open_statement, tooltip="عرض كشف حساب الإجازات للموظف")
+        collect(
+            "تصفية نهاية الخدمة  📤",
+            "Ghost",
+            self._open_settlement,
+            tooltip="تصفية حساب الموظف عند نهاية الخدمة",
+        )
+        collect(
+            "حذف الموظف  🗑",
+            "Warn",
+            self._delete_employee,
+            "delete_employee",
+            tooltip="حذف الموظف من قاعدة البيانات",
+        )
         # إضافة القسم إذا كان هناك أزرار مرئية
         if buttons:
             if not is_first and section_added[0]:
                 layout.addWidget(W.separator())
             layout.addWidget(label)
-            for text, style, slot, permission, tooltip in buttons:
+            for text, style, slot, _permission, tooltip in buttons:
                 if style == "Ghost":
                     btn = W.nav_button(text, slot, tooltip=tooltip)
                 else:
@@ -218,19 +270,23 @@ class MainWindow(QMainWindow):
 
         # 2. قسم الإجازات والدوام
         collect, label, buttons, is_first = add_section("الإجازات والدوام")
-        collect("تسجيل إجازة  📝", "Blue", self._quick_leave, "edit_leave",
-            tooltip="تسجيل إجازة جديدة للموظف")
-        collect("سجل الإجازات  📅", "Ghost", self._open_register,
-            tooltip="عرض سجل جميع الإجازات")
-        collect("تقويم الإجازات  🗓", "Ghost", self._open_calendar,
-            tooltip="عرض الإجازات على التقويم الشهري")
-        collect("مرفقات الإجازة  📎", "Ghost", self._open_attachments, "manage_attachments",
-            tooltip="إدارة مرفقات الإجازات")
+        collect(
+            "تسجيل إجازة  📝", "Blue", self._quick_leave, "edit_leave", tooltip="تسجيل إجازة جديدة للموظف"
+        )
+        collect("سجل الإجازات  📅", "Ghost", self._open_register, tooltip="عرض سجل جميع الإجازات")
+        collect("تقويم الإجازات  🗓", "Ghost", self._open_calendar, tooltip="عرض الإجازات على التقويم الشهري")
+        collect(
+            "مرفقات الإجازة  📎",
+            "Ghost",
+            self._open_attachments,
+            "manage_attachments",
+            tooltip="إدارة مرفقات الإجازات",
+        )
         if buttons:
             if section_added[0]:
                 layout.addWidget(W.separator())
             layout.addWidget(label)
-            for text, style, slot, permission, tooltip in buttons:
+            for text, style, slot, _permission, tooltip in buttons:
                 if style == "Ghost":
                     btn = W.nav_button(text, slot, tooltip=tooltip)
                 else:
@@ -241,21 +297,29 @@ class MainWindow(QMainWindow):
 
         # 3. قسم التقارير والبيانات
         collect, label, buttons, is_first = add_section("التقارير والبيانات")
-        collect("لوحة المؤشرات  📊", "Gold", self._open_dashboard,
-            tooltip="عرض لوحة المؤشرات والإحصائيات")
-        collect("تقرير إجمالي  📄", "Ghost", self._global_report,
-            tooltip="توليد تقرير إجمالي لجميع الموظفين")
-        collect("تقرير مخصص  📑", "Ghost", self._open_custom_report,
-            tooltip="توليد تقرير مخصص حسب معايير محددة")
-        collect("استيراد موظفين Excel  📥", "Ghost", self._import_employee_data, "edit_employee",
-            tooltip="استيراد بيانات الموظفين من ملف Excel")
-        collect("تصدير الموظفين Excel  📤", "Ghost", self._export_employee_data,
-            tooltip="تصدير بيانات الموظفين إلى ملف Excel")
+        collect("لوحة المؤشرات  📊", "Gold", self._open_dashboard, tooltip="عرض لوحة المؤشرات والإحصائيات")
+        collect("تقرير إجمالي  📄", "Ghost", self._global_report, tooltip="توليد تقرير إجمالي لجميع الموظفين")
+        collect(
+            "تقرير مخصص  📑", "Ghost", self._open_custom_report, tooltip="توليد تقرير مخصص حسب معايير محددة"
+        )
+        collect(
+            "استيراد موظفين Excel  📥",
+            "Ghost",
+            self._import_employee_data,
+            "edit_employee",
+            tooltip="استيراد بيانات الموظفين من ملف Excel",
+        )
+        collect(
+            "تصدير الموظفين Excel  📤",
+            "Ghost",
+            self._export_employee_data,
+            tooltip="تصدير بيانات الموظفين إلى ملف Excel",
+        )
         if buttons:
             if section_added[0]:
                 layout.addWidget(W.separator())
             layout.addWidget(label)
-            for text, style, slot, permission, tooltip in buttons:
+            for text, style, slot, _permission, tooltip in buttons:
                 if style == "Ghost":
                     btn = W.nav_button(text, slot, tooltip=tooltip)
                 else:
@@ -266,19 +330,39 @@ class MainWindow(QMainWindow):
 
         # 4. قسم المؤسسات والتنقلات
         collect, label, buttons, is_first = add_section("المؤسسات والتنقلات")
-        collect("المؤسسات  🏥", "Ghost", self._open_institutions, "manage_institutions",
-            tooltip="إدارة قائمة المؤسسات")
-        collect("استيراد من مؤسسة  📥", "Blue", self._import_transfer, "import_transfer",
-            tooltip="استيراد بيانات من مؤسسة أخرى")
-        collect("تصدير للمركز  📤", "Blue", self._export_transfer, "export_transfer",
-            tooltip="تصدير بيانات للمركز الرئيسي")
-        collect("سجل الاستيراد  📋", "Ghost", self._open_import_history, "manage_institutions",
-            tooltip="عرض سجل عمليات الاستيراد")
+        collect(
+            "المؤسسات  🏥",
+            "Ghost",
+            self._open_institutions,
+            "manage_institutions",
+            tooltip="إدارة قائمة المؤسسات",
+        )
+        collect(
+            "استيراد من مؤسسة  📥",
+            "Blue",
+            self._import_transfer,
+            "import_transfer",
+            tooltip="استيراد بيانات من مؤسسة أخرى",
+        )
+        collect(
+            "تصدير للمركز  📤",
+            "Blue",
+            self._export_transfer,
+            "export_transfer",
+            tooltip="تصدير بيانات للمركز الرئيسي",
+        )
+        collect(
+            "سجل الاستيراد  📋",
+            "Ghost",
+            self._open_import_history,
+            "manage_institutions",
+            tooltip="عرض سجل عمليات الاستيراد",
+        )
         if buttons:
             if section_added[0]:
                 layout.addWidget(W.separator())
             layout.addWidget(label)
-            for text, style, slot, permission, tooltip in buttons:
+            for text, style, slot, _permission, tooltip in buttons:
                 if style == "Ghost":
                     btn = W.nav_button(text, slot, tooltip=tooltip)
                 else:
@@ -289,21 +373,28 @@ class MainWindow(QMainWindow):
 
         # 5. قسم إدارة النظام
         collect, label, buttons, is_first = add_section("إدارة النظام")
-        collect("ضوابط الإجازات  📋", "Ghost", self._open_rules, "edit_rules",
-            tooltip="تعديل ضوابط وسياسات الإجازات")
-        collect("العطل الرسمية  🗓", "Ghost", self._open_holidays, "view_holidays",
-            tooltip="عرض وإدارة العطل الرسمية")
-        collect("المستخدمون  👥", "Ghost", self._open_users, "manage_users",
-            tooltip="إدارة مستخدمين النظام")
-        collect("سجل التدقيق  📜", "Ghost", self._open_audit, "view_audit",
-            tooltip="عرض سجل تدقيق العمليات")
-        collect("التنبيهات  🔔", "Ghost", self._open_notifications,
-            tooltip="عرض التنبيهات والإشعارات")
+        collect(
+            "ضوابط الإجازات  📋",
+            "Ghost",
+            self._open_rules,
+            "edit_rules",
+            tooltip="تعديل ضوابط وسياسات الإجازات",
+        )
+        collect(
+            "العطل الرسمية  🗓",
+            "Ghost",
+            self._open_holidays,
+            "view_holidays",
+            tooltip="عرض وإدارة العطل الرسمية",
+        )
+        collect("المستخدمون  👥", "Ghost", self._open_users, "manage_users", tooltip="إدارة مستخدمين النظام")
+        collect("سجل التدقيق  📜", "Ghost", self._open_audit, "view_audit", tooltip="عرض سجل تدقيق العمليات")
+        collect("التنبيهات  🔔", "Ghost", self._open_notifications, tooltip="عرض التنبيهات والإشعارات")
         if buttons:
             if section_added[0]:
                 layout.addWidget(W.separator())
             layout.addWidget(label)
-            for text, style, slot, permission, tooltip in buttons:
+            for text, style, slot, _permission, tooltip in buttons:
                 if style == "Ghost":
                     btn = W.nav_button(text, slot, tooltip=tooltip)
                 else:
@@ -314,19 +405,35 @@ class MainWindow(QMainWindow):
 
         # 6. قسم الأمان والصيانة
         collect, label, buttons, is_first = add_section("الأمان والصيانة")
-        collect("تشفير قاعدة البيانات  🔒", "Ghost", self._open_encryption, "manage_encryption",
-            tooltip="تشفير وفك تشفير قاعدة البيانات")
-        collect("خزنة كلمات المرور  🔐", "Ghost", self._open_vault, "manage_encryption",
-            tooltip="إدارة خزنة كلمات المرور")
-        collect("عمليات قاعدة البيانات  🗄️", "Ghost", self._open_db_ops, "db_operations",
-            tooltip="عمليات الصيانة على قاعدة البيانات")
-        collect("سلة المحذوفات  🗑", "Warn", self._open_trash, "purge",
-            tooltip="عرض واستعادة العناصر المحذوفة")
+        collect(
+            "تشفير قاعدة البيانات  🔒",
+            "Ghost",
+            self._open_encryption,
+            "manage_encryption",
+            tooltip="تشفير وفك تشفير قاعدة البيانات",
+        )
+        collect(
+            "خزنة كلمات المرور  🔐",
+            "Ghost",
+            self._open_vault,
+            "manage_encryption",
+            tooltip="إدارة خزنة كلمات المرور",
+        )
+        collect(
+            "عمليات قاعدة البيانات  🗄️",
+            "Ghost",
+            self._open_db_ops,
+            "db_operations",
+            tooltip="عمليات الصيانة على قاعدة البيانات",
+        )
+        collect(
+            "سلة المحذوفات  🗑", "Warn", self._open_trash, "purge", tooltip="عرض واستعادة العناصر المحذوفة"
+        )
         if buttons:
             if section_added[0]:
                 layout.addWidget(W.separator())
             layout.addWidget(label)
-            for text, style, slot, permission, tooltip in buttons:
+            for text, style, slot, _permission, tooltip in buttons:
                 if style == "Ghost":
                     btn = W.nav_button(text, slot, tooltip=tooltip)
                 else:
@@ -337,15 +444,13 @@ class MainWindow(QMainWindow):
 
         # 7. الإعدادات
         collect, label, buttons, is_first = add_section("عام")
-        collect("الإعدادات  ⚙", "Ghost", self._open_settings,
-            tooltip="إعدادات النظام والتفضيلات")
-        collect("حول  ℹ", "Gold", self._open_about,
-            tooltip="معلومات عن التطبيق والإصدار")
+        collect("الإعدادات  ⚙", "Ghost", self._open_settings, tooltip="إعدادات النظام والتفضيلات")
+        collect("حول  ℹ", "Gold", self._open_about, tooltip="معلومات عن التطبيق والإصدار")
         if buttons:
             if section_added[0]:
                 layout.addWidget(W.separator())
             layout.addWidget(label)
-            for text, style, slot, permission, tooltip in buttons:
+            for text, style, slot, _permission, tooltip in buttons:
                 if style == "Ghost":
                     btn = W.nav_button(text, slot, tooltip=tooltip)
                 else:
@@ -361,6 +466,7 @@ class MainWindow(QMainWindow):
 
         layout.addStretch()
         return area
+
     # -- المنطقة الوسطى -------------------------------------------------
     def _center(self) -> QVBoxLayout:
         layout = QVBoxLayout()
@@ -425,8 +531,10 @@ class MainWindow(QMainWindow):
     # البيانات
     # ==================================================================
     def _load_filters(self) -> None:
-        for combo, values in ((self.cb_workplace, self.ctx.workplaces()),
-                              (self.cb_institution, self.ctx.institutions())):
+        for combo, values in (
+            (self.cb_workplace, self.ctx.workplaces()),
+            (self.cb_institution, self.ctx.institutions()),
+        ):
             combo.blockSignals(True)
             current = combo.currentText()
             combo.clear()
@@ -445,24 +553,38 @@ class MainWindow(QMainWindow):
     def _filters(self) -> tuple[str, str, str]:
         workplace = self.cb_workplace.currentText().strip()
         institution = self.cb_institution.currentText().strip()
-        return (self.search.text().strip(),
-                "" if workplace == "الكل" else workplace,
-                "" if institution == "الكل" else institution)
+        return (
+            self.search.text().strip(),
+            "" if workplace == "الكل" else workplace,
+            "" if institution == "الكل" else institution,
+        )
 
     def _refresh(self) -> None:
         self.policy = self.ctx.db.policy(refresh=True)
         q, workplace, institution = self._filters()
         employees = self.ctx.employees(q, workplace, institution)
         rows, colors = [], {}
-        totals = {"raw": 0, "outside": 0, "net": 0, "earned": 0, "taken": 0, "balance": 0,
-                  "negative": 0}
+        totals = {"raw": 0, "outside": 0, "net": 0, "earned": 0, "taken": 0, "balance": 0, "negative": 0}
         for r, emp in enumerate(employees):
             balance = B.compute_balance(emp, emp.leaves, self.policy)
-            rows.append([
-                emp.emp_id, emp.name, emp.job_title, emp.workplace, emp.institution, emp.gender,
-                D.to_iso(emp.start_date), D.to_iso(emp.end_date), balance.raw_days, balance.outside,
-                balance.net_days, balance.earned, balance.taken, balance.balance,
-            ])
+            rows.append(
+                [
+                    emp.emp_id,
+                    emp.name,
+                    emp.job_title,
+                    emp.workplace,
+                    emp.institution,
+                    emp.gender,
+                    D.to_iso(emp.start_date),
+                    D.to_iso(emp.end_date),
+                    balance.raw_days,
+                    balance.outside,
+                    balance.net_days,
+                    balance.earned,
+                    balance.taken,
+                    balance.balance,
+                ]
+            )
             colors[(r, 13)] = theme.balance_color(balance.balance, self.policy.low_balance_days)
             totals["raw"] += balance.raw_days
             totals["outside"] += balance.outside
@@ -472,14 +594,20 @@ class MainWindow(QMainWindow):
             totals["balance"] += balance.balance
             totals["negative"] += 1 if balance.balance < 0 else 0
         self.rows = rows
-        footer = (f"عدد الموظفين المعروضين: {len(rows)} | إجمالي المستحقة: {totals['earned']} يوم | "
-                  f"المأخوذة: {totals['taken']} يوم | إجمالي الرصيد: {totals['balance']} يوم | "
-                  f"أرصدة سالبة: {totals['negative']} (مسموح حسب الضوابط)")
-        self.table.set_rows(rows, numeric_columns=NUMERIC_COLUMNS, colors=colors,
-                            empty_text="لا يوجد موظفون مطابقون للبحث أو الفلاتر", footer=footer)
+        footer = (
+            f"عدد الموظفين المعروضين: {len(rows)} | إجمالي المستحقة: {totals['earned']} يوم | "
+            f"المأخوذة: {totals['taken']} يوم | إجمالي الرصيد: {totals['balance']} يوم | "
+            f"أرصدة سالبة: {totals['negative']} (مسموح حسب الضوابط)"
+        )
+        self.table.set_rows(
+            rows,
+            numeric_columns=NUMERIC_COLUMNS,
+            colors=colors,
+            empty_text="لا يوجد موظفون مطابقون للبحث أو الفلاتر",
+            footer=footer,
+        )
         if hasattr(self, "lbl_status"):
-            self.lbl_status.setText(f"الموظفون: {len(rows)} — آخر تحديث: "
-                                    f"{date.today().strftime('%Y-%m-%d')}")
+            self.lbl_status.setText(f"الموظفون: {len(rows)} — آخر تحديث: {date.today().strftime('%Y-%m-%d')}")
         self._on_selection()
 
     def _current_id(self) -> str | None:
@@ -539,8 +667,9 @@ class MainWindow(QMainWindow):
             W.error(self, "لا تملك صلاحية حذف الموظفين.")
             return
         employee = self.ctx.db.get_employee(emp_id)
-        if not W.confirm(self, f"حذف الموظف «{employee.name}» مع إجازاته؟\n"
-                               "الحذف ناعم ويمكن الاستعادة من سلة المحذوفات."):
+        if not W.confirm(
+            self, f"حذف الموظف «{employee.name}» مع إجازاته؟\nالحذف ناعم ويمكن الاستعادة من سلة المحذوفات."
+        ):
             return
         self.ctx.db.soft_delete_employee(emp_id, self.ctx.user())
         self._after_change()
@@ -563,12 +692,13 @@ class MainWindow(QMainWindow):
             W.warn(self, "لا توجد بيانات للتصدير.")
             return
         path, _ = QFileDialog.getSaveFileName(
-            self, "تصدير الموظفين", f"الموظفون_{D.date.today()}.xlsx", "Excel (*.xlsx)")
+            self, "تصدير الموظفين", f"الموظفون_{D.date.today()}.xlsx", "Excel (*.xlsx)"
+        )
         if not path:
             return
         try:
             X.export_employee_master(path, employees)
-        except Exception as exc:                      # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             W.error(self, f"فشل التصدير: {exc}")
             return
         W.info(self, f"تم التصدير:\n{path}")
@@ -580,6 +710,7 @@ class MainWindow(QMainWindow):
             W.error(self, "لا تملك صلاحية استيراد الموظفين.")
             return
         from .dialogs_db import ImportWizardDialog
+
         ImportWizardDialog(self, self.ctx, refresh_callback=self._after_change).exec()
 
     def _open_attachments(self) -> None:
@@ -598,8 +729,7 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         menu.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         for leave in leaves:
-            label = (f"{leave.type} — {D.to_iso(leave.start_date)} "
-                     f"({leave.days_actual} يوم)")
+            label = f"{leave.type} — {D.to_iso(leave.start_date)} ({leave.days_actual} يوم)"
             action = QAction(label, self)
             action.triggered.connect(lambda _c=False, lid=leave.id: self._chosen_leave.append(lid))
             menu.addAction(action)
@@ -615,11 +745,13 @@ class MainWindow(QMainWindow):
     def _open_encryption(self) -> None:
         """إدارة تشفير قاعدة البيانات."""
         from .dialogs_security import EncryptionDialog
+
         dialog = EncryptionDialog(self, self.ctx)
         dialog.exec()
 
     def _open_vault(self) -> None:
         from .dialogs_vault import VaultDialog
+
         VaultDialog(self, self.ctx).exec()
 
     def _open_settlement(self) -> None:
@@ -681,28 +813,41 @@ class MainWindow(QMainWindow):
         employee = self.ctx.db.get_employee(emp_id)
         if employee is None:
             return
-        names = [item.name for item in self.ctx.db.list_institutions(active_only=True)
-                 if item.name != employee.institution]
+        names = [
+            item.name
+            for item in self.ctx.db.list_institutions(active_only=True)
+            if item.name != employee.institution
+        ]
         if not names:
             W.warn(self, "لا توجد مؤسسة أخرى مسجّلة. أضف المؤسسات من نافذة «المؤسسات».")
             return
         from PyQt6.QtWidgets import QInputDialog
+
         choice, ok = QInputDialog.getItem(
-            self, "نقل موظف", f"نقل «{employee.name}» من «{employee.institution}» إلى:",
-            names, 0, False)
+            self, "نقل موظف", f"نقل «{employee.name}» من «{employee.institution}» إلى:", names, 0, False
+        )
         if not ok or not choice:
             return
         from ..services import dates as DD
+
         moved_on = DD.date.today()
-        if not W.confirm(self, f"نقل الموظف {employee.name} ({emp_id}) إلى «{choice}»؟\n\n"
-                              "سيبقى رصيده وإجازاته كما هي، ويُسجَّل الانتقال في سجل الموظف.",
-                         "تأكيد النقل"):
+        if not W.confirm(
+            self,
+            f"نقل الموظف {employee.name} ({emp_id}) إلى «{choice}»؟\n\n"
+            "سيبقى رصيده وإجازاته كما هي، ويُسجَّل الانتقال في سجل الموظف.",
+            "تأكيد النقل",
+        ):
             return
-        self.ctx.db.add_move(emp_id, employee.institution, choice, moved_on=moved_on,
-                             source_file="—", note="نقل يدوي من الشاشة الرئيسية",
-                             user=self.ctx.user())
-        self.ctx.db.set_employee_institution(emp_id, choice, moved_on=moved_on,
-                                            user=self.ctx.user())
+        self.ctx.db.add_move(
+            emp_id,
+            employee.institution,
+            choice,
+            moved_on=moved_on,
+            source_file="—",
+            note="نقل يدوي من الشاشة الرئيسية",
+            user=self.ctx.user(),
+        )
+        self.ctx.db.set_employee_institution(emp_id, choice, moved_on=moved_on, user=self.ctx.user())
         W.info(self, f"تم نقل الموظف إلى «{choice}» بتاريخ {moved_on}.")
         self._after_change()
 
@@ -723,6 +868,7 @@ class MainWindow(QMainWindow):
 
     def _open_advanced_search(self) -> None:
         from .dialogs_advanced_search import AdvancedSearchDialog
+
         AdvancedSearchDialog(self, self.ctx).exec()
 
     def _open_about(self) -> None:
@@ -740,11 +886,13 @@ class MainWindow(QMainWindow):
             W.error(self, "الموظف غير موجود.")
             return
         from .dialogs_employee_card import EmployeeCardDialog
+
         EmployeeCardDialog(employee, self.policy, self, self.ctx).exec()
 
     def _open_custom_report(self) -> None:
         """فتح نافذة التقرير المخصص."""
         from .dialogs_custom_report import CustomReportDialog
+
         CustomReportDialog(self, self.ctx).exec()
 
     def _after_change(self) -> None:
@@ -765,8 +913,9 @@ class MainWindow(QMainWindow):
         else:
             rows = self._report_rows_from_table()
             label = "المعروضين"
-        path, _ = QFileDialog.getSaveFileName(self, f"تصدير {label}",
-                                              f"employees_{date.today()}.xlsx", "Excel (*.xlsx)")
+        path, _ = QFileDialog.getSaveFileName(
+            self, f"تصدير {label}", f"employees_{date.today()}.xlsx", "Excel (*.xlsx)"
+        )
         if not path:
             return
         try:
@@ -787,8 +936,9 @@ class MainWindow(QMainWindow):
         if not rows:
             W.info(self, "لا توجد بيانات للتصدير.")
             return
-        content = H.global_report_html(rows, self.policy, "تقرير الإجازات التراكمية",
-                                       self.ctx.session.scoped_institution)
+        content = H.global_report_html(
+            rows, self.policy, "تقرير الإجازات التراكمية", self.ctx.session.scoped_institution
+        )
         path = H.save_and_open(content, self.ctx.paths.reports_dir, "global_report.html")
         W.info(self, f"تم فتح التقرير في المتصفح:\n{path.name}")
 
@@ -898,8 +1048,8 @@ class MainWindow(QMainWindow):
 
     def _pick_accent(self) -> None:
         from PyQt6.QtWidgets import QColorDialog
-        chosen = QColorDialog.getColor(QColor(theme.color("accent")), self,
-                                       "اختر اللون المميز")
+
+        chosen = QColorDialog.getColor(QColor(theme.color("accent")), self, "اختر اللون المميز")
         if chosen.isValid():
             self.set_accent(chosen.name())
 
@@ -960,6 +1110,7 @@ class MainWindow(QMainWindow):
         # أيقونة الصندوق (Tray)
         try:
             from .tray import TrayController
+
             self.tray = TrayController(self, self.ctx)
             if self.tray.start():
                 QTimer.singleShot(900, lambda: self.tray.refresh_alerts(notify=True))
@@ -1008,12 +1159,15 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):  # noqa: N802
         # الإخفاء إلى الصندوق إن كان مُفعَّلاً (وزر الخروج/إنهاء التطبيق يتجاوز ذلك)
         tray = getattr(self, "tray", None)
-        if (tray is not None and tray.tray is not None and not getattr(self, "_force_quit", False)
-                and bool(self.ctx.ui_get("close_to_tray", False, bool))):
+        if (
+            tray is not None
+            and tray.tray is not None
+            and not getattr(self, "_force_quit", False)
+            and bool(self.ctx.ui_get("close_to_tray", False, bool))
+        ):
             self.ctx.ui_set("window_geometry", self.saveGeometry())
             self.hide()
-            tray.notify("البرنامج ما زال يعمل",
-                        "أُخفي البرنامج إلى شريط النظام. اضغط على الأيقونة لإظهاره.")
+            tray.notify("البرنامج ما زال يعمل", "أُخفي البرنامج إلى شريط النظام. اضغط على الأيقونة لإظهاره.")
             event.ignore()
             return
         try:
@@ -1021,8 +1175,7 @@ class MainWindow(QMainWindow):
             if self.policy.backup_on_exit:
                 path = self.ctx.backup.create_if_changed("exit")
                 if path:
-                    self.ctx.db.log(self.ctx.user(), "نسخ احتياطي", "database", path.name,
-                                    "عند الإغلاق")
+                    self.ctx.db.log(self.ctx.user(), "نسخ احتياطي", "database", path.name, "عند الإغلاق")
         except Exception:  # pragma: no cover - لا نمنع الإغلاق بسبب النسخ
             pass
         tray = getattr(self, "tray", None)

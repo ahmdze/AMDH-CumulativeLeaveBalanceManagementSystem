@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+
 # ---------------------------------------------------------------------------
 # تحويلات أساسية
 # ---------------------------------------------------------------------------
@@ -62,9 +63,11 @@ def _channel_luminance(value: int) -> float:
 def luminance(color: str) -> float:
     """الإضاءة النسبية (0 أسود، 1 أبيض) حسب WCAG."""
     red, green, blue = parse(color)
-    return (0.2126 * _channel_luminance(red)
-            + 0.7152 * _channel_luminance(green)
-            + 0.0722 * _channel_luminance(blue))
+    return (
+        0.2126 * _channel_luminance(red)
+        + 0.7152 * _channel_luminance(green)
+        + 0.0722 * _channel_luminance(blue)
+    )
 
 
 def contrast(first: str, second: str) -> float:
@@ -78,8 +81,9 @@ def readable_on(background: str, light: str = "#FFFFFF", dark: str = "#0B1220") 
     return light if contrast(background, light) >= contrast(background, dark) else dark
 
 
-def ensure_contrast(foreground: str, background: str, target: float = 4.5,
-                    light: str = "#FFFFFF", dark: str = "#0B1220") -> str:
+def ensure_contrast(
+    foreground: str, background: str, target: float = 4.5, light: str = "#FFFFFF", dark: str = "#0B1220"
+) -> str:
     """يعدّل اللون تدريجياً حتى يبلغ التباين المطلوب مع الخلفية (للقراءة المريحة).
 
     الاتجاه صحيح دائماً: إن كان اللون أفتح من الخلفية نُفتّحه أكثر، وإن كان أغمق نُغمّقه.

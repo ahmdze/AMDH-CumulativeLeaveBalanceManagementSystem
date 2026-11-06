@@ -18,7 +18,7 @@ class AppContext:
     db: Database
     backup: BackupService
     session: Session
-    settings: object          # QSettings (لا نستورد PyQt6 هنا)
+    settings: object  # QSettings (لا نستورد PyQt6 هنا)
 
     # ------------------------------------------------------------------
     @property
@@ -36,13 +36,15 @@ class AppContext:
         return self.session.username
 
     # ------------------------------------------------------------------
-    def employees(self, q: str = "", workplace: str = "", institution: str = "",
-                  include_deleted: bool = False) -> list[Employee]:
+    def employees(
+        self, q: str = "", workplace: str = "", institution: str = "", include_deleted: bool = False
+    ) -> list[Employee]:
         scope = self.session.scoped_institution
         if scope:
             institution = scope
-        return self.db.list_employees(q, workplace, institution,
-                                      include_deleted=include_deleted, with_leaves=True)
+        return self.db.list_employees(
+            q, workplace, institution, include_deleted=include_deleted, with_leaves=True
+        )
 
     def institutions(self) -> list[str]:
         scope = self.session.scoped_institution
