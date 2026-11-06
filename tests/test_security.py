@@ -1,4 +1,4 @@
-"""اختبارات الأمان: كلمات المرور، الأدوار، والصلاحيات."""
+"""اختبارات الأمان: كلمات المرور، الأدوار، الرموز الموقعة، والصلاحيات."""
 
 from __future__ import annotations
 
@@ -42,9 +42,10 @@ def test_permission_matrix():
     editor = S.make_session(AppUser(username="e", role="editor"), True)
     assert editor.can("edit_leave") and editor.can("edit_employee") and editor.can("export")
     assert editor.can("view_holidays") and editor.can("manage_holidays")
-    assert editor.can("delete_employee") and editor.can("delete_leave") and editor.can("purge")
-    assert editor.can("edit_policy") and editor.can("backup_restore")
+    assert editor.can("delete_employee") and editor.can("delete_leave")
+    assert editor.can("backup_restore")
     assert editor.can("manage_encryption") and editor.can("db_operations")
+    assert not editor.can("purge") and not editor.can("edit_policy")
     assert not editor.can("manage_users") and not editor.can("manage_institutions")
     assert not editor.can("view_audit") and not editor.can("edit_rules")
     assert editor.read_only is False
@@ -53,6 +54,20 @@ def test_permission_matrix():
     assert viewer.can("export") and viewer.can("view_holidays")
     assert not viewer.can("edit_leave") and not viewer.can("edit_employee")
     assert viewer.read_only is True
+
+
+def test_signed_api_tokens():
+    token = S.create_api_token("admin", role="admin", institution="")
+    assert token != "admin"
+    payload = S.verify_api_token(token)
+    assert payload is not None
+    assert payload["sub"] == "admin" and payload["role"] == "admin"
+    # التلاعب بالتوقيع يفشل فوراً
+    assert S.verify_api_token(token + "x") is None
+    assert S.verify_api_token("admin") is None
+    # رمز منتهي الصلاحية يفشل
+    expired = S.create_api_token("admin", ttl=-10)
+    assert S.verify_api_token(expired) is None
 
 
 def test_unknown_role_falls_back_to_viewer():

@@ -1,4 +1,4 @@
-"""منطق حساب الأرصدة: الاحتساب المتواصل، الترصيد السنوي، كشف الحساب، تصفية نهاية الخدمة.
+"""منطق حساب الأرصدة: الاحتساب المتواصل، الترصيد السنوي، كشف الحساب، تصفية نهاية الخدمة، وأثر العلاوة والترفيع.
 
 ملاحظات ضوابطية:
   * الرصيد السالب **مشروع** حسب الضوابط الإدارية ولا يُعد خطأً ولا يُمنع.
@@ -12,7 +12,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 
 from .. import config as cfg
-from ..models import Balance, Employee, Leave, Settlement, Statement, YearLine
+from ..models import Balance, Employee, Leave, PromotionImpact, Settlement, Statement, YearLine
 from ..rules import LeaveRule, Policy
 from . import dates as D
 
@@ -429,6 +429,63 @@ def period_totals(
         out["taken"] += consumed
         out["count"] += 1
     return out
+
+
+# ---------------------------------------------------------------------------
+# حاسبة أثر الإجازات المستبعدة من الخدمة على العلاوة السنوية والترفيع
+# ---------------------------------------------------------------------------
+def promotion_impact(
+    employee: Employee, leaves: list[Leave], policy: Policy, today: date | None = None
+) -> PromotionImpact:
+    """يحسب مقدار تأخر استحقاق العلاوة السنوية والترفيع بسبب الإجازات المستبعدة من الخدمة."""
+    today = today or date.today()
+    items = active_leaves(leaves)
+    total_excluded = 0
+    excluded_after = 0
+    by_type: dict[str, int] = {}
+    cutoff = employee.opening_balance_date if employee.has_opening_balance else None
+
+    for lv in items:
+        excluded, _consumed = leave_effect(policy, lv)
+        if excluded <= 0:
+            continue
+        total_excluded += excluded
+        by_type[lv.type or "خارج الرصيد"] = by_type.get(lv.type or "خارج الرصيد", 0) + excluded
+        s, e = leave_span(lv)
+        if cutoff and s and s <= cutoff:
+            if e and e > cutoff:
+                rule = policy.rule(lv.type)
+                partial = D.days_count(
+                    cutoff + timedelta(days=1), e, rule.count_mode, policy.weekend, policy.holidays
+                )
+                excluded_after += min(excluded, partial)
+        else:
+            excluded_after += excluded
+
+    base_anniv: date | None = None
+    eff_anniv: date | None = None
+    if employee.start_date:
+        years_elapsed = max(1, today.year - employee.start_date.year)
+        candidate = D.add_years(employee.start_date, years_elapsed)
+        if candidate < today:
+            candidate = D.add_years(employee.start_date, years_elapsed + 1)
+        base_anniv = candidate
+        # إضافة أيام التأخير التقويمية إلى ذكرى المباشرة
+        eff_anniv = base_anniv + timedelta(days=total_excluded)
+        while eff_anniv < today:
+            eff_anniv = D.add_years(eff_anniv, 1)
+
+    delay_months = total_excluded // 30
+    delay_days_rem = total_excluded % 30
+    return PromotionImpact(
+        total_excluded_days=total_excluded,
+        excluded_after_opening=excluded_after,
+        base_increment_date=base_anniv,
+        effective_increment_date=eff_anniv,
+        delay_months=delay_months,
+        delay_days_remainder=delay_days_rem,
+        by_type=by_type,
+    )
 
 
 # ---------------------------------------------------------------------------

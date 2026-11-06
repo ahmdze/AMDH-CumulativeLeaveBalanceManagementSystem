@@ -38,6 +38,11 @@ class Employee:
     opening_balance_note: str = ""
     opening_updated_at: str = ""
     opening_updated_by: str = ""
+    # التنسيب / التكليف المؤقت بين المؤسسات
+    secondment_to: str = ""
+    secondment_start: date | None = None
+    secondment_end: date | None = None
+    secondment_order: str = ""
     leaves: list[Leave] = field(default_factory=list)
 
     # -- تحويل -------------------------------------------------------------
@@ -68,6 +73,10 @@ class Employee:
             opening_balance_note=m.get("opening_balance_note") or "",
             opening_updated_at=m.get("opening_updated_at") or "",
             opening_updated_by=m.get("opening_updated_by") or "",
+            secondment_to=m.get("secondment_to") or "",
+            secondment_start=parse_iso(m.get("secondment_start")),
+            secondment_end=parse_iso(m.get("secondment_end")),
+            secondment_order=m.get("secondment_order") or "",
         )
 
     def to_fields(self) -> dict:
@@ -92,6 +101,10 @@ class Employee:
             "opening_balance_note": self.opening_balance_note,
             "opening_updated_at": self.opening_updated_at,
             "opening_updated_by": self.opening_updated_by,
+            "secondment_to": self.secondment_to,
+            "secondment_start": self.secondment_start.strftime("%Y-%m-%d") if self.secondment_start else "",
+            "secondment_end": self.secondment_end.strftime("%Y-%m-%d") if self.secondment_end else "",
+            "secondment_order": self.secondment_order,
         }
 
     @property
@@ -101,6 +114,18 @@ class Employee:
     @property
     def has_opening_balance(self) -> bool:
         return bool(self.opening_balance_set and self.opening_balance_date)
+
+    @property
+    def is_seconded(self) -> bool:
+        """هل الموظف في حالة تنسيب ساري المفعول؟"""
+        if not self.secondment_to:
+            return False
+        today = date.today()
+        if self.secondment_start and today < self.secondment_start:
+            return False
+        if self.secondment_end and today > self.secondment_end:
+            return False
+        return True
 
     @property
     def label(self) -> str:
@@ -230,6 +255,36 @@ class Balance:
     @property
     def is_negative(self) -> bool:
         return self.balance < 0
+
+
+@dataclass
+class PromotionImpact:
+    """أثر الإجازات المستبعدة من الخدمة (بدون راتب / 5 سنوات / أمومة) على استحقاق العلاوة والترفيع."""
+
+    total_excluded_days: int = 0
+    excluded_after_opening: int = 0
+    base_increment_date: date | None = None
+    effective_increment_date: date | None = None
+    delay_months: int = 0
+    delay_days_remainder: int = 0
+    by_type: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def has_delay(self) -> bool:
+        return self.total_excluded_days > 0
+
+    @property
+    def summary_text(self) -> str:
+        if not self.total_excluded_days:
+            return "لا يوجد تأخير في العلاوة أو الترفيع (0 يوم مستبعد)"
+        parts = []
+        if self.delay_months:
+            parts.append(f"{self.delay_months} شهر")
+        if self.delay_days_remainder:
+            parts.append(f"{self.delay_days_remainder} يوم")
+        delay_str = " و ".join(parts) if parts else f"{self.total_excluded_days} يوم"
+        nxt = f" | الاستحقاق القادم: {self.effective_increment_date.isoformat()}" if self.effective_increment_date else ""
+        return f"تأخير العلاوة/الترفيع بمقدار {self.total_excluded_days} يوم ({delay_str}){nxt}"
 
 
 @dataclass
@@ -403,6 +458,8 @@ class EmployeeMove:
     recorded_at: str = ""
     source_file: str = ""
     note: str = ""
+    move_type: str = "transfer"
+    end_date: date | None = None
 
     @classmethod
     def from_mapping(cls, m) -> EmployeeMove:
@@ -415,6 +472,8 @@ class EmployeeMove:
             recorded_at=m.get("recorded_at") or "",
             source_file=m.get("source_file") or "",
             note=m.get("note") or "",
+            move_type=m.get("move_type") or "transfer",
+            end_date=parse_iso(m.get("end_date")),
         )
 
 

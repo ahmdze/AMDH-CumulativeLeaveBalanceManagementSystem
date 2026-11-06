@@ -1,8 +1,8 @@
-"""ملفات النقل بين المركز والمؤسسات: تصدير مُنقّى، معاينة، واستيراد.
+"""ملفات النقل بين المركز والمؤسسات: تصدير مُنقّى ومشفّر، إرسال شبكي مباشر، معاينة، واستيراد.
 
 الصيغ المدعومة:
-  * ``.amdhz`` — أرشيف ZIP يحوي ``data.db`` و``manifest.json`` و``attachments/`` (الموصى به،
-    لأن المرفقات تنتقل مع البيانات كما هو مطلوب في حالة نقل الموظفين والأوامر).
+  * ``.amdhz`` — أرشيف ZIP يحوي ``data.db`` (مشفّر بـ Fernet) و``manifest.json`` و``attachments/``
+    (الموصى به، لأن المرفقات تنتقل مع البيانات كما هو مطلوب في حالة نقل الموظفين والأوامر).
   * ``.db`` — قاعدة SQLite عادية (بلا مرفقات) للتوافق مع الطريقة القديمة.
 
 التنقية: لا تُصدَّر جداول المستخدمين (بصمات كلمات المرور) ولا سجل التدقيق ولا سجل
@@ -15,11 +15,15 @@ import json
 import shutil
 import sqlite3
 import tempfile
+import urllib.error
+import urllib.request
+import uuid
 import zipfile
 from datetime import datetime
 from pathlib import Path
 
 from ..logging_setup import get_logger
+from . import crypto
 from . import merge as M
 
 LOG = get_logger("transfer")
@@ -43,8 +47,10 @@ def export_transfer(
     attachments_dir: Path | None = None,
     period: tuple[str, str] | None = None,
     center: str = "",
+    encrypt_archive: bool = True,
+    secret: str = "",
 ) -> dict:
-    """ينشئ ملف نقل مُنقّى ويعيد بيان المحتوى (manifest)."""
+    """ينشئ ملف نقل مُنقّى (ومشفّر داخل الأرشيف) ويعيد بيان المحتوى (manifest)."""
     dest_path = Path(dest_path)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
     institution = (institution or "").strip()
@@ -54,8 +60,6 @@ def export_transfer(
     work_dir = Path(tempfile.mkdtemp(prefix="amdh_export_"))
     try:
         staging = work_dir / DATA_NAME
-        # ملف النقل يجب أن يكون عادياً (غير مشفّر) حتى يُقرأ ويُدمج في أي نسخة؛
-        # لذلك نُصدّر نسخة نصية من القاعدة المشفّرة بدل نسخها كما هي.
         db.export_plaintext(staging)
         counts = _sanitize(staging, institution, db.conn)
         manifest = {
@@ -74,6 +78,7 @@ def export_transfer(
             "period_from": period[0] if period else "",
             "period_to": period[1] if period else "",
             "policy_fingerprint": M.policy_fingerprint(db),
+            "encrypted_payload": bool(encrypt_archive),
             "counts": counts,
         }
         _write_manifest(staging, manifest)
@@ -88,11 +93,17 @@ def export_transfer(
         wants_plain = suffix == ".db"
         if wants_archive or (not wants_plain and include_attachments and attachment_files):
             manifest["data_checksum"] = M.file_checksum(staging)
+            db_bytes = staging.read_bytes()
+            if encrypt_archive:
+                db_bytes = crypto.encrypt_bytes(db_bytes, secret)
             with zipfile.ZipFile(dest_path, "w", zipfile.ZIP_DEFLATED) as archive:
-                archive.write(staging, DATA_NAME)
+                archive.writestr(DATA_NAME, db_bytes)
                 archive.writestr(MANIFEST_NAME, json.dumps(manifest, ensure_ascii=False, indent=2))
                 for stored_name, source_file in attachment_files:
-                    archive.write(source_file, f"{ATTACHMENTS_DIR}/{stored_name}")
+                    att_bytes = source_file.read_bytes()
+                    if encrypt_archive:
+                        att_bytes = crypto.encrypt_bytes(att_bytes, secret)
+                    archive.writestr(f"{ATTACHMENTS_DIR}/{stored_name}", att_bytes)
         else:
             shutil.copy2(staging, dest_path)
         manifest["path"] = str(dest_path)
@@ -131,6 +142,64 @@ def export_transfer(
         shutil.rmtree(work_dir, ignore_errors=True)
 
 
+def send_transfer_over_network(
+    file_path: str | Path,
+    server_url: str,
+    *,
+    username: str = "",
+    password: str = "",
+    token: str = "",
+    timeout: int = 30,
+) -> dict:
+    """يرسل ملف النقل (.amdhz) مباشرة عبر الشبكة المحلية (LAN) إلى خادم المركز (FastAPI)."""
+    file_path = Path(file_path)
+    if not file_path.exists():
+        raise ValueError("ملف النقل غير موجود.")
+    base_url = server_url.strip().rstrip("/")
+    if not base_url.startswith(("http://", "https://")):
+        base_url = "http://" + base_url
+
+    # إذا لم يتوفر التوكن، نحصل عليه من /api/auth/login
+    if not token and username and password:
+        login_url = f"{base_url}/api/auth/login?username={urllib.parse.quote(username)}&password={urllib.parse.quote(password)}"
+        req = urllib.request.Request(login_url, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                auth_data = json.loads(resp.read().decode("utf-8"))
+                token = auth_data.get("token", "")
+        except urllib.error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")
+            raise RuntimeError(f"فشل تسجيل الدخول في خادم المركز ({exc.code}): {detail}") from exc
+        except Exception as exc:
+            raise RuntimeError(f"تعذّر الاتصال بخادم المركز ({base_url}): {exc}") from exc
+
+    boundary = f"----AMDHBoundary{uuid.uuid4().hex}"
+    file_bytes = file_path.read_bytes()
+    body = (
+        f"--{boundary}\r\n"
+        f'Content-Disposition: form-data; name="file"; filename="{file_path.name}"\r\n'
+        f"Content-Type: application/octet-stream\r\n\r\n"
+    ).encode("utf-8") + file_bytes + f"\r\n--{boundary}--\r\n".encode("utf-8")
+
+    headers = {
+        "Content-Type": f"multipart/form-data; boundary={boundary}",
+        "Content-Length": str(len(body)),
+    }
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    upload_url = f"{base_url}/api/transfer/upload"
+    req = urllib.request.Request(upload_url, data=body, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="ignore")
+        raise RuntimeError(f"رفض خادم المركز استلام الملف ({exc.code}): {detail}") from exc
+    except Exception as exc:
+        raise RuntimeError(f"فشل إرسال الملف عبر الشبكة: {exc}") from exc
+
+
 def _sanitize(db_path: Path, institution: str, source_connection=None) -> dict:
     """يحذف ما لا يجب تصديره ويقصر البيانات على مؤسسة (عند تحديدها) ويعيد الأعداد."""
     connection = sqlite3.connect(str(db_path))
@@ -150,14 +219,18 @@ def _sanitize(db_path: Path, institution: str, source_connection=None) -> dict:
             if "attachments" in tables:
                 connection.execute(
                     "DELETE FROM attachments WHERE emp_id NOT IN "
-                    "(SELECT emp_id FROM employees WHERE institution=?)",
-                    (institution,),
+                    "(SELECT emp_id FROM employees WHERE institution=? OR secondment_to=?)",
+                    (institution, institution),
                 )
             connection.execute(
-                "DELETE FROM leaves WHERE emp_id NOT IN (SELECT emp_id FROM employees WHERE institution=?)",
-                (institution,),
+                "DELETE FROM leaves WHERE emp_id NOT IN "
+                "(SELECT emp_id FROM employees WHERE institution=? OR secondment_to=?)",
+                (institution, institution),
             )
-            connection.execute("DELETE FROM employees WHERE institution<>?", (institution,))
+            connection.execute(
+                "DELETE FROM employees WHERE institution<>? AND COALESCE(secondment_to,'')<>?",
+                (institution, institution),
+            )
             connection.execute(
                 "DELETE FROM employee_moves WHERE emp_id NOT IN (SELECT emp_id FROM employees)"
             )
@@ -285,10 +358,6 @@ def read_transfer_info(path: str | Path, key_hex: str = "") -> dict:
 
 
 def _read_only(path: Path):
-    import sqlite3
-
-    from . import crypto
-
     if crypto.is_encrypted_database(path):
         raise ValueError("الملف مشفّر")
     connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
@@ -296,8 +365,8 @@ def _read_only(path: Path):
     return connection
 
 
-def prepare_source(path: str | Path, key_hex: str = "") -> PreparedTransfer:
-    """يفك الأرشيف (إن لزم) إلى مجلد مؤقت ويعيد مسار القاعدة ومجلد المرفقات."""
+def prepare_source(path: str | Path, key_hex: str = "", secret: str = "") -> PreparedTransfer:
+    """يفك الأرشيف (ويفك تشفير data.db والمرفقات تلقائياً إن كانت مشفّرة) إلى مجلد مؤقت."""
     path = Path(path)
     if not is_archive(path):
         attachments = path.parent / ATTACHMENTS_DIR
@@ -310,6 +379,19 @@ def prepare_source(path: str | Path, key_hex: str = "") -> PreparedTransfer:
     temp_dir = Path(tempfile.mkdtemp(prefix="amdh_import_"))
     with zipfile.ZipFile(path) as archive:
         archive.extractall(temp_dir)
+    # فك تشفير data.db والمرفقات إن كانت مشفّرة بـ Fernet
+    db_file = temp_dir / DATA_NAME
+    if db_file.exists():
+        raw_db = db_file.read_bytes()
+        if crypto.is_encrypted_payload(raw_db):
+            db_file.write_bytes(crypto.decrypt_bytes(raw_db, secret))
+    attachments = temp_dir / ATTACHMENTS_DIR
+    if attachments.exists():
+        for att_file in attachments.rglob("*"):
+            if att_file.is_file():
+                raw_att = att_file.read_bytes()
+                if crypto.is_encrypted_payload(raw_att):
+                    att_file.write_bytes(crypto.decrypt_bytes(raw_att, secret))
     manifest: dict = {}
     manifest_file = temp_dir / MANIFEST_NAME
     if manifest_file.exists():
@@ -317,9 +399,8 @@ def prepare_source(path: str | Path, key_hex: str = "") -> PreparedTransfer:
             manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             manifest = {}
-    attachments = temp_dir / ATTACHMENTS_DIR
     return PreparedTransfer(
-        db_path=temp_dir / DATA_NAME,
+        db_path=db_file,
         attachments_dir=attachments if attachments.exists() else None,
         manifest=manifest,
         temp_dir=temp_dir,

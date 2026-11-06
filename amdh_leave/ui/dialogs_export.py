@@ -1,7 +1,8 @@
-"""حوار «تصدير للمركز»: المؤسسة تلقائياً، والشهر الحالي أو فترة محددة."""
+"""حوار «تصدير للمركز»: المؤسسة تلقائياً، والشهر الحالي أو فترة محددة، مع إرسال شبكي مباشر (LAN Sync)."""
 
 from __future__ import annotations
 
+import tempfile
 from datetime import date
 from pathlib import Path
 
@@ -12,9 +13,11 @@ from PyQt6.QtWidgets import (
     QDateEdit,
     QDialog,
     QFileDialog,
+    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QRadioButton,
     QVBoxLayout,
 )
@@ -36,7 +39,7 @@ def _month_bounds(today: date | None = None) -> tuple[date, date]:
 
 
 class ExportToCenterDialog(QDialog):
-    """تصدير ملف نقل مُوسَّم بالمؤسسة والفترة، مع أعداد وتنبيه قبل التنفيذ."""
+    """تصدير ملف نقل مُوسَّم بالمؤسسة والفترة (مشفر)، مع إمكانية الإرسال الشبكي المباشر للمركز."""
 
     def __init__(self, parent, ctx, institution: str = "") -> None:
         super().__init__(parent)
@@ -45,7 +48,7 @@ class ExportToCenterDialog(QDialog):
         self.result_path: Path | None = None
         self.setWindowTitle("تصدير للمركز")
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
-        self.setMinimumSize(620, 520)
+        self.setMinimumSize(640, 560)
         self.setStyleSheet(parent.styleSheet() if parent else "")
         self._build()
         self._refresh()
@@ -61,8 +64,8 @@ class ExportToCenterDialog(QDialog):
         layout.addWidget(title)
         layout.addWidget(
             W.muted_label(
-                "يُصدَّر ملف نقل منقّى (بلا مستخدمين ولا سجل تدقيق) مع المرفقات، "
-                "ثم يُسلَّم إلى المركز ليستورده من «استيراد من مؤسسة»."
+                "يُصدَّر ملف نقل منقّى ومشفّر (بلا مستخدمين ولا سجل تدقيق) مع المرفقات، "
+                "ويمكن حفظه كملف أو إرساله مباشرة عبر الشبكة المحلية إلى خادم المركز."
             )
         )
 
@@ -139,7 +142,8 @@ class ExportToCenterDialog(QDialog):
         layout.addStretch()
 
         buttons = QHBoxLayout()
-        buttons.addWidget(W.button("📤 تصدير", "Accent", self._export, width=130))
+        buttons.addWidget(W.button("📤 حفظ ملف (.amdhz)", "Accent", self._export, width=160))
+        buttons.addWidget(W.button("🌐 إرسال مباشر عبر الشبكة", "Blue", self._send_lan, width=190))
         buttons.addWidget(W.button("إلغاء", "Ghost", self.reject, width=90))
         buttons.addStretch()
         layout.addLayout(buttons)
@@ -214,7 +218,7 @@ class ExportToCenterDialog(QDialog):
         first, last = self._period()
         default = self.ctx.paths.reports_dir / self._default_name()
         path, _ = QFileDialog.getSaveFileName(
-            self, "حفظ ملف النقل", str(default), "أرشيف نقل (*.amdhz);;قاعدة بيانات (*.db)"
+            self, "حفظ ملف النقل", str(default), "أرشيف نقل مشفّر (*.amdhz);;قاعدة بيانات (*.db)"
         )
         if not path:
             return
@@ -247,7 +251,7 @@ class ExportToCenterDialog(QDialog):
         self.result_path = output
         W.info(
             self,
-            f"تم إنشاء ملف النقل:\n{output}\n\n"
+            f"تم إنشاء ملف النقل المشفّر:\n{output}\n\n"
             f"المؤسسة: {manifest.get('institution') or 'كل المؤسسات'}\n"
             f"الفترة: {first} ← {last}\n"
             f"الموظفون: {counts.get('employees', 0)} | "
@@ -258,6 +262,68 @@ class ExportToCenterDialog(QDialog):
         )
         if W.confirm(self, "هل تريد فتح مجلد الملف الآن؟"):
             W.open_path(self, output.parent)
+        self.accept()
+
+    def _send_lan(self) -> None:
+        """إرسال الحزمة مباشرة عبر الشبكة المحلية (LAN Sync) إلى خادم المركز."""
+        institution = self._selected_institution()
+        first, last = self._period()
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("إرسال مباشر إلى خادم المركز عبر الشبكة")
+        dlg.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        dlg.setMinimumWidth(460)
+        form = QFormLayout(dlg)
+        e_url = QLineEdit(str(self.ctx.ui_get("lan_center_url", "http://127.0.0.1:8000") or "http://127.0.0.1:8000"))
+        e_user = QLineEdit(self.ctx.user() if self.ctx.user() != "—" else "admin")
+        e_pass = QLineEdit()
+        e_pass.setEchoMode(QLineEdit.EchoMode.Password)
+        form.addRow("عنوان خادم المركز (URL):", e_url)
+        form.addRow("اسم المستخدم في المركز:", e_user)
+        form.addRow("كلمة المرور:", e_pass)
+        row = QHBoxLayout()
+        row.addWidget(W.button("🌐 إرسال ودمج الآن", "Accent", dlg.accept, width=150))
+        row.addWidget(W.button("إلغاء", "Ghost", dlg.reject, width=90))
+        form.addRow("", row)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        url = e_url.text().strip()
+        if not url:
+            W.warn(self, "أدخل عنوان خادم المركز.")
+            return
+        self.ctx.ui_set("lan_center_url", url)
+
+        temp_file = Path(tempfile.mktemp(suffix=".amdhz", prefix="amdh_lan_"))
+        try:
+            T.export_transfer(
+                self.ctx.db,
+                temp_file,
+                institution=institution,
+                include_attachments=True,
+                user=self.ctx.user(),
+                attachments_dir=self.ctx.paths.attachments_dir,
+                period=(first, last),
+                center=self.ctx.db.center_institution(),
+            )
+            result = T.send_transfer_over_network(
+                temp_file,
+                url,
+                username=e_user.text().strip(),
+                password=e_pass.text(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            W.error(self, f"فشل الإرسال الشبكي:\n{exc}")
+            return
+        finally:
+            temp_file.unlink(missing_ok=True)
+
+        summary = "\n".join(result.get("summary") or [])
+        W.info(
+            self,
+            f"تم إرسال ودمج بيانات المؤسسة في المركز بنجاح!\n\n{summary}",
+            "نجاح المزامنة الشبكية",
+        )
         self.accept()
 
 

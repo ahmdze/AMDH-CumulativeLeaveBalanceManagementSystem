@@ -37,6 +37,11 @@ _EMPLOYEE_COLUMNS: list[tuple[str, str]] = [
     ("opening_balance_note", "TEXT"),
     ("opening_updated_at", "TEXT"),
     ("opening_updated_by", "TEXT"),
+    # التنسيب / التكليف المؤقت بين المؤسسات
+    ("secondment_to", "TEXT DEFAULT ''"),
+    ("secondment_start", "TEXT DEFAULT ''"),
+    ("secondment_end", "TEXT DEFAULT ''"),
+    ("secondment_order", "TEXT DEFAULT ''"),
 ]
 
 _LEAVE_COLUMNS: list[tuple[str, str]] = [
@@ -85,7 +90,18 @@ def create_tables(c: sqlite3.Cursor) -> None:
             deleted_by TEXT,
             uid TEXT,
             previous_institution TEXT,
-            moved_on TEXT
+            moved_on TEXT,
+            opening_balance_set INTEGER DEFAULT 0,
+            opening_balance INTEGER DEFAULT 0,
+            opening_balance_date TEXT,
+            opening_balance_by TEXT,
+            opening_balance_note TEXT,
+            opening_updated_at TEXT,
+            opening_updated_by TEXT,
+            secondment_to TEXT DEFAULT '',
+            secondment_start TEXT DEFAULT '',
+            secondment_end TEXT DEFAULT '',
+            secondment_order TEXT DEFAULT ''
         )""")
     c.execute("""
         CREATE TABLE IF NOT EXISTS leaves (
@@ -224,7 +240,8 @@ def create_tables(c: sqlite3.Cursor) -> None:
         CREATE TABLE IF NOT EXISTS employee_moves (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             emp_id TEXT, from_institution TEXT, to_institution TEXT,
-            moved_on TEXT, recorded_at TEXT, source_file TEXT, note TEXT
+            moved_on TEXT, recorded_at TEXT, source_file TEXT, note TEXT,
+            move_type TEXT DEFAULT 'transfer', end_date TEXT DEFAULT ''
         )""")
     c.execute("""
         CREATE TABLE IF NOT EXISTS transfer_manifest (
@@ -289,25 +306,13 @@ def create_indexes(c: sqlite3.Cursor) -> None:
 
 
 def add_missing_columns(c: sqlite3.Cursor, table_columns_fn) -> dict[str, set[str]]:
-    """إضافة الأعمدة الناقصة للجداول القديمة.
-
-    Parameters
-    ----------
-    c : sqlite3.Cursor
-        مؤشر قاعدة البيانات.
-    table_columns_fn : callable
-        دالة تأخذ (conn, table) وتعيد set[str] لأسماء الأعمدة.
-
-    Returns
-    -------
-    dict[str, set[str]]
-        قاموس يحتوي على الأعمدة المضافة لكل جدول.
-    """
+    """إضافة الأعمدة الناقصة للجداول القديمة."""
     added: dict[str, set[str]] = {
         "employees": set(),
         "leaves": set(),
         "attachments": set(),
         "holidays": set(),
+        "employee_moves": set(),
     }
     for table, columns in (
         ("employees", _EMPLOYEE_COLUMNS),
@@ -324,6 +329,12 @@ def add_missing_columns(c: sqlite3.Cursor, table_columns_fn) -> dict[str, set[st
     if "recurring" not in holiday_cols:
         c.execute("ALTER TABLE holidays ADD COLUMN recurring INTEGER DEFAULT 0")
         added["holidays"].add("recurring")
+    # أعمدة التنسيب في employee_moves
+    move_cols = table_columns_fn("employee_moves")
+    for name, ddl in (("move_type", "TEXT DEFAULT 'transfer'"), ("end_date", "TEXT DEFAULT ''")):
+        if name not in move_cols:
+            c.execute(f"ALTER TABLE employee_moves ADD COLUMN {name} {ddl}")
+            added["employee_moves"].add(name)
     return added
 
 

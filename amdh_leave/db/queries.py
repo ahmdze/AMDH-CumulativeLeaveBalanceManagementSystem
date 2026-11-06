@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import calendar
 import hashlib
 import logging
 import sqlite3
@@ -146,26 +147,49 @@ def list_holidays(conn: sqlite3.Connection, year: int | None = None) -> list[Hol
     sql = "SELECT * FROM holidays"
     params: list = []
     if year:
-        sql += " WHERE day LIKE ?"
+        sql += " WHERE day LIKE ? OR recurring = 1"
         params.append(f"{year}-%")
     sql += " ORDER BY day"
     result = []
     for r in conn.execute(sql, params).fetchall():
         d = dict(r)
+        day_obj = parse_iso(d["day"])
+        recurring = bool(d.get("recurring", 0))
+        if year and day_obj and recurring and day_obj.year != year:
+            max_day = calendar.monthrange(year, day_obj.month)[1]
+            day_obj = date(year, day_obj.month, min(day_obj.day, max_day))
         result.append(
             Holiday(
                 id=d["id"],
-                day=parse_iso(d["day"]),
+                day=day_obj,
                 name=d.get("name") or "",
-                recurring=bool(d.get("recurring", 0)),
+                recurring=recurring,
             )
         )
     return result
 
 
-def holiday_set(conn: sqlite3.Connection, years: int | None = None) -> set[date]:
+def holiday_set(conn: sqlite3.Connection, years: int | list[int] | set[int] | None = None) -> set[date]:
+    """يعيد مجموعة تواريخ العطل الرسمية، مع توليد العطل المتكررة سنوياً لجميع السنوات."""
     holidays = list_holidays(conn)
-    return {h.day for h in holidays if h.day}
+    result: set[date] = set()
+    if years is None:
+        current_year = date.today().year
+        target_years = list(range(1990, current_year + 15))
+    elif isinstance(years, int):
+        target_years = [years]
+    else:
+        target_years = list(years)
+
+    for h in holidays:
+        if not h.day:
+            continue
+        result.add(h.day)
+        if h.recurring:
+            for yr in target_years:
+                max_day = calendar.monthrange(yr, h.day.month)[1]
+                result.add(date(yr, h.day.month, min(h.day.day, max_day)))
+    return result
 
 
 def add_holiday(conn: sqlite3.Connection, day, name: str = "", recurring: bool = False) -> None:
@@ -202,8 +226,8 @@ def _employee_query(
         conditions.append("workplace = ?")
         params.append(workplace)
     if institution:
-        conditions.append("institution = ?")
-        params.append(institution)
+        conditions.append("(institution = ? OR secondment_to = ?)")
+        params.extend([institution, institution])
     where = " AND ".join(conditions)
     return f"SELECT * FROM employees WHERE {where} ORDER BY name COLLATE NOCASE, emp_id", params
 
@@ -275,8 +299,9 @@ def add_employee(conn: sqlite3.Connection, emp_id: str, fields: dict, user: str 
                       notes, institution, status, created_at, updated_at, uid,
                       previous_institution, opening_balance_set, opening_balance,
                       opening_balance_date, opening_balance_by, opening_balance_note,
-                      opening_updated_at, opening_updated_by)
-                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                      opening_updated_at, opening_updated_by,
+                      secondment_to, secondment_start, secondment_end, secondment_order)
+                     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 emp_id,
                 fields.get("name", ""),
@@ -295,6 +320,10 @@ def add_employee(conn: sqlite3.Connection, emp_id: str, fields: dict, user: str 
                 *opening,
                 now if opening[0] else "",
                 user if opening[0] else "",
+                fields.get("secondment_to", ""),
+                fields.get("secondment_start", ""),
+                fields.get("secondment_end", ""),
+                fields.get("secondment_order", ""),
             ),
         )
     log_action(conn, user, "إضافة", "employee", emp_id, fields.get("name", ""))
@@ -324,6 +353,16 @@ def update_employee(conn: sqlite3.Connection, emp_id: str, fields: dict, user: s
         previous.opening_balance_note if previous else "",
     )
     opening = _opening_values(fields)
+    sec_to = fields.get("secondment_to", previous.secondment_to if previous else "")
+    sec_start = fields.get(
+        "secondment_start",
+        D_iso(previous.secondment_start) if previous and previous.secondment_start else "",
+    )
+    sec_end = fields.get(
+        "secondment_end",
+        D_iso(previous.secondment_end) if previous and previous.secondment_end else "",
+    )
+    sec_order = fields.get("secondment_order", previous.secondment_order if previous else "")
     with conn:
         conn.execute(
             """UPDATE employees SET name=?, job_title=?, workplace=?, gender=?,
@@ -332,6 +371,7 @@ def update_employee(conn: sqlite3.Connection, emp_id: str, fields: dict, user: s
                      opening_balance_by=?, opening_balance_note=?,
                      opening_updated_at=CASE WHEN ? THEN ? ELSE opening_updated_at END,
                      opening_updated_by=CASE WHEN ? THEN ? ELSE opening_updated_by END,
+                     secondment_to=?, secondment_start=?, secondment_end=?, secondment_order=?,
                      updated_at=? WHERE emp_id=?""",
             (
                 fields.get("name", ""),
@@ -348,6 +388,10 @@ def update_employee(conn: sqlite3.Connection, emp_id: str, fields: dict, user: s
                 _now(),
                 int(opening != old_opening),
                 user,
+                sec_to,
+                sec_start,
+                sec_end,
+                sec_order,
                 _now(),
                 emp_id,
             ),
@@ -355,6 +399,10 @@ def update_employee(conn: sqlite3.Connection, emp_id: str, fields: dict, user: s
         if opening != old_opening:
             _log_opening_change(conn, emp_id, old_opening, opening, user, "تعديل الرصيد الافتتاحي")
     log_action(conn, user, "تعديل", "employee", emp_id, fields.get("name", ""))
+
+
+def D_iso(d: date | None) -> str:
+    return d.strftime("%Y-%m-%d") if d else ""
 
 
 def soft_delete_employee(conn: sqlite3.Connection, emp_id: str, user: str = "") -> None:
@@ -422,8 +470,8 @@ def leaves_in_range(
                AND l.start_date <= ?"""
     params: list = [to_iso(start), to_iso(end)]
     if institution:
-        sql += " AND e.institution = ?"
-        params.append(institution)
+        sql += " AND (e.institution = ? OR e.secondment_to = ?)"
+        params.extend([institution, institution])
     sql += " ORDER BY l.start_date"
     out = []
     for row in conn.execute(sql, params).fetchall():
@@ -692,13 +740,18 @@ def touch_login(conn: sqlite3.Connection, username: str) -> None:
 
 
 # ==================================================================
-# خزنة كلمات المرور
+# خزنة كلمات المرور (مع تشفير تلقائي للقيم الحساسة)
 # ==================================================================
 
 
 def list_vault(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute("SELECT * FROM password_vault ORDER BY id DESC").fetchall()
-    return [dict(row) for row in rows]
+    out = []
+    for row in rows:
+        d = dict(row)
+        d["password"] = crypto.decrypt_secret_text(str(d.get("password") or ""))
+        out.append(d)
+    return out
 
 
 def add_vault_entry(
@@ -713,11 +766,12 @@ def add_vault_entry(
     note: str = "",
     user: str = "",
 ) -> int:
+    enc_pw = crypto.encrypt_secret_text(password)
     with conn:
         cursor = conn.execute(
             "INSERT INTO password_vault(created_at, kind, label, institution, file_name, "
             "file_path, password, note, created_by) VALUES (?,?,?,?,?,?,?,?,?)",
-            (_now(), kind, label, institution, file_name, file_path, password, note, user or "—"),
+            (_now(), kind, label, institution, file_name, file_path, enc_pw, note, user or "—"),
         )
         return int(cursor.lastrowid)
 
@@ -727,6 +781,8 @@ def update_vault_entry(conn: sqlite3.Connection, entry_id: int, **fields) -> Non
     updates = {key: str(fields[key] or "") for key in allowed if key in fields}
     if not updates:
         return
+    if "password" in updates:
+        updates["password"] = crypto.encrypt_secret_text(updates["password"])
     with conn:
         assignments = ", ".join(f"{key}=?" for key in updates)
         conn.execute(
@@ -1148,7 +1204,7 @@ def checksum_seen(conn: sqlite3.Connection, checksum: str) -> ImportRecord | Non
 
 
 # ==================================================================
-# انتقال الموظفين بين المؤسسات
+# انتقال وتنسيب الموظفين بين المؤسسات
 # ==================================================================
 
 
@@ -1161,14 +1217,27 @@ def add_move(
     source_file: str = "",
     note: str = "",
     user: str = "",
+    *,
+    move_type: str = "transfer",
+    end_date=None,
 ) -> int:
     with conn:
         conn.execute(
             """INSERT INTO employee_moves
                          (emp_id, from_institution, to_institution, moved_on, recorded_at,
-                          source_file, note)
-                         VALUES (?,?,?,?,?,?,?)""",
-            (emp_id, from_institution, to_institution, to_iso(moved_on), _now(), source_file, note),
+                          source_file, note, move_type, end_date)
+                         VALUES (?,?,?,?,?,?,?,?,?)""",
+            (
+                emp_id,
+                from_institution,
+                to_institution,
+                to_iso(moved_on),
+                _now(),
+                source_file,
+                note,
+                move_type or "transfer",
+                to_iso(end_date),
+            ),
         )
         return int(conn.execute("SELECT last_insert_rowid()").fetchone()[0])
 
@@ -1193,6 +1262,42 @@ def set_employee_institution(
             (institution, to_iso(moved_on), _now(), emp_id),
         )
     log_action(conn, user, "نقل", "employee", emp_id, f"إلى {institution}")
+
+
+def set_employee_secondment(
+    conn: sqlite3.Connection,
+    emp_id: str,
+    secondment_to: str,
+    start_date=None,
+    end_date=None,
+    order: str = "",
+    user: str = "",
+) -> None:
+    """تسجيل أو إنهاء تنسيب/تكليف مؤقت للموظف."""
+    emp = get_employee(conn, emp_id)
+    from_inst = emp.institution if emp else ""
+    with conn:
+        conn.execute(
+            """UPDATE employees SET secondment_to=?, secondment_start=?, secondment_end=?,
+                         secondment_order=?, updated_at=? WHERE emp_id=?""",
+            (secondment_to, to_iso(start_date), to_iso(end_date), order, _now(), emp_id),
+        )
+    if secondment_to:
+        add_move(
+            conn,
+            emp_id,
+            from_inst,
+            secondment_to,
+            moved_on=start_date,
+            source_file=order or "—",
+            note=f"تنسيب إلى {secondment_to}" + (f" حتى {to_iso(end_date)}" if end_date else ""),
+            user=user,
+            move_type="secondment",
+            end_date=end_date,
+        )
+        log_action(conn, user, "تنسيب", "employee", emp_id, f"إلى {secondment_to}")
+    else:
+        log_action(conn, user, "إنهاء تنسيب", "employee", emp_id, f"عودة إلى {from_inst}")
 
 
 # ==================================================================

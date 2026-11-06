@@ -109,6 +109,7 @@ class Policy:
     low_balance_days: int = 5
     first_day_of_week: int = 5
     auth_enabled: bool = False
+    session_timeout_minutes: int = 0
     backup_on_start: bool = True
     backup_on_exit: bool = True
     backup_keep: int = 30
@@ -145,6 +146,9 @@ class Policy:
             low_balance_days=_as_int(meta.get("low_balance_days"), d["low_balance_days"]),
             first_day_of_week=_as_int(meta.get("first_day_of_week"), d["first_day_of_week"]),
             auth_enabled=_as_bool(meta.get("auth_enabled"), False),
+            session_timeout_minutes=max(
+                0, _as_int(meta.get("session_timeout_minutes"), d.get("session_timeout_minutes", 0))
+            ),
             backup_on_start=_as_bool(meta.get("backup_on_start"), True),
             backup_on_exit=_as_bool(meta.get("backup_on_exit"), True),
             backup_keep=max(1, _as_int(meta.get("backup_keep"), d["backup_keep"])),
@@ -168,6 +172,7 @@ class Policy:
             "low_balance_days": str(self.low_balance_days),
             "first_day_of_week": str(self.first_day_of_week),
             "auth_enabled": "1" if self.auth_enabled else "0",
+            "session_timeout_minutes": str(self.session_timeout_minutes),
             "backup_on_start": "1" if self.backup_on_start else "0",
             "backup_on_exit": "1" if self.backup_on_exit else "0",
             "backup_keep": str(self.backup_keep),
@@ -178,6 +183,12 @@ class Policy:
     # -- استعلامات ---------------------------------------------------------
     def rule(self, leave_type: str) -> LeaveRule:
         return self.rules.get(leave_type, replace(_FALLBACK_RULE, type=leave_type))
+
+    def compute_balance_for(self, employee, today: date | None = None):
+        """دالة مختصرة لحساب رصيد موظف وفق هذه السياسة."""
+        from .services import balance as B
+
+        return B.compute_balance(employee, getattr(employee, "leaves", []), self, today=today)
 
     def types_for_gender(self, gender: str, include_adjustment: bool = False) -> list[str]:
         gender = gender or "ذكر"

@@ -103,11 +103,6 @@ class IssuesBox(QTextEdit):
 
 
 # ---------------------------------------------------------------------------
-# حول النظام (نُقل إلى dialogs_about.py مع الشعارات وصورة المطوّر)
-# ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
 # الإعدادات
 # ---------------------------------------------------------------------------
 class SettingsDialog(BaseDialog):
@@ -150,6 +145,17 @@ class SettingsDialog(BaseDialog):
                 "غيّر كلمة المرور فوراً من «إدارة المستخدمين»."
             )
         )
+
+        # مؤقت قفل الجلسة التلقائي عند الخمول
+        timeout_row = QHBoxLayout()
+        timeout_row.addWidget(QLabel("قفل الجلسة تلقائياً عند الخمول (دقائق، 0 = معطّل):"))
+        self.sp_session_timeout = QSpinBox()
+        self.sp_session_timeout.setRange(0, 480)
+        self.sp_session_timeout.setSuffix(" دقيقة")
+        self.sp_session_timeout.setValue(int(getattr(self._policy, "session_timeout_minutes", 0) or 0))
+        timeout_row.addWidget(self.sp_session_timeout)
+        timeout_row.addStretch()
+        outer.addLayout(timeout_row)
 
         box = QGroupBox("تشفير قاعدة البيانات (SQLCipher)")
         box_layout = QVBoxLayout(box)
@@ -507,11 +513,16 @@ class SettingsDialog(BaseDialog):
         layout.addLayout(row1)
 
         row2 = QHBoxLayout()
-        row2.addWidget(W.button("🗑 سلة المحذوفات", "Gold", self._open_trash))
-        row2.addWidget(W.button("📜 سجل التدقيق", "Ghost", self._open_audit))
-        row2.addWidget(W.button("👥 المستخدمون", "Ghost", self._open_users))
-        row2.addWidget(W.button("📋 ضوابط الأنواع", "Ghost", self._open_rules))
-        row2.addWidget(W.button("🗓 العطل الرسمية", "Ghost", self._open_holidays))
+        if self.ctx.can("purge"):
+            row2.addWidget(W.button("🗑 سلة المحذوفات", "Gold", self._open_trash))
+        if self.ctx.can("view_audit"):
+            row2.addWidget(W.button("📜 سجل التدقيق", "Ghost", self._open_audit))
+        if self.ctx.can("manage_users"):
+            row2.addWidget(W.button("👥 المستخدمون", "Ghost", self._open_users))
+        if self.ctx.can("edit_rules"):
+            row2.addWidget(W.button("📋 ضوابط الأنواع", "Ghost", self._open_rules))
+        if self.ctx.can("view_holidays"):
+            row2.addWidget(W.button("🗓 العطل الرسمية", "Ghost", self._open_holidays))
         row2.addStretch()
         layout.addLayout(row2)
         layout.addStretch()
@@ -579,6 +590,7 @@ class SettingsDialog(BaseDialog):
             weekend=weekend or config.DEFAULT_WEEKEND,
             first_day_of_week=self.cb_first_day.currentIndex(),
             auth_enabled=self.chk_auth_page.isChecked(),
+            session_timeout_minutes=self.sp_session_timeout.value(),
             backup_on_start=self.chk_backup_start.isChecked(),
             backup_on_exit=self.chk_backup_exit.isChecked(),
             backup_before_import=self.chk_backup_import.isChecked(),

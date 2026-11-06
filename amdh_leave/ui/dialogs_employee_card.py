@@ -1,10 +1,10 @@
-"""بطاقة الموظف: عرض وطباعة بطاقة تحتوي على بيانات الموظف ورصيده.
+"""بطاقة الموظف: عرض وطباعة بطاقة تحتوي على بيانات الموظف ورصيده وأثر العلاوة.
 
 تدعم:
   - عرض معاينة للبطاقة بحجم A5.
   - تصدير إلى PDF للطباعة.
   - معلومات شاملة: الاسم، الرقم الوظيفي، المؤسسة، تاريخ التعيين،
-    الرصيد الحالي، والإجازات المستخدمة.
+    الرصيد الحالي، أثر العلاوة، والإجازات المستخدمة.
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class EmployeeCardDialog(BaseDialog):
         super().__init__(parent, ctx, f"بطاقة الموظف: {employee.name}")
         self.employee = employee
         self.policy = policy
-        self.resize(460, 560)
+        self.resize(460, 600)
         layout = QVBoxLayout(self)
 
         # معاينة البطاقة
@@ -59,7 +59,6 @@ class EmployeeCardDialog(BaseDialog):
 
     def _build_card(self) -> QWidget:
         """بناء معاينة البطاقة — تصميم عالي التباين للطباعة بالأبيض والأسود."""
-        # ألوان ثابتة عالية التباين: أسود على أبيض مع حدود رمادية داكنة
         BLACK = "#000000"
         WHITE = "#FFFFFF"
         LIGHT_GRAY = "#E0E0E0"
@@ -67,9 +66,7 @@ class EmployeeCardDialog(BaseDialog):
         BORDER_GRAY = "#666666"
 
         card = QWidget()
-        # حجم A5: 148mm × 210mm ≈ 559×794 pixels عند 96 DPI
-        # نستخدم حجم أكبر مع هوامش مناسبة لملء الصفحة
-        card.setFixedSize(420, 580)
+        card.setFixedSize(420, 600)
         card.setStyleSheet(f"""
             QWidget {{
                 background: {WHITE};
@@ -79,7 +76,7 @@ class EmployeeCardDialog(BaseDialog):
             }}
         """)
         layout = QVBoxLayout(card)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
         # الهيدر
         header = QLabel(config.APP_NAME)
@@ -120,22 +117,26 @@ class EmployeeCardDialog(BaseDialog):
 
         # بيانات الموظف
         bal = B.compute_balance(self.employee, self.employee.leaves, self.policy)
+        promo = B.promotion_impact(self.employee, self.employee.leaves, self.policy)
         active_leaves = [lv for lv in self.employee.leaves if not lv.is_deleted]
 
         info_layout = QGridLayout()
-        info_layout.setSpacing(6)
+        info_layout.setSpacing(5)
+
+        inst_text = self.employee.institution or "—"
+        if self.employee.secondment_to:
+            inst_text += f" (منسّب: {self.employee.secondment_to})"
 
         fields = [
             ("الاسم", self.employee.name),
             ("الرقم الوظيفي", self.employee.emp_id),
             ("العنوان الوظيفي", self.employee.job_title or "—"),
-            ("المؤسسة", self.employee.institution or "—"),
+            ("المؤسسة", inst_text),
             ("مكان العمل", self.employee.workplace or "—"),
             ("تاريخ التعيين", D.to_iso(self.employee.start_date) if self.employee.start_date else "—"),
             ("الجنس", self.employee.gender),
         ]
         for i, (label_text, value) in enumerate(fields):
-            # التسمية على اليمين — محاذاة RTL
             lbl_label = QLabel(label_text)
             lbl_label.setObjectName(f"info_label_{i}")
             lbl_label.setStyleSheet(f"""
@@ -149,11 +150,10 @@ class EmployeeCardDialog(BaseDialog):
                     border-radius: 2px;
                 }}
             """)
-            lbl_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignLeft)
-            lbl_label.setMinimumHeight(28)
+            lbl_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            lbl_label.setMinimumHeight(26)
             info_layout.addWidget(lbl_label, i, 0)
 
-            # القيمة على اليسار
             lbl_value = QLabel(str(value))
             lbl_value.setObjectName(f"info_value_{i}")
             lbl_value.setStyleSheet(f"""
@@ -165,8 +165,8 @@ class EmployeeCardDialog(BaseDialog):
                     border-radius: 2px;
                 }}
             """)
-            lbl_value.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignLeft)
-            lbl_value.setMinimumHeight(28)
+            lbl_value.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            lbl_value.setMinimumHeight(26)
             info_layout.addWidget(lbl_value, i, 1)
 
         layout.addLayout(info_layout)
@@ -174,24 +174,24 @@ class EmployeeCardDialog(BaseDialog):
         # الرصيد
         balance_box = QWidget()
         balance_layout = QVBoxLayout(balance_box)
-        balance_layout.setSpacing(6)
+        balance_layout.setSpacing(5)
         balance_box.setObjectName("balance_box")
         balance_box.setStyleSheet(f"""
             QWidget#balance_box {{
                 background: {WHITE};
                 border: 2px solid {BLACK};
                 border-radius: 4px;
-                padding: 10px;
+                padding: 8px;
             }}
         """)
-        balance_title = QLabel("الرصيد الحالي")
+        balance_title = QLabel("الرصيد الحالي وأثر العلاوة")
         balance_title.setObjectName("balance_title")
         balance_title.setStyleSheet(f"""
             QLabel#balance_title {{
-                font-size: 14px;
+                font-size: 13px;
                 font-weight: bold;
                 color: {BLACK};
-                padding: 6px;
+                padding: 5px;
                 border: 2px solid {BLACK};
                 border-radius: 4px;
                 background: {LIGHT_GRAY};
@@ -206,9 +206,10 @@ class EmployeeCardDialog(BaseDialog):
             ("المستحقة", f"{bal.earned} يوم"),
             ("المأخوذة", f"{bal.taken} يوم"),
             ("الرصيد", f"{bal.balance} يوم"),
+            ("تأخير العلاوة", f"{promo.total_excluded_days} يوم"),
         ]
         bal_form = QGridLayout()
-        bal_form.setSpacing(5)
+        bal_form.setSpacing(4)
         for i, (label_text, value) in enumerate(balance_info):
             lbl_label = QLabel(label_text)
             lbl_label.setObjectName(f"bal_label_{i}")
@@ -223,8 +224,8 @@ class EmployeeCardDialog(BaseDialog):
                     border-radius: 2px;
                 }}
             """)
-            lbl_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignLeft)
-            lbl_label.setMinimumHeight(24)
+            lbl_label.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            lbl_label.setMinimumHeight(22)
             bal_form.addWidget(lbl_label, i, 0)
 
             lbl_value = QLabel(str(value))
@@ -238,8 +239,8 @@ class EmployeeCardDialog(BaseDialog):
                     border-radius: 2px;
                 }}
             """)
-            lbl_value.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignLeft)
-            lbl_value.setMinimumHeight(24)
+            lbl_value.setAlignment(Qt.AlignmentFlag.AlignLeft)
+            lbl_value.setMinimumHeight(22)
             bal_form.addWidget(lbl_value, i, 1)
         balance_layout.addLayout(bal_form)
         layout.addWidget(balance_box)
@@ -251,7 +252,7 @@ class EmployeeCardDialog(BaseDialog):
             QLabel#used_label {{
                 font-size: 11px;
                 color: {DARK_GRAY};
-                padding: 6px;
+                padding: 5px;
                 border: 1px solid {BORDER_GRAY};
                 border-radius: 4px;
             }}
@@ -266,7 +267,7 @@ class EmployeeCardDialog(BaseDialog):
             QLabel#card_footer {{
                 font-size: 10px;
                 color: {DARK_GRAY};
-                padding: 4px;
+                padding: 3px;
             }}
         """)
         footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -278,14 +279,19 @@ class EmployeeCardDialog(BaseDialog):
     def _build_card_html(self) -> str:
         """بناء البطاقة كـ HTML بوضع LTR هندسي (عكس الخلايا يدوياً) لتجاوز أخطاء الطابعات."""
         bal = B.compute_balance(self.employee, self.employee.leaves, self.policy)
+        promo = B.promotion_impact(self.employee, self.employee.leaves, self.policy)
         active_leaves = [lv for lv in self.employee.leaves if not lv.is_deleted]
         today = D.to_iso(date.today())
+
+        inst_text = self.employee.institution or "—"
+        if self.employee.secondment_to:
+            inst_text += f" (منسّب: {self.employee.secondment_to})"
 
         info_rows = [
             ("الاسم", self.employee.name),
             ("الرقم الوظيفي", str(self.employee.emp_id)),
             ("العنوان الوظيفي", self.employee.job_title or "—"),
-            ("المؤسسة", self.employee.institution or "—"),
+            ("المؤسسة", inst_text),
             ("مكان العمل", self.employee.workplace or "—"),
             ("تاريخ التعيين", D.to_iso(self.employee.start_date) if self.employee.start_date else "—"),
             ("الجنس", self.employee.gender),
@@ -297,10 +303,9 @@ class EmployeeCardDialog(BaseDialog):
             ("المستحقة", bal.earned),
             ("المأخوذة", bal.taken),
             ("الرصيد", bal.balance),
+            ("تأخير العلاوة", promo.total_excluded_days),
         ]
 
-        # 1. بناء صفوف بيانات الموظف
-        # نعكس ترتيب الخلايا برمجياً: نضع القيمة (يساراً) ثم العنوان (يميناً)
         info_html = ""
         for label, value in info_rows:
             info_html += f"""
@@ -309,13 +314,11 @@ class EmployeeCardDialog(BaseDialog):
                 <td width="35%" style="background-color:#E0E0E0; font-weight:bold; padding:4px; border:1px solid #333333; text-align:right;">{label}</td>
             </tr>"""
 
-        # 2. بناء صفوف الرصيد
         balance_html = ""
         for label, val in balance_rows:
             balance_html += f"""
             <tr>
                 <td width="65%" style="padding:4px; border:1px solid #333333; text-align:right;">
-                    <!-- جدول لترتيب (الرقم يميناً وكلمة يوم يساراً) داخل خلية القيمة -->
                     <table border="0" cellpadding="0" cellspacing="0" align="right">
                         <tr>
                             <td style="padding-right:12px; font-family:'Arial';">يوم</td>
@@ -328,7 +331,6 @@ class EmployeeCardDialog(BaseDialog):
 
         return f"""
         <!DOCTYPE html>
-        <!-- نستخدم ltr قسرياً لأن محرك الطابعة يتجاهل rtl ويعكس الأعمدة -->
         <html dir="ltr" lang="ar">
         <head>
             <meta charset="utf-8">
@@ -391,20 +393,17 @@ class EmployeeCardDialog(BaseDialog):
 
                         <div style="height: 8px;"></div>
 
-                        <!-- عنوان القسم كجدول منفصل حتى لا ينهار التخطيط بسبب LTR -->
                         <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border: 2px solid #000000; border-bottom: none;">
                             <tr>
-                                <td class="section-header">الرصيد الحالي</td>
+                                <td class="section-header">الرصيد الحالي وأثر العلاوة</td>
                             </tr>
                         </table>
-                        <!-- جدول الرصيد الفعلي -->
                         <table width="100%" border="0" cellpadding="0" cellspacing="0" style="border: 2px solid #000000;">
                             {balance_html}
                         </table>
 
                         <div style="height: 8px;"></div>
 
-                        <!-- تم عكس النصوص لضمان ظهورها الصحيح في وضع LTR -->
                         <table width="100%" border="0" cellpadding="0" cellspacing="0">
                             <tr><td class="summary-box">{len(active_leaves)} &nbsp;:الإجازات المسجلة</td></tr>
                         </table>
@@ -429,24 +428,17 @@ class EmployeeCardDialog(BaseDialog):
             if dialog.exec() != QPrintDialog.DialogCode.Accepted:
                 return
 
-            # 🔴 خطوة مهمة جداً:
-            # إعادة تعيين حجم الورقة والهوامش *بعد* اختيار الطابعة
-            # لأن الطابعة تعيد ضبط الحجم تلقائياً إلى A4
             printer.setPageSize(QPageSize(QPageSize.PageSizeId.A5))
             printer.setPageOrientation(QPageLayout.Orientation.Portrait)
             printer.setPageMargins(QMarginsF(3, 3, 3, 3), QPageLayout.Unit.Millimeter)
 
-            # بناء HTML
             html = self._build_card_html()
             doc = QTextDocument()
             doc.setDocumentMargin(0)
-            # إجبار المستند على استخدام خط محدد لمنع تعريف الطابعة من العبث باتجاه النصوص
             font = QFont("Arial", 12)
             doc.setDefaultFont(font)
-
             doc.setHtml(html)
 
-            # تحديث أبعاد المستند بناءً على المساحة الفعلية للطباعة
             page_rect = printer.pageRect(QPrinter.Unit.Point)
             doc.setPageSize(QSizeF(page_rect.size()))
 
@@ -466,24 +458,18 @@ class EmployeeCardDialog(BaseDialog):
             return
 
         try:
-            # استخدام HighResolution لضمان دقة أعلى وتمدد صحيح
             printer = QPrinter(QPrinter.PrinterMode.HighResolution)
             printer.setPageSize(QPageSize(QPageSize.PageSizeId.A5))
             printer.setPageOrientation(QPageLayout.Orientation.Portrait)
-
-            # تعيين هوامش الطابعة
             printer.setPageMargins(QMarginsF(3, 3, 3, 3), QPageLayout.Unit.Millimeter)
-
             printer.setOutputFormat(QPrinter.OutputFormat.PdfFormat)
             printer.setOutputFileName(path)
 
-            # بناء HTML وتحويله إلى QTextDocument ثم طباعته كـ PDF
             html = self._build_card_html()
             doc = QTextDocument()
             doc.setDocumentMargin(0)
             doc.setHtml(html)
 
-            # إجبار المستند على أخذ الأبعاد الحقيقية لصفحة الطباعة
             page_rect = printer.pageRect(QPrinter.Unit.Point)
             doc.setPageSize(QSizeF(page_rect.size()))
 

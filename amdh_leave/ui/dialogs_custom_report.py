@@ -2,7 +2,7 @@
 
 يوفر:
   - اختيار الحقول من قائمة (اسم، رقم وظيفي، نوع إجازة، تاريخ، إلخ).
-  - اختيار التجميع (حسب المؤسسة، حسب النوع، حسب الشهر).
+  - اختيار التجميع (حسب المؤسسة، حسب النوع، حسب الشهر، حسب مكان العمل).
   - اختيار الفلترة (تاريخ، نوع، مؤسسة، حالة).
   - معاينة التقرير قبل التصدير.
   - تصدير إلى Excel أو PDF.
@@ -31,6 +31,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .. import config
+from ..services import balance as B
 from ..services import dates as D
 from . import widgets as W
 from .dialogs_base import BaseDialog
@@ -42,9 +43,11 @@ EMPLOYEE_FIELDS = [
     ("job_title", "العنوان الوظيفي"),
     ("workplace", "مكان العمل"),
     ("institution", "المؤسسة"),
+    ("secondment_to", "منسّب إلى"),
     ("gender", "الجنس"),
     ("start_date", "تاريخ التعيين"),
 ]
+EMPLOYEE_FIELD_KEYS = {k for k, _ in EMPLOYEE_FIELDS}
 
 LEAVE_FIELDS = [
     ("type", "نوع الإجازة"),
@@ -58,11 +61,15 @@ LEAVE_FIELDS = [
 
 BALANCE_FIELDS = [
     ("raw_days", "أيام الخدمة"),
+    ("outside", "خارج الرصيد"),
     ("net_days", "الدوام المحسوبة"),
     ("earned", "المستحقة"),
     ("taken", "المأخوذة"),
     ("balance", "الرصيد"),
+    ("promotion_delay_days", "تأخير العلاوة (يوم)"),
+    ("effective_increment_date", "تاريخ العلاوة المعدّل"),
 ]
+BALANCE_FIELD_KEYS = {k for k, _ in BALANCE_FIELDS}
 
 GROUP_BY_OPTIONS = [
     ("none", "بدون تجميع"),
@@ -148,7 +155,8 @@ class CustomReportDialog(BaseDialog):
         group_group = QGroupBox("التجميع")
         group_layout = QVBoxLayout(group_group)
         self.group_by = QComboBox()
-        self.group_by.addItems([f"{label} ({key})" for key, label in GROUP_BY_OPTIONS])
+        for key, label in GROUP_BY_OPTIONS:
+            self.group_by.addItem(f"{label} ({key})", key)
         group_layout.addWidget(self.group_by)
         layout.addWidget(group_group)
 
@@ -171,8 +179,8 @@ class CustomReportDialog(BaseDialog):
             self.filter_status.addItem(label, key)
         filter_layout.addRow("الحالة:", self.filter_status)
 
-        self.filter_date_from = W.date_edit()
-        self.filter_date_to = W.date_edit()
+        self.filter_date_from = W.date_edit(date(2000, 1, 1))
+        self.filter_date_to = W.date_edit(date.today())
         date_row = QHBoxLayout()
         date_row.addWidget(QLabel("من:"))
         date_row.addWidget(self.filter_date_from)
@@ -205,7 +213,6 @@ class CustomReportDialog(BaseDialog):
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(Qt.CheckState.Checked)
                 self.fields_list.addItem(item)
-            # إضافة حقول الرصيد
             for key, label in BALANCE_FIELDS:
                 item = QListWidgetItem(f"☐ {label}")
                 item.setData(Qt.ItemDataRole.UserRole, key)
@@ -213,21 +220,20 @@ class CustomReportDialog(BaseDialog):
                 item.setCheckState(Qt.CheckState.Unchecked)
                 self.fields_list.addItem(item)
         elif idx == 1:  # إجازات
+            for key, label in EMPLOYEE_FIELDS[:5]:
+                item = QListWidgetItem(f"☑ {label}")
+                item.setData(Qt.ItemDataRole.UserRole, f"emp.{key}")
+                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                item.setCheckState(Qt.CheckState.Checked if key in ("emp_id", "name") else Qt.CheckState.Unchecked)
+                self.fields_list.addItem(item)
             for key, label in LEAVE_FIELDS:
                 item = QListWidgetItem(f"☑ {label}")
                 item.setData(Qt.ItemDataRole.UserRole, key)
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(Qt.CheckState.Checked)
                 self.fields_list.addItem(item)
-            # إضافة حقول الموظف
-            for key, label in EMPLOYEE_FIELDS[:3]:
-                item = QListWidgetItem(f"☐ {label}")
-                item.setData(Qt.ItemDataRole.UserRole, key)
-                item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                item.setCheckState(Qt.CheckState.Unchecked)
-                self.fields_list.addItem(item)
         else:  # أرصدة
-            for key, label in EMPLOYEE_FIELDS[:4]:
+            for key, label in EMPLOYEE_FIELDS[:5]:
                 item = QListWidgetItem(f"☑ {label}")
                 item.setData(Qt.ItemDataRole.UserRole, key)
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
@@ -240,18 +246,22 @@ class CustomReportDialog(BaseDialog):
                 item.setCheckState(Qt.CheckState.Checked)
                 self.fields_list.addItem(item)
 
-        # تحديث فلاتر المؤسسات والأنواع
         self._refresh_filters()
 
     def _refresh_filters(self) -> None:
-        """تحديث قوائم الفلترة."""
-        insts = self.ctx.db.distinct_values("institution")
+        """تحديث قوائم الفلترة مع مراعاة مؤسسة المستخدم المقيّد."""
+        scope = self.ctx.session.scoped_institution if self.ctx else ""
+        insts = [scope] if scope else self.ctx.db.distinct_values("institution")
         current = self.filter_institution.currentText()
         self.filter_institution.clear()
-        self.filter_institution.insertItem(0, "كل المؤسسات")
+        if not scope:
+            self.filter_institution.insertItem(0, "كل المؤسسات")
         for inst in insts:
             self.filter_institution.addItem(inst)
-        if current:
+        if scope:
+            self.filter_institution.setCurrentText(scope)
+            self.filter_institution.setEnabled(False)
+        elif current:
             self.filter_institution.setCurrentText(current)
 
         rules = self.ctx.db.list_rules()
@@ -275,50 +285,74 @@ class CustomReportDialog(BaseDialog):
                 fields.append((key, label))
         return fields
 
+    def _selected_group_by(self) -> str:
+        data = self.group_by.currentData()
+        if data:
+            return str(data)
+        idx = self.group_by.currentIndex()
+        if 0 <= idx < len(GROUP_BY_OPTIONS):
+            return GROUP_BY_OPTIONS[idx][0]
+        return "none"
+
     def _build_data(self) -> tuple[list[str], list[list]]:
-        """بناء بيانات التقرير."""
+        """بناء بيانات التقرير مع دعم حقول الموظف وحقول الرصيد والتجميع (group_by)."""
         fields = self._get_selected_fields()
         if not fields:
             W.warn(self, "اختر حقلاً واحداً على الأقل.")
             return [], []
 
         headers = [label for _, label in fields]
-        rows = []
+        raw_items: list[tuple[str, list]] = []
         report_type = self.report_type.currentIndex()
+        group_key = self._selected_group_by()
 
         # الفلاتر
-        institution = self.filter_institution.currentText()
+        scope = self.ctx.session.scoped_institution if self.ctx else ""
+        institution = scope or self.filter_institution.currentText()
         if institution == "كل المؤسسات":
             institution = ""
         leave_type = self.filter_type.currentText()
         if leave_type == "كل الأنواع":
             leave_type = ""
-        status = self.filter_status.currentData()
-        if not status:
-            status = ""
+        status = self.filter_status.currentData() or ""
         date_from = W.date_of(self.filter_date_from)
         date_to = W.date_of(self.filter_date_to)
 
-        employees = self.ctx.db.list_employees(institution=institution, with_leaves=True)
+        employees = self.ctx.db.list_employees(
+            institution=institution,
+            include_deleted=self.chk_include_deleted.isChecked(),
+            with_leaves=True,
+        )
+        policy = self.ctx.db.policy()
 
-        if report_type == 0:  # موظفين
+        def _extract_emp_or_bal(emp, bal, impact, key: str):
+            clean = key[4:] if key.startswith("emp.") else key
+            if clean == "promotion_delay_days":
+                return impact.total_excluded_days
+            if clean == "effective_increment_date":
+                return D.to_iso(impact.effective_increment_date) if impact.effective_increment_date else "—"
+            if clean in BALANCE_FIELD_KEYS:
+                return getattr(bal, clean, "—")
+            val = getattr(emp, clean, "")
+            return D.to_iso(val) if isinstance(val, date) else val
+
+        if report_type in (0, 2):  # موظفين أو أرصدة
             for emp in employees:
+                bal = B.compute_balance(emp, emp.leaves, policy)
+                impact = B.promotion_impact(emp, emp.leaves, policy)
                 row = []
                 for key, _ in fields:
-                    if key in ("raw_days", "net_days", "earned", "taken", "balance"):
-                        bal = (
-                            self.ctx.db.policy().compute_balance_for(emp)
-                            if hasattr(self.ctx.db.policy(), "compute_balance_for")
-                            else None
-                        )
-                        val = getattr(bal, key, "—") if bal else "—"
-                    else:
-                        val = getattr(emp, key, "")
-                        if isinstance(val, date):
-                            val = D.to_iso(val)
+                    val = _extract_emp_or_bal(emp, bal, impact, key)
                     row.append(str(val) if val is not None else "")
-                rows.append(row)
-        elif report_type == 1:  # إجازات
+                g_val = ""
+                if group_key == "institution":
+                    g_val = emp.institution or "(غير محددة)"
+                elif group_key == "workplace":
+                    g_val = emp.workplace or "(غير محدد)"
+                elif group_key == "month":
+                    g_val = emp.start_date.strftime("%Y-%m") if emp.start_date else "(بلا تاريخ)"
+                raw_items.append((g_val, row))
+        else:  # إجازات
             for emp in employees:
                 for lv in emp.leaves:
                     if lv.is_deleted and not self.chk_include_deleted.isChecked():
@@ -333,31 +367,40 @@ class CustomReportDialog(BaseDialog):
                         continue
                     row = []
                     for key, _ in fields:
-                        if key in EMPLOYEE_FIELDS:
-                            val = getattr(emp, key, "")
+                        clean = key[4:] if key.startswith("emp.") else key
+                        if key.startswith("emp.") or (clean in EMPLOYEE_FIELD_KEYS and clean not in {"start_date", "status"}):
+                            val = getattr(emp, clean, "")
                         else:
-                            val = getattr(lv, key, "")
+                            val = getattr(lv, clean, "")
+                            if clean == "status":
+                                val = config.LEAVE_STATUS_LABELS.get(str(val), val)
                         if isinstance(val, date):
                             val = D.to_iso(val)
                         row.append(str(val) if val is not None else "")
-                    rows.append(row)
-        else:  # أرصدة
-            policy = self.ctx.db.policy()
-            for emp in employees:
-                from ..services import balance as B
+                    g_val = ""
+                    if group_key == "institution":
+                        g_val = emp.institution or "(غير محددة)"
+                    elif group_key == "type":
+                        g_val = lv.type or "(غير محدد)"
+                    elif group_key == "month":
+                        g_val = lv.start_date.strftime("%Y-%m") if lv.start_date else "(بلا تاريخ)"
+                    elif group_key == "workplace":
+                        g_val = emp.workplace or "(غير محدد)"
+                    raw_items.append((g_val, row))
 
-                bal = B.compute_balance(emp, emp.leaves, policy)
-                row = []
-                for key, _ in fields:
-                    if key in ("raw_days", "net_days", "earned", "taken", "balance"):
-                        val = getattr(bal, key, "—")
-                    else:
-                        val = getattr(emp, key, "")
-                        if isinstance(val, date):
-                            val = D.to_iso(val)
-                    row.append(str(val) if val is not None else "")
-                rows.append(row)
+        if group_key == "none" or not raw_items:
+            return headers, [r for _, r in raw_items]
 
+        # تطبيق التجميع (Group By) مع صفوف عنوان ومجموع فرعي لكل مجموعة
+        grouped: dict[str, list[list]] = {}
+        for g_val, row in raw_items:
+            grouped.setdefault(g_val or "(غير محدد)", []).append(row)
+
+        rows: list[list] = []
+        for g_name, g_rows in grouped.items():
+            header_row = [f"▸ {g_name} ({len(g_rows)})"] + [""] * (len(headers) - 1)
+            rows.append(header_row)
+            rows.extend(g_rows)
         return headers, rows
 
     def _preview_report(self) -> None:
@@ -481,13 +524,12 @@ class CustomReportDialog(BaseDialog):
             cfg = templates[name]
             self.report_type.setCurrentIndex(cfg.get("report_type", 0))
             self._on_type_change()
-            # استعادة الحقول
             fields_cfg = cfg.get("fields", [])
             for i in range(self.fields_list.count()):
                 item = self.fields_list.item(i)
                 key = item.data(Qt.ItemDataRole.UserRole)
                 for fc in fields_cfg:
-                    if fc["key"] == key:
+                    if fc["key"] == key or fc["key"] == str(key).replace("emp.", ""):
                         item.setCheckState(
                             Qt.CheckState.Checked if fc["checked"] else Qt.CheckState.Unchecked
                         )

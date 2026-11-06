@@ -45,6 +45,10 @@ EMPLOYEE_CONTENT = (
     "opening_balance_date",
     "opening_balance_by",
     "opening_balance_note",
+    "secondment_to",
+    "secondment_start",
+    "secondment_end",
+    "secondment_order",
 )
 LEAVE_CONTENT = (
     "type",
@@ -476,7 +480,14 @@ def build_plan(target, source_path: Path, options: MergeOptions | None = None) -
         if not emp_id:
             continue
         source_inst = str(source.get("institution") or "").strip()
-        if declared and source_inst and source_inst != declared and not options.allow_other_institutions:
+        source_sec = str(source.get("secondment_to") or "").strip()
+        if (
+            declared
+            and source_inst
+            and source_inst != declared
+            and source_sec != declared
+            and not options.allow_other_institutions
+        ):
             plan.employees_skipped.append(
                 {"emp_id": emp_id, "name": source.get("name") or "", "reason": f"مؤسسة أخرى ({source_inst})"}
             )
@@ -486,7 +497,7 @@ def build_plan(target, source_path: Path, options: MergeOptions | None = None) -
             conflicts = opening_conflicts(emp_id, str(source.get("opening_balance_date") or ""))
             if conflicts:
                 source = dict(source)
-                for field in (
+                for field_name in (
                     "opening_balance_set",
                     "opening_balance",
                     "opening_balance_date",
@@ -495,7 +506,7 @@ def build_plan(target, source_path: Path, options: MergeOptions | None = None) -
                     "opening_updated_at",
                     "opening_updated_by",
                 ):
-                    source[field] = existing.get(field)
+                    source[field_name] = existing.get(field_name)
                 plan.conflicts.append(
                     {
                         "kind": "opening_balance",
@@ -777,6 +788,10 @@ def execute_plan(
                 "opening_balance_note",
                 "opening_updated_at",
                 "opening_updated_by",
+                "secondment_to",
+                "secondment_start",
+                "secondment_end",
+                "secondment_order",
             ]
             c.execute(
                 f"INSERT INTO employees ({','.join(columns)}) VALUES ({','.join('?' * len(columns))})",
@@ -806,6 +821,10 @@ def execute_plan(
                 "opening_balance_note",
                 "opening_updated_at",
                 "opening_updated_by",
+                "secondment_to",
+                "secondment_start",
+                "secondment_end",
+                "secondment_order",
             ]
             c.execute(
                 f"UPDATE employees SET {','.join(f'{column}=?' for column in columns)} WHERE emp_id=?",

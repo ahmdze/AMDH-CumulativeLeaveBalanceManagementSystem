@@ -1,10 +1,10 @@
-"""النافذة الرئيسية: الجدول، الفلاتر، التفاصيل، الشريط الجانبي، والاختصارات."""
+"""النافذة الرئيسية: الجدول، الفلاتر، التفاصيل، الشريط الجانبي، قفل الخمول، والاختصارات."""
 
 from __future__ import annotations
 
 from datetime import date
 
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import QEvent, QObject, Qt, QTimer
 from PyQt6.QtGui import QAction, QColor, QFont, QKeySequence
 from PyQt6.QtWidgets import (
     QApplication,
@@ -77,7 +77,26 @@ DETAIL_ITEMS = [
     ("earned", "المستحقة"),
     ("taken", "المأخوذة"),
     ("balance", "الرصيد"),
+    ("promotion_delay", "تأخير العلاوة"),
 ]
+
+
+class _IdleActivityFilter(QObject):
+    """مراقب أحداث على مستوى التطبيق لإعادة ضبط مؤقت الخمول عند أي حركة ماوس أو ضغطة مفتاح."""
+
+    def __init__(self, on_activity, parent=None):
+        super().__init__(parent)
+        self._on_activity = on_activity
+
+    def eventFilter(self, obj, event):  # noqa: N802
+        if event.type() in (
+            QEvent.Type.KeyPress,
+            QEvent.Type.MouseButtonPress,
+            QEvent.Type.MouseMove,
+            QEvent.Type.Wheel,
+        ):
+            self._on_activity()
+        return super().eventFilter(obj, event)
 
 
 class MainWindow(QMainWindow):
@@ -86,6 +105,7 @@ class MainWindow(QMainWindow):
         self.ctx = ctx
         self.policy = ctx.db.policy(refresh=True)
         self.rows: list[dict] = []
+        self._session_locking = False
         self.setWindowTitle(f"{config.APP_NAME} — الإصدار {config.APP_VERSION}")
         self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
         self.resize(1360, 820)
@@ -93,11 +113,57 @@ class MainWindow(QMainWindow):
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(250)
         self._search_timer.timeout.connect(self._refresh)
+        self._idle_timer = QTimer(self)
+        self._idle_timer.setSingleShot(True)
+        self._idle_timer.timeout.connect(self._lock_session_on_idle)
+        self._idle_filter = _IdleActivityFilter(self._reset_idle_timer, self)
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self._idle_filter)
         self._build()
         self._restore_state()
         self._load_filters()
         self._refresh()
+        self._configure_idle_timer()
         self._startup_tasks()
+
+    # ==================================================================
+    # مؤقت الخمول وقفل الجلسة التلقائي
+    # ==================================================================
+    def _configure_idle_timer(self) -> None:
+        minutes = int(getattr(self.policy, "session_timeout_minutes", 0) or 0)
+        if minutes > 0 and self.policy.auth_enabled:
+            self._idle_timer.setInterval(minutes * 60 * 1000)
+            self._idle_timer.start()
+        else:
+            self._idle_timer.stop()
+
+    def _reset_idle_timer(self) -> None:
+        if self._idle_timer.isActive() and not self._session_locking:
+            self._idle_timer.start()
+
+    def _lock_session_on_idle(self) -> None:
+        if self._session_locking or not self.policy.auth_enabled:
+            return
+        self._session_locking = True
+        try:
+            from ..services.security import make_session
+            from .dialogs_login import LoginDialog
+
+            self.hide()
+            dlg = LoginDialog(None, self.ctx)
+            dlg.setWindowTitle("قُفلت الجلسة بسبب الخمول — أعد تسجيل الدخول")
+            if dlg.exec() == dlg.DialogCode.Accepted and dlg.user is not None:
+                self.ctx.session = make_session(dlg.user, True)
+                self.lbl_user.setText(self._user_text())
+                self.show()
+                self._after_change()
+                self._configure_idle_timer()
+            else:
+                self._force_quit = True
+                self.close()
+        finally:
+            self._session_locking = False
 
     # ==================================================================
     # البناء
@@ -172,32 +238,12 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(3)
 
-        # تتبع هل تم إضافة فاصل سابقاً
         section_added: list[bool] = [False]
 
-        def add(text: str, style: str, slot, permission: str | None = None, tooltip: str = "") -> None:
-            """عناصر التنقّل: تُخفى بالكامل إذا لم يملك المستخدم صلاحيتها."""
-            if permission and not self.ctx.can(permission):
-                return
-            if style == "Ghost":
-                btn = W.nav_button(text, slot, tooltip=tooltip)
-            else:
-                btn = W.button(text, style, slot, tooltip=tooltip)
-                btn.setMinimumHeight(34)
-            layout.addWidget(btn)
-
-        def add_section(title: str, is_first: bool = False) -> None:
-            """
-            تسجيل عنوان القسم لإضافته لاحقاً إذا كان هناك أزرار مرئية.
-            نستخدم قائمة مؤقتة لتخزين الأزرار وإضافتها بعد العنوان فقط إذا لزم الأمر.
-            """
-            # نجمع الأزرار في قائمة مؤقتة لهذا القسم
+        def add_section(title: str, is_first: bool = False):
             section_buttons: list[tuple[str, str, callable, str | None, str]] = []
-            section_label = None
 
             def make_label():
-                from ..ui import theme
-
                 lbl = QLabel(title)
                 text_color = theme.color("text")
                 lbl.setStyleSheet(f"""
@@ -212,7 +258,6 @@ class MainWindow(QMainWindow):
 
             section_label = make_label()
 
-            # نعيد تعريف add مؤقتاً لجمع الأزرار بدلاً من إضافتها مباشرة
             def collect_button(
                 text: str, style: str, slot, permission: str | None = None, tooltip: str = ""
             ) -> None:
@@ -220,7 +265,6 @@ class MainWindow(QMainWindow):
                     return
                 section_buttons.append((text, style, slot, permission, tooltip))
 
-            # إرجاع الدالة المجمعة لاستخدامها في هذا القسم
             return collect_button, section_label, section_buttons, is_first
 
         # 1. قسم إدارة الموظفين
@@ -254,7 +298,6 @@ class MainWindow(QMainWindow):
             "delete_employee",
             tooltip="حذف الموظف من قاعدة البيانات",
         )
-        # إضافة القسم إذا كان هناك أزرار مرئية
         if buttons:
             if not is_first and section_added[0]:
                 layout.addWidget(W.separator())
@@ -349,7 +392,7 @@ class MainWindow(QMainWindow):
             "Blue",
             self._export_transfer,
             "export_transfer",
-            tooltip="تصدير بيانات للمركز الرئيسي",
+            tooltip="تصدير بيانات للمركز الرئيسي أو إرسالها عبر الشبكة",
         )
         collect(
             "سجل الاستيراد  📋",
@@ -567,13 +610,16 @@ class MainWindow(QMainWindow):
         totals = {"raw": 0, "outside": 0, "net": 0, "earned": 0, "taken": 0, "balance": 0, "negative": 0}
         for r, emp in enumerate(employees):
             balance = B.compute_balance(emp, emp.leaves, self.policy)
+            inst_label = emp.institution
+            if emp.secondment_to:
+                inst_label = f"{emp.institution} (منسّب: {emp.secondment_to})"
             rows.append(
                 [
                     emp.emp_id,
                     emp.name,
                     emp.job_title,
                     emp.workplace,
-                    emp.institution,
+                    inst_label,
                     emp.gender,
                     D.to_iso(emp.start_date),
                     D.to_iso(emp.end_date),
@@ -626,8 +672,15 @@ class MainWindow(QMainWindow):
         if not employee:
             return
         balance = B.compute_balance(employee, employee.leaves, self.policy)
+        promo = B.promotion_impact(employee, employee.leaves, self.policy)
         for key, widget in self.detail_widgets.items():
-            if key in ("raw_days", "outside", "net_days", "earned", "taken", "balance"):
+            if key == "promotion_delay":
+                widget.set_value(
+                    promo.total_excluded_days,
+                    "gold" if promo.has_delay else "pos",
+                    " يوم",
+                )
+            elif key in ("raw_days", "outside", "net_days", "earned", "taken", "balance"):
                 value = getattr(balance, key)
                 color_key = "text"
                 if key == "earned":
@@ -859,11 +912,14 @@ class MainWindow(QMainWindow):
         dialog = SettingsDialog(self, self.ctx)
         dialog.theme_changed.connect(self._on_settings_saved)
         dialog.exec()
+        self.policy = self.ctx.db.policy(refresh=True)
+        self._configure_idle_timer()
 
     def _on_settings_saved(self, _old_theme: str) -> None:
         self.policy = self.ctx.db.policy(refresh=True)
         self.lbl_policy.setText(self.policy.annual_rate_note)
         self._apply_theme()
+        self._configure_idle_timer()
         self._after_change()
 
     def _open_advanced_search(self) -> None:
@@ -978,7 +1034,7 @@ class MainWindow(QMainWindow):
         actions = [
             ("🖨 طباعة التفاصيل", self._print_employee, ""),
             ("📄 تصدير PDF", self._export_pdf_employee, ""),
-            ("✏ تعديل الموظف", self._edit_employee, "edit_employee"),
+            ("✏ تعديل الموظف / التنسيب", self._edit_employee, "edit_employee"),
             ("📅 سجل الإجازات", self._open_register, ""),
             ("📝 تسجيل إجازة", self._quick_leave, "edit_leave"),
             ("🧾 كشف حساب الرصيد", self._open_statement, ""),
@@ -1083,7 +1139,6 @@ class MainWindow(QMainWindow):
         self.lbl_policy.setStyleSheet(theme.label_style("muted"))
         self.lbl_user.setStyleSheet(theme.label_style("muted"))
         self._on_selection()
-        # تحديث عناصر تعتمد على الألوان مباشرةً (بطاقات المؤشرات والرسوم)
         for widget in self.findChildren(W.KPICard):
             widget.value.setStyleSheet(theme.label_style(theme.color("accent"), 18, bold=True))
 
@@ -1114,7 +1169,7 @@ class MainWindow(QMainWindow):
             self.tray = TrayController(self, self.ctx)
             if self.tray.start():
                 QTimer.singleShot(900, lambda: self.tray.refresh_alerts(notify=True))
-        except Exception as exc:  # pragma: no cover - لا نُفشل التشغيل بسبب الصندوق
+        except Exception as exc:  # pragma: no cover
             get_logger("tray").warning("تعذّر تشغيل أيقونة الصندوق: %s", exc)
             self.tray = None
         if self.ctx.ui_get("notifications", True, bool):
@@ -1157,7 +1212,6 @@ class MainWindow(QMainWindow):
         super().keyPressEvent(event)
 
     def closeEvent(self, event):  # noqa: N802
-        # الإخفاء إلى الصندوق إن كان مُفعَّلاً (وزر الخروج/إنهاء التطبيق يتجاوز ذلك)
         tray = getattr(self, "tray", None)
         if (
             tray is not None
@@ -1171,12 +1225,16 @@ class MainWindow(QMainWindow):
             event.ignore()
             return
         try:
+            self._idle_timer.stop()
+            app = QApplication.instance()
+            if app is not None and hasattr(self, "_idle_filter"):
+                app.removeEventFilter(self._idle_filter)
             self.ctx.ui_set("window_geometry", self.saveGeometry())
             if self.policy.backup_on_exit:
                 path = self.ctx.backup.create_if_changed("exit")
                 if path:
                     self.ctx.db.log(self.ctx.user(), "نسخ احتياطي", "database", path.name, "عند الإغلاق")
-        except Exception:  # pragma: no cover - لا نمنع الإغلاق بسبب النسخ
+        except Exception:  # pragma: no cover
             pass
         tray = getattr(self, "tray", None)
         if tray is not None:

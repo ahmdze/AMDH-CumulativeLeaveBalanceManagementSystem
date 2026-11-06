@@ -193,7 +193,7 @@ class Database:
     def list_holidays(self, year: int | None = None) -> list[Holiday]:
         return _queries.list_holidays(self.conn, year)
 
-    def holiday_set(self, years: int | None = None) -> set[date]:
+    def holiday_set(self, years: int | list[int] | set[int] | None = None) -> set[date]:
         return _queries.holiday_set(self.conn, years)
 
     def add_holiday(self, day, name: str = "", recurring: bool = False) -> None:
@@ -240,6 +240,9 @@ class Database:
 
     def distinct_values(self, column: str) -> list[str]:
         return _queries.distinct_values(self.conn, column)
+
+    def _log_opening_change(self, c, emp_id: str, old: tuple, new: tuple, user: str, note: str = "") -> None:
+        _queries._log_opening_change(c, emp_id, old, new, user, note)
 
     # ==================================================================
     # الإجازات
@@ -464,7 +467,7 @@ class Database:
         return _queries.checksum_seen(self.conn, checksum)
 
     # ==================================================================
-    # انتقال الموظفين بين المؤسسات
+    # انتقال وتنسيب الموظفين بين المؤسسات
     # ==================================================================
     def add_move(
         self,
@@ -475,9 +478,21 @@ class Database:
         source_file: str = "",
         note: str = "",
         user: str = "",
+        *,
+        move_type: str = "transfer",
+        end_date=None,
     ) -> int:
         return _queries.add_move(
-            self.conn, emp_id, from_institution, to_institution, moved_on, source_file, note, user
+            self.conn,
+            emp_id,
+            from_institution,
+            to_institution,
+            moved_on,
+            source_file,
+            note,
+            user,
+            move_type=move_type,
+            end_date=end_date,
         )
 
     def list_moves(self, emp_id: str = "", limit: int = 200) -> list[EmployeeMove]:
@@ -485,6 +500,19 @@ class Database:
 
     def set_employee_institution(self, emp_id: str, institution: str, moved_on=None, user: str = "") -> None:
         _queries.set_employee_institution(self.conn, emp_id, institution, moved_on, user)
+
+    def set_employee_secondment(
+        self,
+        emp_id: str,
+        secondment_to: str,
+        start_date=None,
+        end_date=None,
+        order: str = "",
+        user: str = "",
+    ) -> None:
+        _queries.set_employee_secondment(
+            self.conn, emp_id, secondment_to, start_date, end_date, order, user
+        )
 
     # ==================================================================
     # بيانات خامة للمقارنة في الدمج

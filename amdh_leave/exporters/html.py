@@ -166,6 +166,7 @@ def employee_detail_html(
         rows.append("<tr><td colspan='12' class='muted'>لا توجد إجازات مسجلة</td></tr>")
 
     bal_class = "neg" if balance.balance < 0 else "pos"
+    promo = B.promotion_impact(employee, employee.leaves, policy)
     info = {
         "الرقم الوظيفي": employee.emp_id,
         "العنوان الوظيفي": employee.job_title or "-",
@@ -174,8 +175,15 @@ def employee_detail_html(
         "الجنس": employee.gender,
         "تاريخ المباشرة": D.to_iso(employee.start_date) or "-",
         "انتهاء الخدمة": D.to_iso(employee.end_date) or "-",
+        "أثر العلاوة والترفيع": promo.summary_text,
         "ملاحظات": employee.notes or "-",
     }
+    if employee.secondment_to:
+        info["التنسيب الحالي"] = (
+            f"إلى {employee.secondment_to}"
+            + (f" (من {D.to_iso(employee.secondment_start)})" if employee.secondment_start else "")
+            + (f" حتى {D.to_iso(employee.secondment_end)}" if employee.secondment_end else "")
+        )
     nums = {
         "أيام الخدمة الكلية": balance.raw_days,
         "أيام خارج الرصيد": balance.outside,

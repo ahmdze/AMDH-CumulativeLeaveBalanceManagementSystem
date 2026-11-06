@@ -1,14 +1,16 @@
 # متطلبات التشغيل الأساسية لنظام إدارة الرصيد التراكمي للإجازات
-PyQt6>=6.12.0,<7
-openpyxl>=3.1.5
-reportlab>=5.1.0
-arabic-reshaper>=3.1.0
-python-bidi>=0.6.12
+PyQt6>=6.6.0,<7
+openpyxl>=3.1.0
+reportlab>=4.0.0
+arabic-reshaper>=3.0.0
+python-bidi>=0.4.2
+Pillow>=10.0.0
+cryptography>=41.0.0
 
-# تشفير قاعدة البيانات (SQLCipher) — مطلوب لنسخ المؤسسات المشفّرة
-# على ويندوز تُثبَّت من wheel جاهز: sqlcipher3-0.6.4-cp314-win_amd64
-sqlcipher3>=0.6.5
+# تشفير قاعدة البيانات (SQLCipher) — اختياري لنسخ المؤسسات المشفّرة
+sqlcipher3>=0.5.0
 
-# API REST (اختياري) — مطلوب لتشغيل الـ API
-fastapi>=0.162.0
-uvicorn>=0.54.0
+# API REST والمزامنة الشبكية المباشرة (اختياري)
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6

@@ -87,6 +87,40 @@ def collect_alerts(employees: list[Employee], policy: Policy, today: date | None
                 )
             )
 
+        # تنبيهات انتهاء التنسيب القريب أو المنتهي
+        if emp.secondment_to and emp.secondment_end:
+            sec_rem = (emp.secondment_end - today).days
+            if 0 <= sec_rem <= 14:
+                alerts.append(
+                    Alert(
+                        "secondment_ending",
+                        "medium",
+                        f"ينتهي التنسيب إلى «{emp.secondment_to}» بعد {sec_rem} يوم ({D.to_iso(emp.secondment_end)})",
+                        emp.emp_id,
+                        emp.name,
+                        emp.institution,
+                        emp.secondment_end,
+                    )
+                )
+
+        # تنبيه أثر الإجازات المستبعدة من الخدمة على العلاوة والترفيع
+        impact = B.promotion_impact(emp, emp.leaves, policy, today)
+        if impact.has_delay and impact.effective_increment_date:
+            days_to_inc = (impact.effective_increment_date - today).days
+            if 0 <= days_to_inc <= 30:
+                alerts.append(
+                    Alert(
+                        "promotion_delay",
+                        "info",
+                        f"موعد العلاوة المعدّل بعد {days_to_inc} يوم ({D.to_iso(impact.effective_increment_date)}) — "
+                        f"مؤجل بمقدار {impact.total_excluded_days} يوم خارج الرصيد",
+                        emp.emp_id,
+                        emp.name,
+                        emp.institution,
+                        impact.effective_increment_date,
+                    )
+                )
+
         for lv in emp.leaves:
             if lv.is_deleted:
                 continue
@@ -161,6 +195,7 @@ def global_report(employees: list[Employee], policy: Policy, today: date | None 
         if emp.is_deleted:
             continue
         bal = B.compute_balance(emp, emp.leaves, policy, today)
+        impact = B.promotion_impact(emp, emp.leaves, policy, today)
         rows.append(
             {
                 "emp_id": emp.emp_id,
@@ -168,6 +203,7 @@ def global_report(employees: list[Employee], policy: Policy, today: date | None 
                 "job_title": emp.job_title,
                 "workplace": emp.workplace,
                 "institution": emp.institution,
+                "secondment_to": emp.secondment_to,
                 "gender": emp.gender,
                 "start_date": D.to_iso(emp.start_date),
                 "raw_days": bal.raw_days,
@@ -176,12 +212,18 @@ def global_report(employees: list[Employee], policy: Policy, today: date | None 
                 "earned": bal.earned,
                 "taken": bal.taken,
                 "balance": bal.balance,
+                "promotion_delay_days": impact.total_excluded_days,
+                "next_increment_date": D.to_iso(impact.effective_increment_date),
                 "leaves_count": len([lv for lv in emp.leaves if not lv.is_deleted]),
                 "notes": emp.notes,
             }
         )
     rows.sort(key=lambda r: (-r["balance"], r["name"]))
     return rows
+
+
+# اسم بديل للتوافق مع استدعاءات API
+build_global_report_rows = global_report
 
 
 def statement_rows(employee: Employee, policy: Policy, today: date | None = None) -> list[dict]:
@@ -325,7 +367,7 @@ def advanced_statistics(employees: list[Employee], policy: Policy, today: date |
     avg_taken = sum(r["taken"] for r in rows) / len(rows)
     avg_earned = sum(r["earned"] for r in rows) / len(rows)
 
-    # أكثر الأنواع استخداماُ
+    # أكثر الأنواع استخداماً
     by_type: dict[str, int] = {}
     for emp in live:
         for lv in emp.leaves:

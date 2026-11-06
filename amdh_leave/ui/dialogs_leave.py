@@ -1,9 +1,7 @@
-"""حوارات الإجازات: تسجيل/تعديل، المرفقات، كشف الحساب، تصفية نهاية الخدمة."""
+"""حوارات الإجازات: تسجيل/تعديل، المرفقات (مع الضغط التلقائي)، كشف الحساب، تصفية نهاية الخدمة."""
 
 from __future__ import annotations
 
-import shutil
-import uuid
 from datetime import date
 from pathlib import Path
 
@@ -30,7 +28,7 @@ from ..exporters import pdf as P
 from ..models import Leave
 from ..services import balance as B
 from ..services import dates as D
-from ..services import reports, validation
+from ..services import reports, security, validation
 from . import theme
 from . import widgets as W
 from .dialogs_base import BaseDialog, IssuesBox
@@ -219,7 +217,7 @@ class LeaveDialog(BaseDialog):
         if rule.is_adjustment:
             hints.append("تسوية: يمكن إدخال قيمة سالبة لتصحيح الرصيد، مع ذكر السبب إلزاماً.")
         if rule.service_exclusion:
-            hints.append("أيام هذا النوع تُستبعد من أيام الخدمة ولا تُخصم من الرصيد.")
+            hints.append("أيام هذا النوع تُستبعد من أيام الخدمة ولا تُخصم من الرصيد (تؤثر على العلاوة والترفيع).")
         if rule.requires_order:
             hints.append("هذا النوع يتطلب رقم الأمر.")
         hints.append(f"طريقة العد: {rule.count_mode_label} | {rule.quota_label}")
@@ -331,17 +329,21 @@ class LeaveDialog(BaseDialog):
 
 
 # ---------------------------------------------------------------------------
-# المرفقات
+# المرفقات (مع الضغط الذكي التلقائي للصور الممسوحة ضوئياً)
 # ---------------------------------------------------------------------------
 class AttachmentsDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, leave_id: int | None = None, emp_id: str = ""):
         super().__init__(parent, ctx, "مرفقات الإجازة")
         self.leave_id = leave_id
         self.emp_id = emp_id
-        self.resize(640, 420)
+        self.resize(640, 440)
         layout = QVBoxLayout(self)
         layout.addWidget(W.title_label("مرفقات الإجازة (صورة الأمر / كتاب)", 14))
-        layout.addWidget(W.muted_label(f"تُخزَّن المرفقات في: {self.ctx.paths.attachments_dir}"))
+        layout.addWidget(
+            W.muted_label(
+                f"تُخزَّن المرفقات في: {self.ctx.paths.attachments_dir} — تُضغط الصور الكبيرة تلقائياً لتوفير المساحة."
+            )
+        )
         self.table = W.TablePanel(["#", "الملف", "أُضيف في", "بواسطة"])
         layout.addWidget(self.table)
         row = QHBoxLayout()
@@ -374,15 +376,14 @@ class AttachmentsDialog(BaseDialog):
             W.info(self, "احفظ الإجازة أولاً ثم أضف المرفقات.")
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "اختر الملف", "", "ملفات (*.pdf *.png *.jpg *.jpeg *.bmp *.tif *.docx)"
+            self, "اختر الملف", "", "ملفات (*.pdf *.png *.jpg *.jpeg *.bmp *.tif *.tiff *.webp *.docx)"
         )
         if not path:
             return
         source = Path(path)
-        stored = f"{uuid.uuid4().hex}{source.suffix.lower()}"
         try:
-            self.ctx.paths.attachments_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(source, self.ctx.paths.attachments_dir / stored)
+            target = security.copy_or_compress_attachment(source, self.ctx.paths.attachments_dir)
+            stored = target.name
         except OSError as exc:
             W.error(self, f"تعذّر نسخ الملف: {exc}")
             return
@@ -427,7 +428,7 @@ class AttachmentsDialog(BaseDialog):
 
 
 # ---------------------------------------------------------------------------
-# كشف الحساب
+# كشف الحساب (مع بيان أثر الإجازات المستبعدة على العلاوة والترفيع)
 # ---------------------------------------------------------------------------
 class StatementDialog(BaseDialog):
     def __init__(self, parent=None, ctx=None, emp_id: str = ""):
@@ -435,13 +436,14 @@ class StatementDialog(BaseDialog):
         self.emp_id = emp_id
         self.policy = self.ctx.db.policy(refresh=True)
         self.employee = self.ctx.db.get_employee(emp_id)
-        self.resize(980, 620)
+        self.resize(1020, 660)
         if not self.employee:
             W.error(self, "الموظف غير موجود.")
             self.reject()
             return
         self.balance = B.compute_balance(self.employee, self.employee.leaves, self.policy)
         self.statement = B.yearly_statement(self.employee, self.employee.leaves, self.policy)
+        self.promotion = B.promotion_impact(self.employee, self.employee.leaves, self.policy)
         self.rows = reports.statement_rows(self.employee, self.policy)
         self._build()
 
@@ -482,6 +484,13 @@ class StatementDialog(BaseDialog):
             widget.set_value(value, key, " يوم")
             summary_layout.addWidget(widget)
         layout.addWidget(summary)
+
+        # بطاقة أثر الإجازات المستبعدة على استحقاق العلاوة والترفيع
+        promo_label = QLabel(f"📌 العلاوة والترفيع: {self.promotion.summary_text}")
+        promo_label.setStyleSheet(
+            theme.label_style("gold" if self.promotion.has_delay else "pos", 11, bold=True)
+        )
+        layout.addWidget(promo_label)
 
         if self.statement.opening_date:
             opening = (

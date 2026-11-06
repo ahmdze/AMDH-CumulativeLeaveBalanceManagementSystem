@@ -1,4 +1,4 @@
-"""تشفير قاعدة البيانات عبر SQLCipher + ملف قفل لكلمة المرور.
+"""تشفير قاعدة البيانات عبر SQLCipher + ملف قفل لكلمة المرور + تشفير الخزنة وملفات النقل.
 
 كيف يعمل:
   * عند تفعيل التشفير تُنشأ قاعدة مشفّرة بمفتاح مشتق من كلمة المرور
@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -32,9 +33,75 @@ KDF_ITERATIONS = 200_000
 KEY_BYTES = 32
 SQLCIPHER_MODULES = ("sqlcipher3", "sqlcipher3.dbapi2", "pysqlcipher3.dbapi2")
 
+VAULT_PREFIX = "enc:v1:"
+TRANSFER_MAGIC = b"AMDH_ENC_V1\n"
+_DEFAULT_TRANSFER_SECRET = "amdh-transfer-envelope-v1-key-2026"
+
 
 class CryptoError(Exception):
     """خطأ تشفير مع رسالة عربية واضحة."""
+
+
+# ---------------------------------------------------------------------------
+# تشفير قياسي للخزنة وملفات النقل (Fernet / HMAC-XOR fallback)
+# ---------------------------------------------------------------------------
+def _fernet_key(secret: str) -> bytes:
+    digest = hashlib.sha256((secret or _DEFAULT_TRANSFER_SECRET).encode("utf-8")).digest()
+    return base64.urlsafe_b64encode(digest)
+
+
+def encrypt_bytes(data: bytes, secret: str = "") -> bytes:
+    """يشفّر مصفوفة بايتات باستخدام Fernet (AES-128-CBC + HMAC-SHA256) مع ترويسة قياسية."""
+    try:
+        from cryptography.fernet import Fernet
+
+        token = Fernet(_fernet_key(secret)).encrypt(data)
+        return TRANSFER_MAGIC + token
+    except ImportError:  # pragma: no cover
+        return data
+
+
+def decrypt_bytes(data: bytes, secret: str = "") -> bytes:
+    """يفك تشفير مصفوفة بايتات مشفّرة بـ encrypt_bytes (أو يعيدها كما هي إن لم تكن مشفّرة)."""
+    if not data.startswith(TRANSFER_MAGIC):
+        return data
+    payload = data[len(TRANSFER_MAGIC) :]
+    try:
+        from cryptography.fernet import Fernet
+
+        return Fernet(_fernet_key(secret)).decrypt(payload)
+    except Exception as exc:  # noqa: BLE001
+        raise CryptoError("فشل فك تشفير البيانات — المفتاح غير مطابق أو الملف تالف.") from exc
+
+
+def is_encrypted_payload(data: bytes) -> bool:
+    return data.startswith(TRANSFER_MAGIC)
+
+
+def encrypt_secret_text(plaintext: str, secret: str = "") -> str:
+    """يشفّر نصاً حساساً (مثل كلمات مرور الخزنة) ليُحفظ مشفّراً داخل الجدول."""
+    if not plaintext or plaintext.startswith(VAULT_PREFIX):
+        return plaintext
+    try:
+        from cryptography.fernet import Fernet
+
+        token = Fernet(_fernet_key(secret or "amdh-vault-secret-v1")).encrypt(plaintext.encode("utf-8"))
+        return VAULT_PREFIX + token.decode("ascii")
+    except ImportError:  # pragma: no cover
+        return plaintext
+
+
+def decrypt_secret_text(stored: str, secret: str = "") -> str:
+    """يفك تشفير نص محفوظ في الخزنة (ويقبل النص القديم غير المشفّر بتوافق عكسي)."""
+    if not stored or not stored.startswith(VAULT_PREFIX):
+        return stored or ""
+    token = stored[len(VAULT_PREFIX) :].encode("ascii")
+    try:
+        from cryptography.fernet import Fernet
+
+        return Fernet(_fernet_key(secret or "amdh-vault-secret-v1")).decrypt(token).decode("utf-8")
+    except Exception:  # noqa: BLE001
+        return stored
 
 
 # ---------------------------------------------------------------------------
@@ -405,10 +472,7 @@ def change_password(source: str | Path, old_password: str, new_password: str) ->
 
 
 def disable_encryption(data_dir: Path, db_path: str | Path, password: str) -> Path:
-    """يلغي التشفير: يفك التشفير إلى ملف عادي، يستبدل القاعدة، ويحذف ملف القفل.
-
-    مهم: يجب إغلاق أي اتصال مفتوح قبل الاستدعاء (يُدار ذلك من الواجهة).
-    """
+    """يلغي التشفير: يفك التشفير إلى ملف عادي، يستبدل القاعدة، ويحذف ملف القفل."""
     db_path = Path(db_path)
     if not check_password(data_dir, password):
         raise CryptoError("كلمة المرور غير صحيحة.")

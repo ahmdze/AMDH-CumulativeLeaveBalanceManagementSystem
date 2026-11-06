@@ -55,12 +55,17 @@ class AdvancedSearchDialog(BaseDialog):
         self.cb_status.addItem("مرفوض", "rejected")
         form.addRow("الحالة:", self.cb_status)
 
-        # المؤسسة
+        # المؤسسة (مع احترام تقييد المؤسسة للمستخدم الحالي)
         self.cb_institution = QComboBox()
-        self.cb_institution.addItem("الكل", "")
-        institutions = self.ctx.db.distinct_values("institution")
-        for inst in institutions:
-            self.cb_institution.addItem(inst, inst)
+        scope = self.ctx.session.scoped_institution if self.ctx else ""
+        if scope:
+            self.cb_institution.addItem(scope, scope)
+            self.cb_institution.setEnabled(False)
+        else:
+            self.cb_institution.addItem("الكل", "")
+            institutions = self.ctx.db.distinct_values("institution")
+            for inst in institutions:
+                self.cb_institution.addItem(inst, inst)
         form.addRow("المؤسسة:", self.cb_institution)
 
         # تاريخ من
@@ -101,13 +106,14 @@ class AdvancedSearchDialog(BaseDialog):
         name_q = self.e_name.text().strip()
         leave_type = self.cb_type.currentData() or ""
         status = self.cb_status.currentData() or ""
-        institution = self.cb_institution.currentData() or ""
+        scope = self.ctx.session.scoped_institution if self.ctx else ""
+        institution = scope or (self.cb_institution.currentData() or "")
         date_from = self.d_from.date().toPyDate()
         date_to = self.d_to.date().toPyDate()
 
-        # جلب كل الإجازات
+        # جلب الإجازات والموظفين المسموح للمستخدم رؤيتهم
         all_leaves = self.ctx.db.all_leaves(include_deleted=False)
-        employees = self.ctx.db.list_employees(with_leaves=False)
+        employees = self.ctx.db.list_employees(institution=institution, with_leaves=False)
         emp_map = {e.emp_id: e for e in employees}
 
         results = []
@@ -131,7 +137,7 @@ class AdvancedSearchDialog(BaseDialog):
                 continue
 
             # فلترة المؤسسة
-            if institution and emp.institution != institution:
+            if institution and emp.institution != institution and emp.secondment_to != institution:
                 continue
 
             # فلترة التاريخ
@@ -177,7 +183,8 @@ class AdvancedSearchDialog(BaseDialog):
         if not path:
             return
         try:
-            X.export_employees(path, rows, title="نتائج البحث المتقدم")
+            headers = ["الاسم", "الرقم الوظيفي", "النوع", "من", "إلى", "الأيام", "الحالة", "المؤسسة"]
+            X._build_custom(path, headers, rows, title="نتائج البحث المتقدم")
             W.info(self, f"تم التصدير:\n{path}")
         except Exception as exc:
             W.error(self, f"فشل التصدير: {exc}")

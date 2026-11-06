@@ -1,15 +1,26 @@
-"""الأمان: تجزئة كلمات المرور، الجلسة، والصلاحيات حسب الدور."""
+"""الأمان: تجزئة كلمات المرور، رموز الجلسة، الضغط التلقائي للمرفقات، والصلاحيات حسب الدور."""
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
+import json
 import os
+import secrets
+import time
 from dataclasses import dataclass, field
+from pathlib import Path
 
 ITERATIONS = 200_000
+TOKEN_TTL_SECONDS = 8 * 3600  # 8 ساعات صلاحية رمز الـ API
 
-# الصلاحيات
+# مفتاح توقيع رموز الجلسة للـ API (يُشتق من بيئة التشغيل أو يُولَّد)
+_API_SECRET = os.environ.get("AMDH_API_SECRET", "") or secrets.token_hex(32)
+
+# الصلاحيات:
+# حُصرت صلاحيات الحذف النهائي (purge) وتعديل السياسة العامة (edit_policy) بمدير النظام (admin)
+# لمنع المؤسسات الفرعية من تغيير معادلات الاحتساب أو إتلاف السجلات نهائياً.
 PERMISSIONS: dict[str, set[str]] = {
     "admin": {
         "edit_employee",
@@ -40,7 +51,6 @@ PERMISSIONS: dict[str, set[str]] = {
         "delete_employee",
         "edit_leave",
         "delete_leave",
-        "purge",
         "export",
         "manage_attachments",
         "approve",
@@ -48,7 +58,6 @@ PERMISSIONS: dict[str, set[str]] = {
         "view_holidays",
         "manage_holidays",
         "transfer_employee",
-        "edit_policy",
         "backup_restore",
         "manage_encryption",
         "db_operations",
@@ -83,6 +92,86 @@ def password_strength(password: str) -> tuple[bool, str]:
     if password.isdigit():
         return False, "لا تستخدم أرقاماً فقط"
     return True, ""
+
+
+# ---------------------------------------------------------------------------
+# رموز الجلسة الموقّعة (Signed Session Tokens لـ REST API)
+# ---------------------------------------------------------------------------
+def create_api_token(username: str, role: str = "viewer", institution: str = "", ttl: int = TOKEN_TTL_SECONDS) -> str:
+    """ينشئ رمز مصادقة موقّع بـ HMAC-SHA256 مع وقت انتهاء الصلاحية."""
+    payload = {
+        "sub": username,
+        "role": role,
+        "inst": institution,
+        "exp": int(time.time()) + int(ttl),
+        "jti": secrets.token_hex(8),
+    }
+    raw = json.dumps(payload, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    b64 = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+    sig = hmac.new(_API_SECRET.encode("utf-8"), b64.encode("ascii"), hashlib.sha256).hexdigest()
+    return f"{b64}.{sig}"
+
+
+def verify_api_token(token: str) -> dict | None:
+    """يتحقق من توقيع وصلاحية الرمز ويعيد حمولته (أو None عند الفشل/الانتهاء)."""
+    if not token or "." not in token:
+        return None
+    b64, sig = token.rsplit(".", 1)
+    expected = hmac.new(_API_SECRET.encode("utf-8"), b64.encode("ascii"), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected):
+        return None
+    padding = "=" * (-len(b64) % 4)
+    try:
+        data = json.loads(base64.urlsafe_b64decode(b64 + padding).decode("utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+    if not isinstance(data, dict) or not data.get("sub"):
+        return None
+    if int(data.get("exp") or 0) < int(time.time()):
+        return None
+    return data
+
+
+# ---------------------------------------------------------------------------
+# الضغط الذكي لصور المرفقات (Scanner & Image Compression)
+# ---------------------------------------------------------------------------
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".bmp", ".tif", ".tiff", ".webp"}
+
+
+def copy_or_compress_attachment(
+    source: str | Path, dest_dir: str | Path, *, max_dim: int = 1800, quality: int = 82
+) -> Path:
+    """ينسخ ملف المرفق مع ضغط تلقائي ذكي للصور الضخمة لتقليل حجم القاعدة وملفات النقل."""
+    import shutil
+    import uuid
+
+    source = Path(source)
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    suffix = source.suffix.lower()
+
+    if suffix in IMAGE_EXTENSIONS:
+        try:
+            from PIL import Image
+
+            with Image.open(source) as img:
+                width, height = img.size
+                needs_resize = width > max_dim or height > max_dim
+                is_heavy = source.stat().st_size > 350 * 1024  # أكبر من 350 كيلوبايت
+                if needs_resize or is_heavy or suffix in {".bmp", ".tif", ".tiff"}:
+                    if img.mode in ("RGBA", "P"):
+                        img = img.convert("RGB")
+                    if needs_resize:
+                        img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+                    target = dest_dir / f"{uuid.uuid4().hex}.jpg"
+                    img.save(target, format="JPEG", quality=quality, optimize=True)
+                    return target
+        except Exception:  # noqa: BLE001
+            pass
+
+    target = dest_dir / f"{uuid.uuid4().hex}{suffix}"
+    shutil.copy2(source, target)
+    return target
 
 
 @dataclass

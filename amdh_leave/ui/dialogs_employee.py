@@ -1,4 +1,4 @@
-"""حوار إضافة/تعديل موظف — البيانات الأساسية + الرصيد الافتتاحي."""
+"""حوار إضافة/تعديل موظف — البيانات الأساسية + الرصيد الافتتاحي + التنسيب المؤقت."""
 
 from __future__ import annotations
 
@@ -43,6 +43,7 @@ class EmployeeDialog(BaseDialog):
         tabs = QTabWidget()
         tabs.addTab(self._tab_basic(), "البيانات الأساسية")
         tabs.addTab(self._tab_opening(), "الرصيد الافتتاحي")
+        tabs.addTab(self._tab_secondment(), "التنسيب / التكليف")
         layout.addWidget(tabs, 1)
 
         self.issues = IssuesBox()
@@ -76,7 +77,7 @@ class EmployeeDialog(BaseDialog):
         for institution in self.ctx.db.list_institutions(active_only=True):
             label = institution.name + (f" ({institution.code})" if institution.code else "")
             self.e_institution.addItem(label, institution.name)
-        self.e_institution.setToolTip("المؤسسة الحالية للموظف — تُختار من قائمة المؤسسات المسجّلة")
+        self.e_institution.setToolTip("المؤسسة الأصلية للموظف — تُختار من قائمة المؤسسات المسجّلة")
         self.e_notes = QTextEdit()
         self.e_notes.setFixedHeight(70)
 
@@ -154,8 +155,47 @@ class EmployeeDialog(BaseDialog):
         self._toggle_opening(False)
         return page
 
+    def _tab_secondment(self) -> QWidget:
+        page = QWidget()
+        outer = QVBoxLayout(page)
+        note = W.muted_label(
+            "نظام التنسيب / التكليف المؤقت يتيح عمل الموظف في مؤسسة أخرى لفترة محددة مع بقاء "
+            "ملاكه الأصلي في مؤسسته الأم، ويظهر الموظف في كلتا المؤسستين طيلة فترة التنسيب."
+        )
+        note.setWordWrap(True)
+        outer.addWidget(note)
+
+        frame = W.card()
+        form = QFormLayout(frame)
+        form.setSpacing(12)
+        self.chk_secondment = QCheckBox("الموظف منسَّب / مكلَّف حالياً في مؤسسة أخرى")
+        self.cb_secondment_to = QComboBox()
+        self.cb_secondment_to.setEditable(True)
+        self.cb_secondment_to.addItem("")
+        for inst in self.ctx.db.list_institutions(active_only=True):
+            self.cb_secondment_to.addItem(inst.name, inst.name)
+        self.d_sec_start = W.date_edit(date.today())
+        self.d_sec_end = W.OptionalDate("تاريخ انتهاء التنسيب", None)
+        self.e_sec_order = QLineEdit()
+        self.e_sec_order.setPlaceholderText("رقم وتاريخ أمر التنسيب / التكليف")
+
+        form.addRow("", self.chk_secondment)
+        form.addRow("المؤسسة المنسَّب إليها", self.cb_secondment_to)
+        form.addRow("تاريخ بدء التنسيب", self.d_sec_start)
+        form.addRow("", self.d_sec_end)
+        form.addRow("أمر التنسيب", self.e_sec_order)
+        outer.addWidget(frame)
+        outer.addStretch()
+        self.chk_secondment.toggled.connect(self._toggle_secondment)
+        self._toggle_secondment(False)
+        return page
+
     def _toggle_opening(self, enabled: bool) -> None:
         for widget in (self.sp_opening, self.d_opening, self.e_opening_by, self.e_opening_note):
+            widget.setEnabled(enabled)
+
+    def _toggle_secondment(self, enabled: bool) -> None:
+        for widget in (self.cb_secondment_to, self.d_sec_start, self.d_sec_end, self.e_sec_order):
             widget.setEnabled(enabled)
 
     # ------------------------------------------------------------------
@@ -192,6 +232,17 @@ class EmployeeDialog(BaseDialog):
         self.e_opening_note.setPlainText(employee.opening_balance_note)
         self._toggle_opening(self.chk_opening.isChecked())
 
+        # تحميل بيانات التنسيب
+        has_sec = bool(employee.secondment_to)
+        self.chk_secondment.setChecked(has_sec)
+        if has_sec:
+            self.cb_secondment_to.setCurrentText(employee.secondment_to)
+            if employee.secondment_start:
+                W.set_date(self.d_sec_start, employee.secondment_start)
+            self.d_sec_end.set_value(employee.secondment_end)
+            self.e_sec_order.setText(employee.secondment_order)
+        self._toggle_secondment(has_sec)
+
     # ------------------------------------------------------------------
     def _institution_value(self) -> str:
         """المؤسسة المختارة (النص كما هو إن كُتب يدوياً أو القيمة المرتبطة)."""
@@ -208,6 +259,8 @@ class EmployeeDialog(BaseDialog):
         scope = self.ctx.session.scoped_institution
         institution = scope or self._institution_value()
         opening_set = self.chk_opening.isChecked()
+        sec_set = self.chk_secondment.isChecked()
+        sec_to = self.cb_secondment_to.currentText().strip() if sec_set else ""
         return {
             "name": self.e_name.text().strip(),
             "job_title": self.e_title.text().strip(),
@@ -223,6 +276,10 @@ class EmployeeDialog(BaseDialog):
             "opening_balance_date": D.to_iso(W.date_of(self.d_opening)) if opening_set else "",
             "opening_balance_by": self.e_opening_by.text().strip() if opening_set else "",
             "opening_balance_note": self.e_opening_note.toPlainText().strip() if opening_set else "",
+            "secondment_to": sec_to,
+            "secondment_start": D.to_iso(W.date_of(self.d_sec_start)) if sec_to else "",
+            "secondment_end": D.to_iso(self.d_sec_end.value()) if sec_to else "",
+            "secondment_order": self.e_sec_order.text().strip() if sec_to else "",
         }
 
     def _opening_changed(self, fields: dict) -> bool:
@@ -289,8 +346,26 @@ class EmployeeDialog(BaseDialog):
                 self.ctx.db.set_employee_institution(
                     emp_id, fields["institution"], moved_on=D.date.today(), user=self.ctx.user()
                 )
+            if previous and previous.secondment_to != fields.get("secondment_to", ""):
+                self.ctx.db.set_employee_secondment(
+                    emp_id,
+                    fields.get("secondment_to", ""),
+                    start_date=fields.get("secondment_start"),
+                    end_date=fields.get("secondment_end"),
+                    order=fields.get("secondment_order", ""),
+                    user=self.ctx.user(),
+                )
         else:
             self.ctx.db.add_employee(emp_id, fields, self.ctx.user())
+            if fields.get("secondment_to"):
+                self.ctx.db.set_employee_secondment(
+                    emp_id,
+                    fields["secondment_to"],
+                    start_date=fields.get("secondment_start"),
+                    end_date=fields.get("secondment_end"),
+                    order=fields.get("secondment_order", ""),
+                    user=self.ctx.user(),
+                )
         if self.on_save:
             self.on_save()
         self.accept()
